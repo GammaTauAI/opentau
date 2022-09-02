@@ -1,0 +1,14 @@
+{
+    "name": "printing-ts-ast",
+    "private": true,
+    "scripts": {
+        "start": "ts-node --project tsconfig.json astPrinter.ts"
+    },
+    "dependencies": {
+        "ts-node": "^8.1.0",
+        "typescript": "^3.4.3"
+    },
+    "devDependencies": {
+        "@types/node": "^18.7.14"
+    }
+}
