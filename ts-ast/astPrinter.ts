@@ -8,10 +8,16 @@ const printer = ts.createPrinter({
   omitTrailingSemicolon: true,
 });
 
+// get argv[1]
+const fileName = process.argv[2];
+if (!fileName) {
+  throw new Error("No file name provided");
+}
+
 // Create a source file
 const sourceFile = ts.createSourceFile(
   "someFileName.ts", // name does not matter until we save, which we don't from here
-  fs.readFileSync("./parseme.ts", "utf8"), // source file
+  fs.readFileSync(fileName, "utf8"), // source file
   ts.ScriptTarget.Latest,
   /*setParentNodes*/ false,
   ts.ScriptKind.TS
@@ -25,7 +31,7 @@ const sourceFile = ts.createSourceFile(
 
 function createFakeType(): ts.TypeReferenceNode {
   return ts.createTypeReferenceNode(
-    ts.createIdentifier("/* insert type here */"),
+    ts.createIdentifier("***"),
     undefined
   );
 }
