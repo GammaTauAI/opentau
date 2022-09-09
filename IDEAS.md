@@ -61,6 +61,3 @@
 - Figure out an abstracted way to easily make the thing work with any language with little changes needed
 - Figure out how to write generalizable tests for the outputs
 - This approach breaks on big software, so we have to break up parts of code into smaller pieces, therefore we have to figure that out. Although it might be okay just for the final project to work on smaller code snippets.
-
-
-<!-- how --!>
