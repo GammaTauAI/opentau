@@ -7,7 +7,7 @@ output: pdf_document
 
 ### Potential Projects
 
-Our group is thinking about implementing type inference and migration utilizing a general purpose language model such as OpenAI Codex. This implementation will be capable of type-annotating all or portions of gradually-typed languages such as TypeScript and Python (using the Pyright type-checker). The implementation will aim to be generalizable in order to ease the implementation of  additional languages.
+Our group is thinking about implementing type inference and migration utilizing a general purpose language model such as OpenAI Codex. This implementation will be capable of type-annotating gradually-typed languages such as TypeScript and Python (using the Pyright type-checker). The implementation will aim to be generalizable in order to ease the implementation of  additional languages.
 
 #### Group Members
 
