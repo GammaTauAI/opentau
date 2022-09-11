@@ -1,5 +1,7 @@
 import sys
+import json
 import socket
+import base64
 
 
 if len(sys.argv) != 3:
@@ -17,4 +19,9 @@ s.sendall(data)
 
 # read the response and print it
 response = s.recv(4096)
-print(response.decode("utf-8"))
+res = response.decode("utf-8")
+
+jsonDecoded = json.loads(res)
+base64Decoded = base64.b64decode(jsonDecoded["text"]).decode("utf-8")
+print("Whole response is:\n {}".format(jsonDecoded))
+print("Text is:\n {}".format(base64Decoded))
