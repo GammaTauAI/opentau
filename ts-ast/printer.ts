@@ -1,13 +1,12 @@
 import ts from "typescript";
 
-export const printSource = (sourceFile: ts.SourceFile) => {
+export const printSource = (sourceFile: ts.SourceFile): string => {
   // create the printer
   const printer = ts.createPrinter({
     newLine: ts.NewLineKind.LineFeed,
     removeComments: false,
     omitTrailingSemicolon: false,
   });
-
 
   // NOTE: ok so the generalization could be:
   //  - we spin up a server, takes in the printed source code
@@ -48,5 +47,5 @@ export const printSource = (sourceFile: ts.SourceFile) => {
   });
 
   // Print the new code
-  console.log(printer.printFile(sourceFile));
+  return printer.printFile(sourceFile);
 };
