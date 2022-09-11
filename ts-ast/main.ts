@@ -36,23 +36,27 @@ var unixServer = net.createServer(function (client) {
       return;
     }
 
+    const decodedText = Buffer.from(obj.text, "base64").toString("utf8");
+
     switch (obj.cmd) {
       // simply print out the text (and puts unknown types)
       case "print": {
         // create the source file
         const sourceFile = ts.createSourceFile(
           "bleh.ts", // name does not matter until we save, which we don't from here
-          obj.text,
+          decodedText,
           ts.ScriptTarget.Latest,
           false, // for setParentNodes TODO: maybe let's set this to true?
           ts.ScriptKind.TS
         );
 
         try {
+          const res = printSource(sourceFile);
+          const base64 = Buffer.from(res).toString("base64");
           client.write(
             JSON.stringify({
               type: "printResponse",
-              text: printSource(sourceFile),
+              text: base64,
             })
           );
         } catch (e) {
@@ -71,7 +75,10 @@ var unixServer = net.createServer(function (client) {
       }
       default: {
         client.write(
-          JSON.stringify({ type: "error", message: `unknown command ${obj.cmd}` })
+          JSON.stringify({
+            type: "error",
+            message: `unknown command ${obj.cmd}`,
+          })
         );
       }
     }
