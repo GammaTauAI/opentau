@@ -14,12 +14,12 @@ export const printSource = (sourceFile: ts.SourceFile): string => {
   //    there needs to be a "fake-type" identifier
   //  - then we give stuff to codex
 
-  function createFakeType(): ts.TypeReferenceNode {
+  const createFakeType = (): ts.TypeReferenceNode => {
     return ts.createTypeReferenceNode(ts.createIdentifier("***"), undefined);
-  }
+  };
 
   // Update the source file statements
-  function traverse(child: ts.Node) {
+  const traverse = (child: ts.Node) => {
     if (child.kind === ts.SyntaxKind.FunctionDeclaration) {
       const functionDeclaration = child as ts.FunctionDeclaration;
       functionDeclaration.type = functionDeclaration.type
@@ -40,7 +40,7 @@ export const printSource = (sourceFile: ts.SourceFile): string => {
     }
 
     ts.forEachChild(child, traverse);
-  }
+  };
 
   sourceFile.forEachChild((child) => {
     traverse(child);
