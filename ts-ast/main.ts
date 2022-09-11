@@ -71,7 +71,10 @@ var unixServer = net.createServer(function (client) {
       }
       default: {
         client.write(
-          JSON.stringify({ type: "error", message: `unknown command ${obj.cmd}` })
+          JSON.stringify({
+            type: "error",
+            message: `unknown command ${obj.cmd}`,
+          })
         );
       }
     }
