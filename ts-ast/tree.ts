@@ -6,7 +6,7 @@ type CodeBlockTree = {
   children: CodeBlockTree[];
 };
 
-export const makeTree = (sourceFile: ts.SourceFile): CodeBlockTree[] => {
+export const makeTree = (sourceFile: ts.SourceFile): CodeBlockTree => {
   // create the printer, TODO: make into a singleton
   const printer = ts.createPrinter({
     newLine: ts.NewLineKind.LineFeed,
@@ -14,53 +14,49 @@ export const makeTree = (sourceFile: ts.SourceFile): CodeBlockTree[] => {
     omitTrailingSemicolon: false,
   });
 
-  const traverse = (
-    child: ts.Node,
-    ctxName: string,
-    ctxNode: CodeBlockTree | undefined
-  ): CodeBlockTree => {
+  // TODO: add these
+  // - classes
+  // - methods
+  // - arrow functions
+  const traverse = (child: ts.Node, ctxNode: CodeBlockTree): void => {
     const code = printer.printNode(ts.EmitHint.Unspecified, child, sourceFile);
 
     // only make children out of function declarations
     if (child.kind === ts.SyntaxKind.FunctionDeclaration) {
       const func = child as ts.FunctionDeclaration;
-      const name = func.name?.escapedText.toString() ?? "anonymous"; // TODO: handle this case, we don't want to do anon
-      console.log("func name: ", name);
+      if (func.name) { // ignore anon functions, TODO: maybe we should include them?
+        const name = func.name.escapedText.toString();
+        console.log("func name: ", name);
 
-      let thisNode = { name, code, children: [] };
+        let thisNode = { name, code, children: [] };
 
-      func.body?.statements.forEach((child) => traverse(child, name, thisNode));
+        func.body?.statements.forEach((child) => traverse(child, thisNode));
 
-      if (ctxNode) {
-        ctxNode.children.push(thisNode);
+        if (ctxNode) {
+          ctxNode.children.push(thisNode);
+        }
+
+        return;
       }
-
-      return thisNode;
-    }
-
-    if (ctxNode === undefined) {
-      let thisNode = { name: ctxName, code, children: [] };
-      child.forEachChild((child) => {
-        traverse(child, ctxName, thisNode);
-      });
-      return thisNode;
     }
 
     child.forEachChild((child) => {
-      traverse(child, ctxName, ctxNode);
+      traverse(child, ctxNode);
     });
 
-    return ctxNode;
+    return;
   };
 
-  let forest: CodeBlockTree[] = [];
+  let tree: CodeBlockTree = {
+    // NOTE: the & is to make sure we don't have a name collision with some other function
+    name: "&root$",
+    code: printer.printFile(sourceFile),
+    children: [],
+  };
 
   ts.forEachChild(sourceFile, (child) => {
-    forest.push(traverse(child, "ctx", undefined)); // TODO: undefined?
+    traverse(child, tree);
   });
-  
-  // filter nodes with code === ""
-  forest = forest.filter((node) => node.code !== "");
 
-  return forest;
+  return tree;
 };
