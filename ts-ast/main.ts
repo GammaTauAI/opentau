@@ -1,7 +1,8 @@
 import ts from "typescript";
-import { printSource } from "./printer";
 import * as net from "net";
-import {stubString as stubSource} from "./stubPrinter";
+import { printSource } from "./printer";
+import { makeTree } from "./tree";
+import { stubSource } from "./stubPrinter";
 
 if (process.argv.length != 4) {
   console.log("usage: [path to socket] [pid of rust proc]");
@@ -68,7 +69,19 @@ var unixServer = net.createServer(function (client) {
       }
       // generate the text tree from the given text (and puts unknown types)
       case "tree": {
-        // TODO
+        const res = makeTree(sourceFile);
+        try {
+          const base64 = Buffer.from(JSON.stringify(res)).toString("base64");
+          client.write(
+            JSON.stringify({
+              type: "treeResponse",
+              text: base64,
+            })
+          );
+        } catch (e) {
+          client.write(JSON.stringify({ type: "error", message: e.message }));
+        }
+
         break;
       }
       // generate a stub for the given node (that is type-annotated)

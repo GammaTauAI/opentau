@@ -1,7 +1,7 @@
 import ts from "typescript";
 import { printSource } from "./printer";
 
-export const stubString = (sourceFile: ts.SourceFile): string => {
+export const stubSource = (sourceFile: ts.SourceFile): string => {
   const traverse = (child: ts.Node, level: number) => {
     if (level > 0) {
       if (child.kind === ts.SyntaxKind.FunctionDeclaration) {
