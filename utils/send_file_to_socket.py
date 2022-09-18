@@ -4,24 +4,43 @@ import socket
 import base64
 
 
-if len(sys.argv) != 3:
-    print("Usage: {} <socket> <file>".format(sys.argv[0]))
+if len(sys.argv) != 4:
+    print("Usage: {} <socket> <cmd> <file>".format(sys.argv[0]))
     sys.exit(1)
 
 sock = sys.argv[1]
-fileName = sys.argv[2]
+fileName = sys.argv[3]
 
 data = open(fileName, "rb").read()
 
+# json format:
+# {
+#   "cmd": "cmd",
+#   "text": "base64 encoded data"
+# }
+
+msg = {
+    "cmd": sys.argv[2],
+    "text": base64.b64encode(data).decode("utf-8")
+}
+
+msg = json.dumps(msg)
+b = msg.encode("utf-8")
+
 s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 s.connect(sock)
-s.sendall(data)
+s.sendall(b)
 
 # read the response and print it
 response = s.recv(4096)
 res = response.decode("utf-8")
+try:
+    jsonDecoded = json.loads(res)
+    base64Decoded = base64.b64decode(jsonDecoded["text"]).decode("utf-8")
+    print("Whole response is:\n {}".format(jsonDecoded))
+    print("Text is:\n {}".format(base64Decoded))
+except:
+    print("Error decoding response")
+    print("Response is:\n {}".format(res))
 
-jsonDecoded = json.loads(res)
-base64Decoded = base64.b64decode(jsonDecoded["text"]).decode("utf-8")
-print("Whole response is:\n {}".format(jsonDecoded))
-print("Text is:\n {}".format(base64Decoded))
+s.close()

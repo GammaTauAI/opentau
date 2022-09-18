@@ -1,6 +1,7 @@
 import ts from "typescript";
 import { printSource } from "./printer";
 import * as net from "net";
+import {stubString as stubSource} from "./stubPrinter";
 
 if (process.argv.length != 4) {
   console.log("usage: [path to socket] [pid of rust proc]");
@@ -38,18 +39,18 @@ var unixServer = net.createServer(function (client) {
 
     const decodedText = Buffer.from(obj.text, "base64").toString("utf8");
 
+    // create the source file
+    const sourceFile = ts.createSourceFile(
+      "bleh.ts", // name does not matter until we save, which we don't from here
+      decodedText,
+      ts.ScriptTarget.Latest,
+      false, // for setParentNodes TODO: maybe let's set this to true?
+      ts.ScriptKind.TS
+    );
+
     switch (obj.cmd) {
       // simply print out the text (and puts unknown types)
       case "print": {
-        // create the source file
-        const sourceFile = ts.createSourceFile(
-          "bleh.ts", // name does not matter until we save, which we don't from here
-          decodedText,
-          ts.ScriptTarget.Latest,
-          false, // for setParentNodes TODO: maybe let's set this to true?
-          ts.ScriptKind.TS
-        );
-
         try {
           const res = printSource(sourceFile);
           const base64 = Buffer.from(res).toString("base64");
@@ -68,10 +69,24 @@ var unixServer = net.createServer(function (client) {
       // generate the text tree from the given text (and puts unknown types)
       case "tree": {
         // TODO
+        break;
       }
       // generate a stub for the given node (that is type-annotated)
       case "stub": {
-        // TODO
+        try {
+          const res = stubSource(sourceFile);
+          const base64 = Buffer.from(res).toString("base64");
+          client.write(
+            JSON.stringify({
+              type: "stubResponse",
+              text: base64,
+            })
+          );
+        } catch (e) {
+          client.write(JSON.stringify({ type: "error", message: e.message }));
+        }
+
+        break;
       }
       default: {
         client.write(
