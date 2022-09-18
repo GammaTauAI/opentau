@@ -24,10 +24,9 @@ export const makeTree = (sourceFile: ts.SourceFile): CodeBlockTree => {
     // only make children out of function declarations
     if (child.kind === ts.SyntaxKind.FunctionDeclaration) {
       const func = child as ts.FunctionDeclaration;
-      if (func.name) { // ignore anon functions, TODO: maybe we should include them?
+      // ignore anon functions, TODO: maybe we should include them?
+      if (func.name) {
         const name = func.name.escapedText.toString();
-        console.log("func name: ", name);
-
         let thisNode = { name, code, children: [] };
 
         func.body?.statements.forEach((child) => traverse(child, thisNode));
