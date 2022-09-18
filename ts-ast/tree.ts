@@ -39,12 +39,15 @@ export const makeTree = (sourceFile: ts.SourceFile): CodeBlockTree[] => {
     }
 
     if (ctxNode === undefined) {
-      return { name: ctxName, code, children: [] }; // TODO: traverse children
+      let thisNode = { name: ctxName, code, children: [] };
+      child.forEachChild((child) => {
+        traverse(child, ctxName, thisNode);
+      });
+      return thisNode;
     }
 
     child.forEachChild((child) => {
-      const node = traverse(child, ctxName, undefined);
-      // ctxNode.children.push(node);
+      traverse(child, ctxName, ctxNode);
     });
 
     return ctxNode;
@@ -55,6 +58,9 @@ export const makeTree = (sourceFile: ts.SourceFile): CodeBlockTree[] => {
   ts.forEachChild(sourceFile, (child) => {
     forest.push(traverse(child, "ctx", undefined)); // TODO: undefined?
   });
+  
+  // filter nodes with code === ""
+  forest = forest.filter((node) => node.code !== "");
 
   return forest;
 };
