@@ -5,7 +5,6 @@
         "start": "ts-node --project tsconfig.json main.ts"
     },
     "dependencies": {
-        "http4js": "^5.0.7",
         "ts-node": "^8.1.0",
         "typescript": "^3.4.3"
     },
