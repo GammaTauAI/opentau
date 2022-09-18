@@ -31,12 +31,18 @@ s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 s.connect(sock)
 s.sendall(b)
 
-# read the response and print it
-response = s.recv(4096)
-res = response.decode("utf-8")
+# read the response and print it, receive all data until EOF
+data = s.recv(12288)
+res = data.decode("utf-8")
 try:
     jsonDecoded = json.loads(res)
     base64Decoded = base64.b64decode(jsonDecoded["text"]).decode("utf-8")
+
+    if sys.argv[2] == "tree":
+        # text is other json, decode it
+        jsonDecoded = json.loads(base64Decoded)
+        base64Decoded = json.dumps(jsonDecoded, indent=4)
+
     print("Whole response is:\n {}".format(jsonDecoded))
     print("Text is:\n {}".format(base64Decoded))
 except:
