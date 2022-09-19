@@ -1,4 +1,5 @@
 import ts from "typescript";
+import { codePrinter } from "./main";
 
 type CodeBlockTree = {
   name: string;
@@ -7,23 +8,15 @@ type CodeBlockTree = {
 };
 
 export const makeTree = (sourceFile: ts.SourceFile): CodeBlockTree => {
-  // create the printer, TODO: make into a singleton
-  const printer = ts.createPrinter({
-    newLine: ts.NewLineKind.LineFeed,
-    removeComments: false,
-    omitTrailingSemicolon: false,
-  });
-
   // TODO: add these
   // - classes
   // - methods
-  // - arrow functions
-  //    - with arrow functions, create a node only if it is letbound, so check parent?
-  //      NOTE:
-  //         FunctionExpression = 201,
-  //         ArrowFunction = 202,
   const traverse = (child: ts.Node, ctxNode: CodeBlockTree): void => {
-    const code = printer.printNode(ts.EmitHint.Unspecified, child, sourceFile);
+    const code = codePrinter.printNode(
+      ts.EmitHint.Unspecified,
+      child,
+      sourceFile
+    );
 
     // only make children out of function declarations
     if (child.kind === ts.SyntaxKind.FunctionDeclaration) {
@@ -54,9 +47,9 @@ export const makeTree = (sourceFile: ts.SourceFile): CodeBlockTree => {
       const func = child as ts.FunctionExpression;
       if (child.parent?.kind === ts.SyntaxKind.VariableDeclaration) {
         const varDec = child.parent as ts.VariableDeclaration;
-        const code = printer.printNode(
+        const code = codePrinter.printNode(
           ts.EmitHint.Unspecified,
-          varDec.parent,
+          varDec.parent, // go another level up
           sourceFile
         );
         const nameId = varDec.name as ts.Identifier;
@@ -83,7 +76,7 @@ export const makeTree = (sourceFile: ts.SourceFile): CodeBlockTree => {
   let tree: CodeBlockTree = {
     // NOTE: the & is to make sure we don't have a name collision with some other function
     name: "&root$",
-    code: printer.printFile(sourceFile),
+    code: codePrinter.printFile(sourceFile),
     children: [],
   };
 

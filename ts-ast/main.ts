@@ -4,6 +4,13 @@ import { printSource } from "./printer";
 import { makeTree } from "./tree";
 import { stubSource } from "./stubPrinter";
 
+// the global printer object! 
+export const codePrinter = ts.createPrinter({
+  newLine: ts.NewLineKind.LineFeed,
+  removeComments: false,
+  omitTrailingSemicolon: false,
+});
+
 if (process.argv.length != 4) {
   console.log("usage: [path to socket] [pid of rust proc]");
   process.exit(1);

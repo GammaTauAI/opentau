@@ -1,13 +1,7 @@
 import ts from "typescript";
+import { codePrinter } from "./main";
 
 export const printSource = (sourceFile: ts.SourceFile): string => {
-  // create the printer
-  const printer = ts.createPrinter({
-    newLine: ts.NewLineKind.LineFeed,
-    removeComments: false,
-    omitTrailingSemicolon: false,
-  });
-
   // NOTE: ok so the generalization could be:
   //  - we spin up a server, takes in the printed source code
   //  - we get a start token (in this case "/*") and and end token (in this case "*/"), where inside those
@@ -47,5 +41,5 @@ export const printSource = (sourceFile: ts.SourceFile): string => {
   });
 
   // Print the new code
-  return printer.printFile(sourceFile);
+  return codePrinter.printFile(sourceFile);
 };
