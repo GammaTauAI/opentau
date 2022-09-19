@@ -9,6 +9,6 @@
         "typescript": "^3.4.3"
     },
     "devDependencies": {
-        "@types/node": "^18.7.14"
+        "@types/node": "^18.7.18"
     }
 }
