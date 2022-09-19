@@ -45,7 +45,7 @@ var unixServer = net.createServer(function (client) {
       "bleh.ts", // name does not matter until we save, which we don't from here
       decodedText,
       ts.ScriptTarget.Latest,
-      false, // for setParentNodes TODO: maybe let's set this to true?
+      true, // for setParentNodes
       ts.ScriptKind.TS
     );
 

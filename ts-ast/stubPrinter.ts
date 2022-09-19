@@ -7,8 +7,11 @@ export const stubSource = (sourceFile: ts.SourceFile): string => {
       if (child.kind === ts.SyntaxKind.FunctionDeclaration) {
         const func = child as ts.FunctionDeclaration;
         func.body = undefined;
-      } else if (child.kind === ts.SyntaxKind.ArrowFunction) {
-        let func = child as ts.ArrowFunction;
+      } else if (
+        child.kind === ts.SyntaxKind.ArrowFunction ||
+        child.kind === ts.SyntaxKind.FunctionExpression
+      ) {
+        let func = child as ts.FunctionExpression;
         func.body = ts.createBlock([]); // TODO: does codex think that it needs to fill in here?
       } else if (child.kind === ts.SyntaxKind.MethodDeclaration) {
         const func = child as ts.MethodDeclaration;

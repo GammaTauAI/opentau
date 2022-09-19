@@ -42,7 +42,36 @@ export const makeTree = (sourceFile: ts.SourceFile): CodeBlockTree => {
         return;
       }
     }
-    
+
+    // console.log("kind: ", child.kind);
+    // console.log("code: ", code);
+
+    if (
+      child.kind === ts.SyntaxKind.FunctionExpression ||
+      child.kind === ts.SyntaxKind.ArrowFunction
+    ) {
+      // check if parent is a variable declaration
+      const func = child as ts.FunctionExpression;
+      if (child.parent?.kind === ts.SyntaxKind.VariableDeclaration) {
+        const varDec = child.parent as ts.VariableDeclaration;
+        const code = printer.printNode(
+          ts.EmitHint.Unspecified,
+          varDec.parent,
+          sourceFile
+        );
+        const nameId = varDec.name as ts.Identifier;
+        const name = nameId.escapedText.toString();
+        let thisNode = { name, code, children: [] };
+
+        func.body?.statements.forEach((child) => traverse(child, thisNode));
+
+        if (ctxNode) {
+          ctxNode.children.push(thisNode);
+        }
+
+        return;
+      }
+    }
 
     child.forEachChild((child) => {
       traverse(child, ctxNode);
