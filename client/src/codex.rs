@@ -6,12 +6,22 @@ use crate::langclient::{LangClient, LangClientError};
 pub struct CodexClient {
     pub client: reqwest::Client,
     pub token: String,
-    pub lang_client: Box<Mutex<dyn LangClient>>,
+    // NOTE: mutex so that we make sure the socket is only used by one thread at a time
+    pub lang_client: Box<Mutex<dyn LangClient>>, 
     pub file_contents: String,
 }
 
 impl CodexClient {
-    pub async fn complete(&self, input: &str, num_comps: usize) -> Result<EditResp, CodexError> {
+    /// Completes the given input code using the codex API. The given input code has to be pretty
+    /// printed such that unknown types are represented by "***".
+    pub async fn complete(
+        &self,
+        input: &str,
+        num_comps: usize,
+        retries: usize,
+    ) -> Result<EditResp, CodexError> {
+        // TODO: give more logic into bad complete response handling, errors and retries
+        // IDEA: - if the response still contains "***", retry
         let req = self
             .client
             .post("https://api.openai.com/v1/edits")

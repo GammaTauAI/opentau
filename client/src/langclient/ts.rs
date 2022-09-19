@@ -1,9 +1,12 @@
 use std::process::Stdio;
 
 use async_trait::async_trait;
-use tokio::{io::{AsyncBufReadExt, AsyncWriteExt}, net::UnixStream};
+use tokio::{
+    io::{AsyncBufReadExt, AsyncWriteExt},
+    net::UnixStream,
+};
 
-use super::{LCReq, LangClient, LangClientError};
+use super::{socket_transaction, LCReq, LangClient, LangClientError};
 
 #[derive(Debug)]
 pub struct TsClient {
@@ -66,20 +69,7 @@ impl LangClient for TsClient {
             text: code.to_string(),
         };
 
-        let req_str = serde_json::to_string(&req).unwrap();
-        println!("sending request: {:?}", req_str);
-
-        let mut socket = self.connect().await?;
-
-        socket.write_all(req_str.as_bytes()).await?;
-        socket.shutdown().await?;
-
-        // read until eof, then decode
-        // json format: {type: "printResponse", text: "base64-encoded-text"}
-
-        let mut reader = tokio::io::BufReader::new(&mut socket);
-        let mut buf = String::new();
-        reader.read_line(&mut buf).await?;
+        let buf = socket_transaction(&self.socket_path, &req).await?;
 
         // into json object
         let resp: serde_json::Value = serde_json::from_str(&buf).unwrap();
@@ -94,13 +84,29 @@ impl LangClient for TsClient {
 
         Ok(String::from_utf8(resp).unwrap())
     }
-}
 
-impl TsClient {
-    async fn connect(&self) -> Result<UnixStream, LangClientError> {
-        match UnixStream::connect(&self.socket_path).await {
-            Ok(s) => Ok(s),
-            Err(_) => Err(LangClientError::SocketConnect),
+    async fn to_tree(&mut self, code: &str) -> Result<crate::tree::CodeBlockTree, LangClientError> {
+        // base64 encode the code
+        let code = base64::encode(code);
+
+        let req = LCReq {
+            cmd: "tree".to_string(),
+            text: code.to_string(),
+        };
+
+        let buf = socket_transaction(&self.socket_path, &req).await?;
+
+        // into json object
+        let resp: serde_json::Value = serde_json::from_str(&buf).unwrap();
+
+        // check if the response is not an error
+        if resp["type"] == "error" {
+            return Err(LangClientError::LC(resp["message"].to_string()));
         }
+
+        // decode the response
+        let tree = base64::decode(resp["text"].as_str().unwrap()).unwrap();
+
+        Ok(serde_json::from_slice(&tree).unwrap())
     }
 }

@@ -1,5 +1,11 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use tokio::{
+    io::{AsyncBufReadExt, AsyncWriteExt},
+    net::UnixStream,
+};
+
+use crate::tree::CodeBlockTree;
 pub mod ts; // the typescript client
 
 // TODO:
@@ -15,6 +21,9 @@ pub trait LangClient {
 
     // pretty print the given code, making all missing types the "***" token
     async fn pretty_print(&mut self, code: &str) -> Result<String, LangClientError>;
+
+    // transforms the given code into a tree of code blocks
+    async fn to_tree(&mut self, code: &str) -> Result<CodeBlockTree, LangClientError>;
 }
 
 // Request to the language client server, with a given command and text
@@ -23,6 +32,19 @@ pub trait LangClient {
 pub struct LCReq {
     pub cmd: String,
     pub text: String,
+}
+
+pub async fn socket_transaction(socket_path: &str, req: &LCReq) -> Result<String, LangClientError> {
+    let mut stream = UnixStream::connect(socket_path).await?;
+    let req = serde_json::to_string(req).unwrap();
+
+    stream.write_all(req.as_bytes()).await?;
+    stream.shutdown().await?;
+
+    let mut reader = tokio::io::BufReader::new(&mut stream);
+    let mut buf = String::new();
+    reader.read_line(&mut buf).await?;
+    Ok(buf)
 }
 
 #[derive(Debug, Clone)]

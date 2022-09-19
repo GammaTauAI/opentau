@@ -43,7 +43,19 @@ async fn main() {
 
         println!("pretty:\n{}", printed);
 
-        let resp = codex.complete(&printed, 1).await.unwrap();
-        println!("{}", resp);
+        // let resp = codex.complete(&printed, 1, 3).await.unwrap();
+        // println!("{}", resp);
+    }
+
+    // testing out "tree"
+    {
+        let tree = codex
+            .lang_client
+            .lock()
+            .await
+            .to_tree(&codex.file_contents)
+            .await
+            .unwrap();
+        println!("{:#?}", tree);
     }
 }
