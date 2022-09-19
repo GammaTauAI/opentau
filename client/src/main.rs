@@ -2,36 +2,16 @@ use rust_ex::{
     codex::{EditReq, EditResp},
     langclient::{ts::TsClient, LangClient},
 };
+use tokio::sync::Mutex;
 
 #[tokio::main]
 async fn main() {
     // get auth token from env
-    // let token = std::env::var("CODEX_TOKEN").expect("CODEX_TOKEN not set");
+    let token = std::env::var("CODEX_TOKEN").expect("CODEX_TOKEN not set");
 
     // get argv[1] and read the file into a string
-    // let filename = std::env::args().nth(1).expect("no filename given");
-    // let input = std::fs::read_to_string(filename).expect("could not read file");
-
-    // let client = reqwest::Client::new();
-    // let req = client
-    // .post("https://api.openai.com/v1/edits")
-    // .bearer_auth(token)
-    // .header("Content-Type", "application/json")
-    // .body(
-    // serde_json::to_string(&EditReq {
-    // model: "code-davinci-edit-001".to_string(),
-    // input,
-    // n: 3,
-    // instruction: "Substitute the token \"***\" with the correct type.".to_string(),
-    // })
-    // .unwrap(),
-    // );
-
-    // let res = req.send().await.unwrap();
-    // let body = res.text().await.unwrap();
-    // let resp: EditResp = serde_json::from_str(&body)
-    // .unwrap_or_else(|_| panic!("could not parse response: {}", body));
-    // println!("{}", resp);
+    let filename = std::env::args().nth(1).expect("no filename given");
+    let input = std::fs::read_to_string(filename).expect("could not read file");
 
     // resolve path ../ts-ast, this is temporary of course!
     // TODO: remove this crap
@@ -43,6 +23,27 @@ async fn main() {
         .unwrap()
         .to_string();
 
-    let langclient = TsClient::make(&client_path).await.unwrap();
-    println!("langclient: {:?}", langclient);
+    let lang_client = Box::new(Mutex::new(TsClient::make(&client_path).await.unwrap()));
+    let codex = rust_ex::codex::CodexClient {
+        client: reqwest::Client::new(),
+        token,
+        lang_client,
+        file_contents: input,
+    };
+
+    // TODO: make this into actual logic
+    {
+        let printed = codex
+            .lang_client
+            .lock()
+            .await
+            .pretty_print(&codex.file_contents)
+            .await
+            .unwrap();
+
+        println!("pretty:\n{}", printed);
+
+        let resp = codex.complete(&printed, 1).await.unwrap();
+        println!("{}", resp);
+    }
 }

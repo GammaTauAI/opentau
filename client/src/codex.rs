@@ -1,4 +1,38 @@
 use serde::{Deserialize, Serialize};
+use tokio::sync::Mutex;
+
+use crate::langclient::{LangClient, LangClientError};
+
+pub struct CodexClient {
+    pub client: reqwest::Client,
+    pub token: String,
+    pub lang_client: Box<Mutex<dyn LangClient>>,
+    pub file_contents: String,
+}
+
+impl CodexClient {
+    pub async fn complete(&self, input: &str, num_comps: usize) -> Result<EditResp, CodexError> {
+        let req = self
+            .client
+            .post("https://api.openai.com/v1/edits")
+            .bearer_auth(&self.token)
+            .header("Content-Type", "application/json")
+            .body(serde_json::to_string(&EditReq {
+                model: "code-davinci-edit-001".to_string(),
+                input: input.to_string(),
+                n: num_comps,
+                instruction: "Substitute the token \"***\" with the correct type.".to_string(),
+            })?);
+
+        let res = req.send().await?;
+        let body = res.text().await?;
+        let resp: EditResp = match serde_json::from_str(&body) {
+            Ok(x) => x,
+            Err(_) => return Err(CodexError::CodexAPI(body)),
+        };
+        Ok(resp)
+    }
+}
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct EditReq {
@@ -29,3 +63,41 @@ impl std::fmt::Display for EditResp {
     }
 }
 
+#[derive(Debug)]
+pub enum CodexError {
+    CodexAPI(String), // TODO: do better than string
+    LangClient(LangClientError),
+    Reqwest(reqwest::Error),
+    Serde(serde_json::Error),
+}
+
+impl From<LangClientError> for CodexError {
+    fn from(e: LangClientError) -> Self {
+        CodexError::LangClient(e)
+    }
+}
+
+impl From<reqwest::Error> for CodexError {
+    fn from(e: reqwest::Error) -> Self {
+        CodexError::Reqwest(e)
+    }
+}
+
+impl From<serde_json::Error> for CodexError {
+    fn from(e: serde_json::Error) -> Self {
+        CodexError::Serde(e)
+    }
+}
+
+impl std::fmt::Display for CodexError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CodexError::CodexAPI(s) => write!(f, "Codex API error: {}", s),
+            CodexError::LangClient(e) => write!(f, "Language client error: {}", e),
+            CodexError::Reqwest(e) => write!(f, "Reqwest error: {}", e),
+            CodexError::Serde(e) => write!(f, "Serde error: {}", e),
+        }
+    }
+}
+
+impl std::error::Error for CodexError {}

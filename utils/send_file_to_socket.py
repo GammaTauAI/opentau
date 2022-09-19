@@ -24,6 +24,8 @@ msg = {
     "text": base64.b64encode(data).decode("utf-8")
 }
 
+print ("Sending msg: {}".format(msg))
+
 msg = json.dumps(msg)
 b = msg.encode("utf-8")
 
