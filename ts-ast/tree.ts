@@ -18,13 +18,17 @@ export const makeTree = (sourceFile: ts.SourceFile): CodeBlockTree => {
   // - classes
   // - methods
   // - arrow functions
+  //    - with arrow functions, create a node only if it is letbound, so check parent?
+  //      NOTE:
+  //         FunctionExpression = 201,
+  //         ArrowFunction = 202,
   const traverse = (child: ts.Node, ctxNode: CodeBlockTree): void => {
     const code = printer.printNode(ts.EmitHint.Unspecified, child, sourceFile);
 
     // only make children out of function declarations
     if (child.kind === ts.SyntaxKind.FunctionDeclaration) {
       const func = child as ts.FunctionDeclaration;
-      // ignore anon functions, TODO: maybe we should include them?
+      // idk why, but sometimes a func doesn't have a name, but it's not necessarily an anonymous function
       if (func.name) {
         const name = func.name.escapedText.toString();
         let thisNode = { name, code, children: [] };
@@ -38,6 +42,7 @@ export const makeTree = (sourceFile: ts.SourceFile): CodeBlockTree => {
         return;
       }
     }
+    
 
     child.forEachChild((child) => {
       traverse(child, ctxNode);

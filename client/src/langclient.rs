@@ -20,10 +20,13 @@ pub trait LangClient {
         Self: std::marker::Sized;
 
     // pretty print the given code, making all missing types the "***" token
-    async fn pretty_print(&mut self, code: &str) -> Result<String, LangClientError>;
+    async fn pretty_print(&self, code: &str) -> Result<String, LangClientError>;
 
     // transforms the given code into a tree of code blocks
-    async fn to_tree(&mut self, code: &str) -> Result<CodeBlockTree, LangClientError>;
+    async fn to_tree(&self, code: &str) -> Result<CodeBlockTree, LangClientError>;
+
+    // makes all functions/classes/methods that are one level deep into a stub
+    async fn stub(&self, code: &str) -> Result<String, LangClientError>;
 }
 
 // Request to the language client server, with a given command and text

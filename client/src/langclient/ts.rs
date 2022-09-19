@@ -6,6 +6,8 @@ use tokio::{
     net::UnixStream,
 };
 
+use crate::tree::CodeBlockTree;
+
 use super::{socket_transaction, LCReq, LangClient, LangClientError};
 
 #[derive(Debug)]
@@ -60,40 +62,49 @@ impl LangClient for TsClient {
         })
     }
 
-    async fn pretty_print(&mut self, code: &str) -> Result<String, LangClientError> {
-        // base64 encode the code
-        let code = base64::encode(code);
-
+    async fn pretty_print(&self, code: &str) -> Result<String, LangClientError> {
         let req = LCReq {
             cmd: "print".to_string(),
-            text: code.to_string(),
+            text: base64::encode(code),
         };
 
-        let buf = socket_transaction(&self.socket_path, &req).await?;
-
-        // into json object
-        let resp: serde_json::Value = serde_json::from_str(&buf).unwrap();
-
-        // check if the response is not an error
-        if resp["type"] == "error" {
-            return Err(LangClientError::LC(resp["message"].to_string()));
-        }
-
+        let resp = self.send_req(req).await?;
         // decode the response
         let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
 
         Ok(String::from_utf8(resp).unwrap())
     }
 
-    async fn to_tree(&mut self, code: &str) -> Result<crate::tree::CodeBlockTree, LangClientError> {
-        // base64 encode the code
-        let code = base64::encode(code);
-
+    async fn to_tree(&self, code: &str) -> Result<CodeBlockTree, LangClientError> {
         let req = LCReq {
             cmd: "tree".to_string(),
-            text: code.to_string(),
+            text: base64::encode(code),
         };
 
+        let resp = self.send_req(req).await?;
+
+        // decode the response
+        let tree = base64::decode(resp["text"].as_str().unwrap()).unwrap();
+
+        Ok(serde_json::from_slice(&tree).unwrap())
+    }
+
+    async fn stub(&self, code: &str) -> Result<String, LangClientError> {
+        let req = LCReq {
+            cmd: "stub".to_string(),
+            text: base64::encode(code),
+        };
+
+        let resp = self.send_req(req).await?;
+        // decode the response
+        let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
+
+        Ok(String::from_utf8(resp).unwrap())
+    }
+}
+
+impl TsClient {
+    pub async fn send_req(&self, req: LCReq) -> Result<serde_json::Value, LangClientError> {
         let buf = socket_transaction(&self.socket_path, &req).await?;
 
         // into json object
@@ -104,9 +115,6 @@ impl LangClient for TsClient {
             return Err(LangClientError::LC(resp["message"].to_string()));
         }
 
-        // decode the response
-        let tree = base64::decode(resp["text"].as_str().unwrap()).unwrap();
-
-        Ok(serde_json::from_slice(&tree).unwrap())
+        Ok(resp)
     }
 }
