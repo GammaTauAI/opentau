@@ -30,4 +30,44 @@ async fn main() {
         lang_client,
         file_contents: input,
     };
+
+    // TODO: make this into actual logic
+    {
+        let printed = codex
+            .lang_client
+            .lock()
+            .await
+            .pretty_print(&codex.file_contents)
+            .await
+            .unwrap();
+
+        println!("pretty:\n{}", printed);
+
+        let resp = codex.complete(&printed, 3, 3).await.unwrap();
+        println!("{}", resp);
+    }
+
+    // testing out "tree"
+    {
+        let tree = codex
+            .lang_client
+            .lock()
+            .await
+            .to_tree(&codex.file_contents)
+            .await
+            .unwrap();
+        println!("tree: {:#?}", tree);
+    }
+
+    // testing out "stub"
+    {
+        let stub = codex
+            .lang_client
+            .lock()
+            .await
+            .stub(&codex.file_contents)
+            .await
+            .unwrap();
+        println!("stub: {}", stub);
+    }
 }
