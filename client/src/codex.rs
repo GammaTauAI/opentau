@@ -7,7 +7,7 @@ pub struct CodexClient {
     pub client: reqwest::Client,
     pub token: String,
     // NOTE: mutex so that we make sure the socket is only used by one thread at a time
-    pub lang_client: Box<Mutex<dyn LangClient>>, 
+    pub lang_client: Box<Mutex<dyn LangClient>>,
     pub file_contents: String,
 }
 
@@ -21,7 +21,9 @@ impl CodexClient {
         retries: usize,
     ) -> Result<EditResp, CodexError> {
         // TODO: give more logic into bad complete response handling, errors and retries
-        // IDEA: - if the response still contains "***", retry
+        // IDEAS:
+        // - if the response still contains "***", retry
+        // - if more than just types got completed, retry
         let req = self
             .client
             .post("https://api.openai.com/v1/edits")
