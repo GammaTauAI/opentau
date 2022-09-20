@@ -19,7 +19,7 @@ pub trait LangClient {
     where
         Self: std::marker::Sized;
 
-    // pretty print the given code, making all missing types the "***" token
+    // pretty print the given code, making all missing types the "_hole_" token
     async fn pretty_print(&self, code: &str) -> Result<String, LangClientError>;
 
     // transforms the given code into a tree of code blocks
@@ -27,6 +27,9 @@ pub trait LangClient {
 
     // makes all functions/classes/methods that are one level deep into a stub
     async fn stub(&self, code: &str) -> Result<String, LangClientError>;
+
+    // checks if the given code is complete
+    async fn check_complete(&self, code: &str) -> Result<bool, LangClientError>;
 }
 
 // Request to the language client server, with a given command and text

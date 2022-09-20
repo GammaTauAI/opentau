@@ -111,9 +111,19 @@ var unixServer = net.createServer(function (client) {
       }
       case "check": {
         // Checks a completion, given the original code and completed code.
-        // if it did complete all "***" then it's a complete completion
+        // if it did complete all "_hole_" then it's a complete completion
         const good = checkCompleted(sourceFile);
-        break; // TODO
+        try {
+          client.write(
+            JSON.stringify({
+              type: "checkResponse",
+              text: good,
+            })
+          );
+        } catch (e) {
+          client.write(JSON.stringify({ type: "error", message: e.message }));
+        }
+        break;
       }
       default: {
         client.write(

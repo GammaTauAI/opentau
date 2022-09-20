@@ -101,6 +101,16 @@ impl LangClient for TsClient {
 
         Ok(String::from_utf8(resp).unwrap())
     }
+
+    async fn check_complete(&self, code: &str) -> Result<bool, LangClientError> {
+        let req = LCReq {
+            cmd: "check".to_string(),
+            text: base64::encode(code),
+        };
+
+        let resp = self.send_req(req).await?;
+        Ok(resp["text"].as_bool().unwrap())
+    }
 }
 
 impl TsClient {

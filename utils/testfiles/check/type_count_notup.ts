@@ -1,1 +1,1 @@
-const a: number = 1
+const a: _hole_ = 1;

@@ -1,15 +1,8 @@
 import ts from "typescript";
 import { printSource } from "./printer";
-import { codePrinter } from "./main";
 
 export const stubSource = (sourceFile: ts.SourceFile): string => {
   const traverse = (child: ts.Node, level: number) => {
-    const code = codePrinter.printNode(
-      ts.EmitHint.Unspecified,
-      child,
-      sourceFile
-    );
-
     // for arrowfunc/funcexpr we ask for five levels because:
     // - first nesting is var type (let, const, var)
     // - second nesting is var decl list

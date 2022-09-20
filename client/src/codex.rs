@@ -18,31 +18,52 @@ impl CodexClient {
         &self,
         input: &str,
         num_comps: usize,
-        retries: usize,
+        mut retries: usize,
     ) -> Result<EditResp, CodexError> {
         // TODO: give more logic into bad complete response handling, errors and retries
         // IDEAS:
-        // - if the response still contains "***", retry
-        // - if more than just types got completed, retry
-        let req = self
-            .client
-            .post("https://api.openai.com/v1/edits")
-            .bearer_auth(&self.token)
-            .header("Content-Type", "application/json")
-            .body(serde_json::to_string(&EditReq {
-                model: "code-davinci-edit-001".to_string(),
-                input: input.to_string(),
-                n: num_comps,
-                instruction: "Substitute the token \"***\" with the correct type.".to_string(),
-            })?);
+        // - if more than just types got completed, retry. think about how to do this
+        //      - we could strip out the types and check the length of the code
 
-        let res = req.send().await?;
-        let body = res.text().await?;
-        let resp: EditResp = match serde_json::from_str(&body) {
-            Ok(x) => x,
-            Err(_) => return Err(CodexError::CodexAPI(body)),
-        };
-        Ok(resp)
+        while retries > 0 {
+            let req = self
+                .client
+                .post("https://api.openai.com/v1/edits")
+                .bearer_auth(&self.token)
+                .header("Content-Type", "application/json")
+                .body(serde_json::to_string(&EditReq {
+                    model: "code-davinci-edit-001".to_string(),
+                    input: input.to_string(),
+                    n: num_comps,
+                    instruction: "Substitute the token _hole_ with the correct type.".to_string(),
+                })?);
+            let res = req.send().await?;
+            let body = res.text().await?;
+            let mut resp: EditResp = match serde_json::from_str(&body) {
+                Ok(x) => x,
+                Err(_) => continue,
+            };
+
+            let lang_client = self.lang_client.lock().await;
+            // we filter incomplete completions
+            let mut filtered_completions = Vec::new();
+            for comp in resp.choices.into_iter() {
+                let is_complete = lang_client.check_complete(&comp.text).await?;
+                if is_complete {
+                    filtered_completions.push(comp);
+                }
+            }
+
+            resp.choices = filtered_completions;
+            if !resp.choices.is_empty() {
+                return Ok(resp);
+            }
+
+            println!("No completions found, retrying...");
+
+            retries -= 1;
+        }
+        Err(CodexError::CodexError)
     }
 }
 
@@ -77,7 +98,7 @@ impl std::fmt::Display for EditResp {
 
 #[derive(Debug)]
 pub enum CodexError {
-    CodexAPI(String), // TODO: do better than string
+    CodexError,
     LangClient(LangClientError),
     Reqwest(reqwest::Error),
     Serde(serde_json::Error),
@@ -104,10 +125,10 @@ impl From<serde_json::Error> for CodexError {
 impl std::fmt::Display for CodexError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CodexError::CodexAPI(s) => write!(f, "Codex API error: {}", s),
             CodexError::LangClient(e) => write!(f, "Language client error: {}", e),
             CodexError::Reqwest(e) => write!(f, "Reqwest error: {}", e),
             CodexError::Serde(e) => write!(f, "Serde error: {}", e),
+            CodexError::CodexError => write!(f, "Codex error"),
         }
     }
 }
