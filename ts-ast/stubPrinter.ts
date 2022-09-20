@@ -9,9 +9,6 @@ export const stubSource = (sourceFile: ts.SourceFile): string => {
       child,
       sourceFile
     );
-    console.log("level: ", level);
-    console.log("kind: ", child.kind);
-    console.log("code: ", code);
 
     // for arrowfunc/funcexpr we ask for five levels because:
     // - first nesting is var type (let, const, var)

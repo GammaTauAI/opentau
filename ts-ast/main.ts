@@ -3,8 +3,9 @@ import * as net from "net";
 import { printSource } from "./printer";
 import { makeTree } from "./tree";
 import { stubSource } from "./stubPrinter";
+import { checkCompleted } from "./check";
 
-// the global printer object! 
+// the global printer object!
 export const codePrinter = ts.createPrinter({
   newLine: ts.NewLineKind.LineFeed,
   removeComments: false,
@@ -107,6 +108,12 @@ var unixServer = net.createServer(function (client) {
         }
 
         break;
+      }
+      case "check": {
+        // Checks a completion, given the original code and completed code.
+        // if it did complete all "***" then it's a complete completion
+        const good = checkCompleted(sourceFile);
+        break; // TODO
       }
       default: {
         client.write(
