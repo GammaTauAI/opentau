@@ -1,5 +1,5 @@
 import ts from "typescript";
-import { printSource } from "./printer";
+import { codePrinter } from "./main";
 
 export const stubSource = (sourceFile: ts.SourceFile): string => {
   const traverse = (child: ts.Node, level: number) => {
@@ -33,5 +33,5 @@ export const stubSource = (sourceFile: ts.SourceFile): string => {
   };
 
   sourceFile.forEachChild((child) => traverse(child, 0));
-  return printSource(sourceFile);
+  return codePrinter.printFile(sourceFile);
 };

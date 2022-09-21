@@ -1,8 +1,8 @@
 import ts from "typescript";
 import { codePrinter } from "./main";
 
-export const createFakeType = (): ts.TypeReferenceNode => {
-  return ts.createTypeReferenceNode(ts.createIdentifier("_hole_"), undefined);
+export const createFakeType = (id: string): ts.TypeReferenceNode => {
+  return ts.createTypeReferenceNode(ts.createIdentifier(id), undefined);
 };
 
 export const typeTraversal = (
@@ -11,9 +11,7 @@ export const typeTraversal = (
 ) => {
   if (child.kind === ts.SyntaxKind.FunctionDeclaration) {
     const functionDeclaration = child as ts.FunctionDeclaration;
-    functionDeclaration.type = functionDeclaration.type
-      ? functionDeclaration.type
-      : createFakeType();
+    functionDeclaration.type = func(functionDeclaration.type);
     functionDeclaration.parameters.forEach((parameter) => {
       parameter.type = func(parameter.type);
     });
@@ -29,11 +27,11 @@ export const typeTraversal = (
   child.forEachChild((c) => typeTraversal(c, func));
 };
 
-export const printSource = (sourceFile: ts.SourceFile): string => {
+export const printSource = (sourceFile: ts.SourceFile, typeName: string): string => {
   // Update the source file statements
 
   sourceFile.forEachChild((child) => {
-    typeTraversal(child, (ty) => (ty ? ty : createFakeType()));
+    typeTraversal(child, (ty) => (ty ? ty : createFakeType(typeName)));
   });
 
   // Print the new code

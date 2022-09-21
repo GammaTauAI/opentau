@@ -39,15 +39,15 @@ async fn main() {
             .lang_client
             .lock()
             .await
-            .pretty_print(&codex.file_contents)
+            .pretty_print(&codex.file_contents, "_hole_")
             .await
             .unwrap();
 
         println!("pretty:\n{}", printed);
 
-        let resp = codex.complete(&printed, 2, 3).await.unwrap();
+        let resp = codex.complete(&printed, 1, 3).await.unwrap();
         for (i, comp) in resp.into_iter().enumerate() {
-            println!("comp {}: {}", i, comp);
+            println!("comp {}:\n {}", i, comp);
         }
     }
 

@@ -47,12 +47,20 @@ impl CodexClient {
                         n: num_comps,
                         instruction: "Substitute the token _hole_ with the correct type."
                             .to_string(),
-                    })?);
+                    })?)
+                    .timeout(std::time::Duration::from_secs(60));
                 let res = req.send().await?;
                 let body = res.text().await?;
                 let resp: EditResp = match serde_json::from_str(&body) {
-                    Ok(x) => x,
-                    Err(_) => return Ok(()),
+                    Ok(p) => p,
+                    // this means it's an error response.
+                    Err(_) => {
+                        if body.contains("Rate") {
+                            return Err(CodexError::RateLimit);
+                        } else {
+                            return Err(CodexError::ErrorResponse(body));
+                        }
+                    }
                 };
 
                 let lang_client = lang_client.lock().await;
@@ -65,7 +73,7 @@ impl CodexClient {
                         .check_complete(&input, &comp.text)
                         .await
                         .unwrap_or_else(|e| {
-                            println!("Error checking completion: {:?}", e);
+                            println!("Error checking completion: {}", e);
                             false // if there is an error, we assume it is not complete
                         });
                     if is_complete {
@@ -89,7 +97,7 @@ impl CodexClient {
         let final_completions = filtered_completions.lock().await;
 
         if final_completions.is_empty() {
-            return Err(CodexError::CodexError);
+            return Err(CodexError::CodexCouldNotComplete);
         }
 
         Ok(final_completions.to_vec())
@@ -127,7 +135,9 @@ impl std::fmt::Display for EditResp {
 
 #[derive(Debug)]
 pub enum CodexError {
-    CodexError,
+    ErrorResponse(String),
+    CodexCouldNotComplete,
+    RateLimit,
     LangClient(LangClientError),
     Reqwest(reqwest::Error),
     Serde(serde_json::Error),
@@ -157,7 +167,9 @@ impl std::fmt::Display for CodexError {
             CodexError::LangClient(e) => write!(f, "Language client error: {}", e),
             CodexError::Reqwest(e) => write!(f, "Reqwest error: {}", e),
             CodexError::Serde(e) => write!(f, "Serde error: {}", e),
-            CodexError::CodexError => write!(f, "Codex error"),
+            CodexError::ErrorResponse(s) => write!(f, "Codex error response: {}", s),
+            CodexError::CodexCouldNotComplete => write!(f, "Codex could not complete"),
+            CodexError::RateLimit => write!(f, "Codex rate limit"),
         }
     }
 }

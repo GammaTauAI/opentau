@@ -19,8 +19,8 @@ pub trait LangClient {
     where
         Self: std::marker::Sized;
 
-    // pretty print the given code, making all missing types the "_hole_" token
-    async fn pretty_print(&self, code: &str) -> Result<String, LangClientError>;
+    // pretty print the given code, making all missing types the given type token
+    async fn pretty_print(&self, code: &str, type_name: &str) -> Result<String, LangClientError>;
 
     // transforms the given code into a tree of code blocks
     async fn to_tree(&self, code: &str) -> Result<CodeBlockTree, LangClientError>;
@@ -44,7 +44,29 @@ pub struct LCReq {
     pub text: String,
 }
 
-pub async fn socket_transaction(socket_path: &str, req: &LCReq) -> Result<String, LangClientError> {
+// Request to the language client server, for the printer command.
+// in the format of {cmd: "the-cmd", text: "the-text", typeName: "the-type-name"}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LCPrintReq {
+    pub cmd: String,
+    pub text: String,
+    #[serde(rename = "typeName")]
+    pub type_name: String,
+}
+
+// Request to the language client server, for the check command.
+// in the format of {cmd: "the-cmd", text: "the-completed-text", original: "the-original-text"}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LCCheckReq {
+    pub cmd: String,
+    pub text: String,
+    pub original: String,
+}
+
+pub async fn socket_transaction<T>(socket_path: &str, req: &T) -> Result<String, LangClientError>
+where
+    T: ?Sized + Serialize,
+{
     let mut stream = UnixStream::connect(socket_path).await?;
     let req = serde_json::to_string(req).unwrap();
 

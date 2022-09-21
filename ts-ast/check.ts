@@ -34,7 +34,7 @@ export const checkCompleted = (
   const completedStripped = ts.getMutableClone(completed);
 
   const stripTypes = (_: ts.TypeNode | undefined): ts.TypeNode =>
-    createFakeType();
+    createFakeType("bleh"); // does not matter what we return here
 
   originalStripped.forEachChild((child) => {
     typeTraversal(child, stripTypes);

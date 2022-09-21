@@ -39,17 +39,18 @@ var unixServer = net.createServer(function (client) {
     // try to parse the data as a json object
 
     var obj; // in the format of {cmd: "the-cmd", text: "the-text"}
+    var decodedText;
     try {
       obj = JSON.parse(data.toString());
+      decodedText = Buffer.from(obj.text, "base64").toString("utf8");
     } catch (e) {
       client.write(JSON.stringify({ type: "error", message: e.message }));
       return;
     }
 
-    const decodedText = Buffer.from(obj.text, "base64").toString("utf8");
-
     switch (obj.cmd) {
-      // simply print out the text (and puts unknown types)
+      // simply print out the text (and puts unknown types).
+      // req: {cmd: "print", text: "the-text", typeName: "the-type"}
       case "print": {
         try {
           // create the source file
@@ -60,7 +61,7 @@ var unixServer = net.createServer(function (client) {
             false, // for setParentNodes
             ts.ScriptKind.TS
           );
-          const res = printSource(sourceFile);
+          const res = printSource(sourceFile, obj.typeName);
           const base64 = Buffer.from(res).toString("base64");
           client.write(
             JSON.stringify({
@@ -124,17 +125,20 @@ var unixServer = net.createServer(function (client) {
 
         break;
       }
+      // check if the given text is complete
+      // req: {cmd: "check", text: "the-completed-text", original: "the-original-text"}
       case "check": {
         // Checks a completion, given the original code and completed code.
         // if it did complete all "_hole_" then it's a complete completion
 
-        // cmd.text is { original: "original code", completed: "completed code" }
         try {
-          const { original, completed } = JSON.parse(decodedText);
+          const decodedOriginal = Buffer.from(obj.original, "base64").toString(
+            "utf8"
+          );
           // create the source file
           const originalFile = ts.createSourceFile(
             "bleh.ts", // name does not matter until we save, which we don't from here
-            original,
+            decodedOriginal,
             ts.ScriptTarget.Latest,
             false, // for setParentNodes
             ts.ScriptKind.TS
@@ -142,7 +146,7 @@ var unixServer = net.createServer(function (client) {
 
           const completedFile = ts.createSourceFile(
             "bleh.ts", // name does not matter until we save, which we don't from here
-            completed,
+            decodedText,
             ts.ScriptTarget.Latest,
             false, // for setParentNodes
             ts.ScriptKind.TS
