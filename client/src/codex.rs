@@ -20,11 +20,7 @@ impl CodexClient {
         num_comps: usize,
         mut retries: usize,
     ) -> Result<EditResp, CodexError> {
-        // TODO: give more logic into bad complete response handling, errors and retries
-        // IDEAS:
-        // - if more than just types got completed, retry. think about how to do this
-        //      - we could strip out the types and check the length of the code
-
+        // TODO: change such that we concurrently send requests to codex for n retries
         while retries > 0 {
             let req = self
                 .client
@@ -48,7 +44,13 @@ impl CodexClient {
             // we filter incomplete completions
             let mut filtered_completions = Vec::new();
             for comp in resp.choices.into_iter() {
-                let is_complete = lang_client.check_complete(&comp.text).await?;
+                let is_complete = lang_client
+                    .check_complete(input, &comp.text)
+                    .await
+                    .unwrap_or_else(|e| {
+                        println!("Error checking completion: {:?}", e);
+                        false // if there is an error, we assume it is not complete
+                    });
                 if is_complete {
                     filtered_completions.push(comp);
                 }

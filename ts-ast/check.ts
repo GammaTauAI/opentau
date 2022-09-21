@@ -1,5 +1,5 @@
 import ts from "typescript";
-import { typeTraversal } from "./printer";
+import { typeTraversal, createFakeType } from "./printer";
 
 const count_nodes = (child: ts.Node): number => {
   let count = 1;
@@ -9,14 +9,17 @@ const count_nodes = (child: ts.Node): number => {
   return count;
 };
 
-export const checkCompleted = (original: ts.SourceFile): boolean => {
-  let completed = true;
-  original.forEachChild((child) => {
+export const checkCompleted = (
+  original: ts.SourceFile,
+  completed: ts.SourceFile
+): boolean => {
+  let isCompleted = true;
+  completed.forEachChild((child) => {
     typeTraversal(child, (ty) => {
       if (ty && ty.kind === ts.SyntaxKind.TypeReference) {
         const typeReference = ty as ts.TypeReferenceNode;
-        if (typeReference.typeName.getText() === "_hole_") {
-          completed = false;
+        if (typeReference.typeName.getText(completed) === "_hole_") {
+          isCompleted = false;
         }
       }
       return ty;
@@ -26,7 +29,29 @@ export const checkCompleted = (original: ts.SourceFile): boolean => {
     return false;
   }
 
+  // now, strip types out of the original and completed
+  const originalStripped = ts.getMutableClone(original);
+  const completedStripped = ts.getMutableClone(completed);
+
+  const stripTypes = (_: ts.TypeNode | undefined): ts.TypeNode =>
+    createFakeType();
+
+  originalStripped.forEachChild((child) => {
+    typeTraversal(child, stripTypes);
+  });
+  completedStripped.forEachChild((child) => {
+    typeTraversal(child, stripTypes);
+  });
+
+  // now, compare the number of nodes in the original and completed
+  const originalCount = count_nodes(originalStripped);
+  const completedCount = count_nodes(completedStripped);
+
+  if (originalCount !== completedCount) {
+    isCompleted = false;
+  }
+
   // TODO: strip types off completed, then check number of nodes
 
-  return completed;
+  return isCompleted;
 };

@@ -48,19 +48,18 @@ var unixServer = net.createServer(function (client) {
 
     const decodedText = Buffer.from(obj.text, "base64").toString("utf8");
 
-    // create the source file
-    const sourceFile = ts.createSourceFile(
-      "bleh.ts", // name does not matter until we save, which we don't from here
-      decodedText,
-      ts.ScriptTarget.Latest,
-      true, // for setParentNodes
-      ts.ScriptKind.TS
-    );
-
     switch (obj.cmd) {
       // simply print out the text (and puts unknown types)
       case "print": {
         try {
+          // create the source file
+          const sourceFile = ts.createSourceFile(
+            "bleh.ts", // name does not matter until we save, which we don't from here
+            decodedText,
+            ts.ScriptTarget.Latest,
+            false, // for setParentNodes
+            ts.ScriptKind.TS
+          );
           const res = printSource(sourceFile);
           const base64 = Buffer.from(res).toString("base64");
           client.write(
@@ -77,6 +76,14 @@ var unixServer = net.createServer(function (client) {
       }
       // generate the text tree from the given text (and puts unknown types)
       case "tree": {
+        // create the source file
+        const sourceFile = ts.createSourceFile(
+          "bleh.ts", // name does not matter until we save, which we don't from here
+          decodedText,
+          ts.ScriptTarget.Latest,
+          true, // for setParentNodes
+          ts.ScriptKind.TS
+        );
         const res = makeTree(sourceFile);
         try {
           const base64 = Buffer.from(JSON.stringify(res)).toString("base64");
@@ -95,6 +102,14 @@ var unixServer = net.createServer(function (client) {
       // generate a stub for the given node (that is type-annotated)
       case "stub": {
         try {
+          // create the source file
+          const sourceFile = ts.createSourceFile(
+            "bleh.ts", // name does not matter until we save, which we don't from here
+            decodedText,
+            ts.ScriptTarget.Latest,
+            true, // for setParentNodes
+            ts.ScriptKind.TS
+          );
           const res = stubSource(sourceFile);
           const base64 = Buffer.from(res).toString("base64");
           client.write(
@@ -112,8 +127,29 @@ var unixServer = net.createServer(function (client) {
       case "check": {
         // Checks a completion, given the original code and completed code.
         // if it did complete all "_hole_" then it's a complete completion
-        const good = checkCompleted(sourceFile);
+
+        // cmd.text is { original: "original code", completed: "completed code" }
         try {
+          const { original, completed } = JSON.parse(decodedText);
+          // create the source file
+          const originalFile = ts.createSourceFile(
+            "bleh.ts", // name does not matter until we save, which we don't from here
+            original,
+            ts.ScriptTarget.Latest,
+            false, // for setParentNodes
+            ts.ScriptKind.TS
+          );
+
+          const completedFile = ts.createSourceFile(
+            "bleh.ts", // name does not matter until we save, which we don't from here
+            completed,
+            ts.ScriptTarget.Latest,
+            false, // for setParentNodes
+            ts.ScriptKind.TS
+          );
+
+          const good = checkCompleted(originalFile, completedFile);
+
           client.write(
             JSON.stringify({
               type: "checkResponse",

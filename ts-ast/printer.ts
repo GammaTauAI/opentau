@@ -1,7 +1,7 @@
 import ts from "typescript";
 import { codePrinter } from "./main";
 
-const createFakeType = (): ts.TypeReferenceNode => {
+export const createFakeType = (): ts.TypeReferenceNode => {
   return ts.createTypeReferenceNode(ts.createIdentifier("_hole_"), undefined);
 };
 

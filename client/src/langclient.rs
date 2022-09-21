@@ -28,8 +28,12 @@ pub trait LangClient {
     // makes all functions/classes/methods that are one level deep into a stub
     async fn stub(&self, code: &str) -> Result<String, LangClientError>;
 
-    // checks if the given code is complete
-    async fn check_complete(&self, code: &str) -> Result<bool, LangClientError>;
+    // checks if the given code is complete, comparing it to the original input
+    async fn check_complete(
+        &self,
+        original: &str,
+        completed: &str,
+    ) -> Result<bool, LangClientError>;
 }
 
 // Request to the language client server, with a given command and text

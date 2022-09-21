@@ -1,6 +1,7 @@
 use std::process::Stdio;
 
 use async_trait::async_trait;
+use serde_json::json;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt},
     net::UnixStream,
@@ -102,10 +103,18 @@ impl LangClient for TsClient {
         Ok(String::from_utf8(resp).unwrap())
     }
 
-    async fn check_complete(&self, code: &str) -> Result<bool, LangClientError> {
+    async fn check_complete(
+        &self,
+        original: &str,
+        completed: &str,
+    ) -> Result<bool, LangClientError> {
+        // encode original and completed into json: {original: "", completed: ""}
         let req = LCReq {
             cmd: "check".to_string(),
-            text: base64::encode(code),
+            text: base64::encode(
+                &serde_json::to_string(&json!({ "original": original, "completed": completed }))
+                    .unwrap(),
+            ),
         };
 
         let resp = self.send_req(req).await?;
