@@ -45,7 +45,7 @@ async fn main() {
 
         println!("pretty:\n{}", printed);
 
-        let resp = codex.complete(&printed, 1, 3).await.unwrap();
+        let resp = codex.complete(&printed, 1, 30).await.unwrap();
         for (i, comp) in resp.into_iter().enumerate() {
             println!("comp {}:\n {}", i, comp);
         }

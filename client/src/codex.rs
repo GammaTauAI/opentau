@@ -13,9 +13,14 @@ pub struct CodexClient {
     pub file_contents: String,
 }
 
+const INSTRUCTIONS: &str = "Substitute the token _hole_ with the correct type.";
+
 impl CodexClient {
     /// Completes the given input code using the codex API. The given input code has to be pretty
     /// printed such that unknown types are represented by "_hole_".
+    /// num_comps is the number of completions to return per request. Codex will fail completely if
+    /// it cannot give you the exact number of completions you ask for. retries is the number of
+    /// requests to make to codex. There is a rate-limit of 20 requests per minute.
     pub async fn complete(
         &self,
         input: &str,
@@ -32,7 +37,7 @@ impl CodexClient {
             let filtered_completions = Arc::clone(&filtered_completions);
             let lang_client = self.lang_client.clone();
             let input = input.to_string();
-            let client = self.client.clone();
+            let client = self.client.clone(); // NOTE: reqwest uses Arc internally
             let token = self.token.clone();
 
             handles.push(tokio::spawn(async move {
@@ -45,22 +50,15 @@ impl CodexClient {
                         model: "code-davinci-edit-001".to_string(),
                         input: input.to_string(),
                         n: num_comps,
-                        instruction: "Substitute the token _hole_ with the correct type."
-                            .to_string(),
+                        instruction: INSTRUCTIONS.to_string(),
                     })?)
-                    .timeout(std::time::Duration::from_secs(60));
+                    .timeout(std::time::Duration::from_secs(30));
                 let res = req.send().await?;
                 let body = res.text().await?;
                 let resp: EditResp = match serde_json::from_str(&body) {
                     Ok(p) => p,
                     // this means it's an error response.
-                    Err(_) => {
-                        if body.contains("Rate") {
-                            return Err(CodexError::RateLimit);
-                        } else {
-                            return Err(CodexError::ErrorResponse(body));
-                        }
-                    }
+                    Err(_) => return Err(CodexError::ErrorResponse(body)),
                 };
 
                 let lang_client = lang_client.lock().await;
@@ -87,20 +85,33 @@ impl CodexClient {
             retries -= 1;
         }
 
+        let mut rate_limited = false;
+
         for handle in handles {
             let res = handle.await.unwrap();
             if let Err(e) = res {
+                if let CodexError::ErrorResponse(body) = &e {
+                    if body.contains("Rate limit reached") {
+                        println!("Rate limited by codex.");
+                        rate_limited = true;
+                    }
+                }
                 println!("Error in completion thread: {:?}", e);
             }
         }
 
-        let final_completions = filtered_completions.lock().await;
+        let final_completions = filtered_completions.lock().await.to_vec();
+
+        if rate_limited {
+            // if we rate limit, we still want to return the completions we have
+            return Err(CodexError::RateLimit(final_completions));
+        }
 
         if final_completions.is_empty() {
             return Err(CodexError::CodexCouldNotComplete);
         }
 
-        Ok(final_completions.to_vec())
+        Ok(final_completions)
     }
 }
 
@@ -137,7 +148,8 @@ impl std::fmt::Display for EditResp {
 pub enum CodexError {
     ErrorResponse(String),
     CodexCouldNotComplete,
-    RateLimit,
+    // where the Vec<String> is the list of completions we got before the rate limit
+    RateLimit(Vec<String>),
     LangClient(LangClientError),
     Reqwest(reqwest::Error),
     Serde(serde_json::Error),
@@ -169,7 +181,9 @@ impl std::fmt::Display for CodexError {
             CodexError::Serde(e) => write!(f, "Serde error: {}", e),
             CodexError::ErrorResponse(s) => write!(f, "Codex error response: {}", s),
             CodexError::CodexCouldNotComplete => write!(f, "Codex could not complete"),
-            CodexError::RateLimit => write!(f, "Codex rate limit"),
+            CodexError::RateLimit(completions) => {
+                write!(f, "Codex rate limit. Got {} completions", completions.len())
+            }
         }
     }
 }
