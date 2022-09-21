@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use rust_ex::{
     codex::{EditReq, EditResp},
     langclient::{ts::TsClient, LangClient},
@@ -23,7 +25,7 @@ async fn main() {
         .unwrap()
         .to_string();
 
-    let lang_client = Box::new(Mutex::new(TsClient::make(&client_path).await.unwrap()));
+    let lang_client = Arc::new(Mutex::new(TsClient::make(&client_path).await.unwrap()));
     let codex = rust_ex::codex::CodexClient {
         client: reqwest::Client::new(),
         token,
@@ -43,8 +45,10 @@ async fn main() {
 
         println!("pretty:\n{}", printed);
 
-        let resp = codex.complete(&printed, 1, 3).await.unwrap();
-        println!("{}", resp);
+        let resp = codex.complete(&printed, 2, 3).await.unwrap();
+        for (i, comp) in resp.into_iter().enumerate() {
+            println!("comp {}: {}", i, comp);
+        }
     }
 
     // testing out "tree"
