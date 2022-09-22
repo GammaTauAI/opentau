@@ -34,6 +34,14 @@ struct Args {
     /// "fallback": tree completion with fallback to "any" type}
     #[clap(short, long, value_parser, default_value = "simple")]
     strategy: String,
+
+    /// The number of completions to return
+    #[clap(short, long, value_parser, default_value = "1")]
+    n: usize,
+
+    /// The number of retries to make to codex
+    #[clap(short, long, value_parser, default_value = "3")]
+    retries: usize,
 }
 
 impl Args {
@@ -86,7 +94,7 @@ async fn main() {
 
             println!("pretty:\n{}", printed);
 
-            let resp = codex.complete(&printed, 1, 4).await.unwrap();
+            let resp = codex.complete(&printed, args.n, args.retries).await.unwrap();
             let lang_client = codex.lang_client.lock().await;
             let mut maybe_comp: Option<String> = None;
             for (i, comp) in resp.into_iter().enumerate() {
