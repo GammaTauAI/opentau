@@ -16,7 +16,7 @@ struct Args {
     #[clap(short, long, value_parser)]
     token: String,
 
-    /// The target language
+    /// The target language.
     /// Either `ts` or `py`
     #[clap(short, long, value_parser, default_value = "ts")]
     lang: String,
@@ -29,10 +29,9 @@ struct Args {
     #[clap(short, long, value_parser)]
     output: String,
 
-    /// Completion strategy
-    /// "simple" - simple completion
-    /// "tree" - tree completion
-    /// "fallback" - tree completion with fallback to "any" type
+    /// Completion strategy. Either: {"simple": simple completion,
+    /// "tree": tree completion,
+    /// "fallback": tree completion with fallback to "any" type}
     #[clap(short, long, value_parser, default_value = "simple")]
     strategy: String,
 }
