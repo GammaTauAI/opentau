@@ -6,6 +6,11 @@
 ## Requirements
 
 - `rust`
-- For typescript:
+- For type-inferring typescript:
   - `ts-node`
   - `tsc`
+
+## Installation
+Run `make` while being in the directory
+
+The output binary (symlinked) will be at `/out/client`
