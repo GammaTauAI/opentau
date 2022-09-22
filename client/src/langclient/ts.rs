@@ -120,6 +120,33 @@ impl LangClient for TsClient {
         let resp = self.send_req(&req).await?;
         Ok(resp["text"].as_bool().unwrap())
     }
+
+    async fn type_check(&self, code: &str) -> Result<bool, LangClientError> {
+        // get a temp file (overwrite if exists)
+        let tmp_dir = std::env::temp_dir();
+        let tmp_file = tmp_dir.join(format!("codex-{}.ts", std::process::id()));
+        tokio::fs::write(&tmp_file, code).await?;
+
+        // run: tsc --allowJs --checkJs --noEmit filename.ts
+        let mut process = match tokio::process::Command::new("tsc")
+            .args([
+                "--allowJs",
+                "--checkJs",
+                "--noEmit",
+                tmp_file.to_str().unwrap(),
+            ])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+        {
+            Ok(p) => p,
+            Err(_) => return Err(LangClientError::ProcessSpawn),
+        };
+
+        // check if the process exited with code 0
+        let status = process.wait().await?;
+        Ok(status.success())
+    }
 }
 
 impl TsClient {

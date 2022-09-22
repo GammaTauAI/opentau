@@ -34,6 +34,10 @@ pub trait LangClient {
         original: &str,
         completed: &str,
     ) -> Result<bool, LangClientError>;
+
+    // type checks the given code. returns true if it type checks, false otherwise.
+    // may return an error.
+    async fn type_check(&self, code: &str) -> Result<bool, LangClientError>;
 }
 
 // Request to the language client server, with a given command and text

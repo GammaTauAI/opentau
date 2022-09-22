@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use rust_ex::{
+use codex_types::{
     codex::{EditReq, EditResp},
     langclient::{ts::TsClient, LangClient},
 };
@@ -26,7 +26,7 @@ async fn main() {
         .to_string();
 
     let lang_client = Arc::new(Mutex::new(TsClient::make(&client_path).await.unwrap()));
-    let codex = rust_ex::codex::CodexClient {
+    let codex = codex_types::codex::CodexClient {
         client: reqwest::Client::new(),
         token,
         lang_client,
