@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use rust_ex::{
     codex::{EditReq, EditResp},
     langclient::{ts::TsClient, LangClient},
@@ -23,7 +25,7 @@ async fn main() {
         .unwrap()
         .to_string();
 
-    let lang_client = Box::new(Mutex::new(TsClient::make(&client_path).await.unwrap()));
+    let lang_client = Arc::new(Mutex::new(TsClient::make(&client_path).await.unwrap()));
     let codex = rust_ex::codex::CodexClient {
         client: reqwest::Client::new(),
         token,
@@ -37,37 +39,39 @@ async fn main() {
             .lang_client
             .lock()
             .await
-            .pretty_print(&codex.file_contents)
+            .pretty_print(&codex.file_contents, "_hole_")
             .await
             .unwrap();
 
         println!("pretty:\n{}", printed);
 
-        let resp = codex.complete(&printed, 3, 3).await.unwrap();
-        println!("{}", resp);
+        let resp = codex.complete(&printed, 1, 30).await.unwrap();
+        for (i, comp) in resp.into_iter().enumerate() {
+            println!("comp {}:\n {}", i, comp);
+        }
     }
 
     // testing out "tree"
-    {
-        let tree = codex
-            .lang_client
-            .lock()
-            .await
-            .to_tree(&codex.file_contents)
-            .await
-            .unwrap();
-        println!("tree: {:#?}", tree);
-    }
+    // {
+    // let tree = codex
+    // .lang_client
+    // .lock()
+    // .await
+    // .to_tree(&codex.file_contents)
+    // .await
+    // .unwrap();
+    // println!("tree: {:#?}", tree);
+    // }
 
     // testing out "stub"
-    {
-        let stub = codex
-            .lang_client
-            .lock()
-            .await
-            .stub(&codex.file_contents)
-            .await
-            .unwrap();
-        println!("stub: {}", stub);
-    }
+    // {
+    // let stub = codex
+    // .lang_client
+    // .lock()
+    // .await
+    // .stub(&codex.file_contents)
+    // .await
+    // .unwrap();
+    // println!("stub: {}", stub);
+    // }
 }

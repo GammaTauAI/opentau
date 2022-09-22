@@ -1,6 +1,8 @@
 use std::process::Stdio;
 
 use async_trait::async_trait;
+use serde::Serialize;
+use serde_json::json;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt},
     net::UnixStream,
@@ -8,7 +10,7 @@ use tokio::{
 
 use crate::tree::CodeBlockTree;
 
-use super::{socket_transaction, LCReq, LangClient, LangClientError};
+use super::{socket_transaction, LCCheckReq, LCPrintReq, LCReq, LangClient, LangClientError};
 
 #[derive(Debug)]
 pub struct TsClient {
@@ -62,13 +64,14 @@ impl LangClient for TsClient {
         })
     }
 
-    async fn pretty_print(&self, code: &str) -> Result<String, LangClientError> {
-        let req = LCReq {
+    async fn pretty_print(&self, code: &str, type_name: &str) -> Result<String, LangClientError> {
+        let req = LCPrintReq {
             cmd: "print".to_string(),
             text: base64::encode(code),
+            type_name: type_name.to_string(),
         };
 
-        let resp = self.send_req(req).await?;
+        let resp = self.send_req(&req).await?;
         // decode the response
         let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
 
@@ -81,7 +84,7 @@ impl LangClient for TsClient {
             text: base64::encode(code),
         };
 
-        let resp = self.send_req(req).await?;
+        let resp = self.send_req(&req).await?;
 
         // decode the response
         let tree = base64::decode(resp["text"].as_str().unwrap()).unwrap();
@@ -95,16 +98,35 @@ impl LangClient for TsClient {
             text: base64::encode(code),
         };
 
-        let resp = self.send_req(req).await?;
+        let resp = self.send_req(&req).await?;
         // decode the response
         let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
 
         Ok(String::from_utf8(resp).unwrap())
     }
+
+    async fn check_complete(
+        &self,
+        original: &str,
+        completed: &str,
+    ) -> Result<bool, LangClientError> {
+        // encode original and completed into json: {original: "", completed: ""}
+        let req = LCCheckReq {
+            cmd: "check".to_string(),
+            text: base64::encode(completed),
+            original: base64::encode(original),
+        };
+
+        let resp = self.send_req(&req).await?;
+        Ok(resp["text"].as_bool().unwrap())
+    }
 }
 
 impl TsClient {
-    pub async fn send_req(&self, req: LCReq) -> Result<serde_json::Value, LangClientError> {
+    pub async fn send_req<T>(&self, req: &T) -> Result<serde_json::Value, LangClientError>
+    where
+        T: ?Sized + Serialize,
+    {
         let buf = socket_transaction(&self.socket_path, &req).await?;
 
         // into json object

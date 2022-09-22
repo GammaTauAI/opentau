@@ -3,6 +3,14 @@ import * as net from "net";
 import { printSource } from "./printer";
 import { makeTree } from "./tree";
 import { stubSource } from "./stubPrinter";
+import { checkCompleted } from "./check";
+
+// the global printer object!
+export const codePrinter = ts.createPrinter({
+  newLine: ts.NewLineKind.LineFeed,
+  removeComments: false,
+  omitTrailingSemicolon: false,
+});
 
 if (process.argv.length != 4) {
   console.log("usage: [path to socket] [pid of rust proc]");
@@ -31,29 +39,29 @@ var unixServer = net.createServer(function (client) {
     // try to parse the data as a json object
 
     var obj; // in the format of {cmd: "the-cmd", text: "the-text"}
+    var decodedText;
     try {
       obj = JSON.parse(data.toString());
+      decodedText = Buffer.from(obj.text, "base64").toString("utf8");
     } catch (e) {
       client.write(JSON.stringify({ type: "error", message: e.message }));
       return;
     }
 
-    const decodedText = Buffer.from(obj.text, "base64").toString("utf8");
-
-    // create the source file
-    const sourceFile = ts.createSourceFile(
-      "bleh.ts", // name does not matter until we save, which we don't from here
-      decodedText,
-      ts.ScriptTarget.Latest,
-      false, // for setParentNodes TODO: maybe let's set this to true?
-      ts.ScriptKind.TS
-    );
-
     switch (obj.cmd) {
-      // simply print out the text (and puts unknown types)
+      // simply print out the text (and puts unknown types).
+      // req: {cmd: "print", text: "the-text", typeName: "the-type"}
       case "print": {
         try {
-          const res = printSource(sourceFile);
+          // create the source file
+          const sourceFile = ts.createSourceFile(
+            "bleh.ts", // name does not matter until we save, which we don't from here
+            decodedText,
+            ts.ScriptTarget.Latest,
+            false, // for setParentNodes
+            ts.ScriptKind.TS
+          );
+          const res = printSource(sourceFile, obj.typeName);
           const base64 = Buffer.from(res).toString("base64");
           client.write(
             JSON.stringify({
@@ -69,6 +77,14 @@ var unixServer = net.createServer(function (client) {
       }
       // generate the text tree from the given text (and puts unknown types)
       case "tree": {
+        // create the source file
+        const sourceFile = ts.createSourceFile(
+          "bleh.ts", // name does not matter until we save, which we don't from here
+          decodedText,
+          ts.ScriptTarget.Latest,
+          true, // for setParentNodes
+          ts.ScriptKind.TS
+        );
         const res = makeTree(sourceFile);
         try {
           const base64 = Buffer.from(JSON.stringify(res)).toString("base64");
@@ -87,6 +103,14 @@ var unixServer = net.createServer(function (client) {
       // generate a stub for the given node (that is type-annotated)
       case "stub": {
         try {
+          // create the source file
+          const sourceFile = ts.createSourceFile(
+            "bleh.ts", // name does not matter until we save, which we don't from here
+            decodedText,
+            ts.ScriptTarget.Latest,
+            true, // for setParentNodes
+            ts.ScriptKind.TS
+          );
           const res = stubSource(sourceFile);
           const base64 = Buffer.from(res).toString("base64");
           client.write(
@@ -99,6 +123,46 @@ var unixServer = net.createServer(function (client) {
           client.write(JSON.stringify({ type: "error", message: e.message }));
         }
 
+        break;
+      }
+      // check if the given text is complete
+      // req: {cmd: "check", text: "the-completed-text", original: "the-original-text"}
+      case "check": {
+        // Checks a completion, given the original code and completed code.
+        // if it did complete all "_hole_" then it's a complete completion
+
+        try {
+          const decodedOriginal = Buffer.from(obj.original, "base64").toString(
+            "utf8"
+          );
+          // create the source file
+          const originalFile = ts.createSourceFile(
+            "bleh.ts", // name does not matter until we save, which we don't from here
+            decodedOriginal,
+            ts.ScriptTarget.Latest,
+            false, // for setParentNodes
+            ts.ScriptKind.TS
+          );
+
+          const completedFile = ts.createSourceFile(
+            "bleh.ts", // name does not matter until we save, which we don't from here
+            decodedText,
+            ts.ScriptTarget.Latest,
+            false, // for setParentNodes
+            ts.ScriptKind.TS
+          );
+
+          const good = checkCompleted(originalFile, completedFile);
+
+          client.write(
+            JSON.stringify({
+              type: "checkResponse",
+              text: good,
+            })
+          );
+        } catch (e) {
+          client.write(JSON.stringify({ type: "error", message: e.message }));
+        }
         break;
       }
       default: {
