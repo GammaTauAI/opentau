@@ -61,6 +61,7 @@ var unixServer = net.createServer(function (client) {
             false, // for setParentNodes
             ts.ScriptKind.TS
           );
+          obj.typeName = obj.typeName || "_hole_"; // default to _hole_
           const res = printSource(sourceFile, obj.typeName);
           const base64 = Buffer.from(res).toString("base64");
           client.write(
