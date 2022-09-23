@@ -49,7 +49,23 @@ export const printSource = (
   // Update the source file statements
 
   sourceFile.forEachChild((child) => {
-    typeTraversal(child, (ty) => (ty ? ty : createFakeType(typeName)));
+    typeTraversal(child, (ty) => {
+      if (ty) {
+        if (ty.kind === ts.SyntaxKind.TypeReference) {
+          const typeReference = ty as ts.TypeReferenceNode;
+          if (
+            typeReference.typeName.getText(sourceFile) === "_hole_" &&
+            typeName != "_hole_"
+          ) {
+            return createFakeType(typeName);
+          }
+        } else {
+          return ty;
+        }
+      } else {
+        return createFakeType(typeName);
+      }
+    });
   });
 
   // Print the new code

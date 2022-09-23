@@ -1,3 +1,4 @@
 class MyClass {
-  myField: string;
+  myField;
+  myField2: string;
 }

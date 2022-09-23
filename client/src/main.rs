@@ -29,9 +29,7 @@ struct Args {
     #[clap(short, long, value_parser)]
     output: String,
 
-    /// Completion strategy. Either: {"simple": simple completion,
-    /// "tree": tree completion,
-    /// "fallback": tree completion with fallback to "any" type}
+    /// Completion strategy. Either: {"simple": simple completion, "tree": tree completion}
     #[clap(short, long, value_parser, default_value = "simple")]
     strategy: String,
 
@@ -42,6 +40,10 @@ struct Args {
     /// The number of retries to make to codex
     #[clap(short, long, value_parser, default_value = "3")]
     retries: usize,
+
+    /// Whether to fallback to any or not
+    #[clap(short, long, value_parser, default_value = "true")]
+    fallback: bool,
 }
 
 impl Args {
@@ -94,7 +96,10 @@ async fn main() {
 
             println!("pretty:\n{}", printed);
 
-            let resp = match codex.complete(&printed, args.n, args.retries).await {
+            let resp = match codex
+                .complete(&printed, args.n, args.retries, args.fallback)
+                .await
+            {
                 Ok(r) => r,
                 Err(CodexError::RateLimit(r)) => {
                     eprintln!("Rate limited, but got {} completions before.", r.len());
@@ -122,7 +127,6 @@ async fn main() {
             })
         }
         "tree" => todo!("tree completion"),
-        "fallback" => todo!("tree completion with fallback"),
         _ => {
             eprintln!("Unknown strategy, {}", args.strategy);
             std::process::exit(1);

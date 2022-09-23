@@ -128,10 +128,8 @@ var unixServer = net.createServer(function (client) {
       }
       // check if the given text is complete
       // req: {cmd: "check", text: "the-completed-text", original: "the-original-text"}
+      // additionally, returns a score for the completion.
       case "check": {
-        // Checks a completion, given the original code and completed code.
-        // if it did complete all "_hole_" then it's a complete completion
-
         try {
           const decodedOriginal = Buffer.from(obj.original, "base64").toString(
             "utf8"
@@ -153,12 +151,13 @@ var unixServer = net.createServer(function (client) {
             ts.ScriptKind.TS
           );
 
-          const good = checkCompleted(originalFile, completedFile);
+          const res = checkCompleted(originalFile, completedFile);
 
           client.write(
             JSON.stringify({
               type: "checkResponse",
-              text: good,
+              text: res[0],
+              score: res[1],
             })
           );
         } catch (e) {

@@ -12,11 +12,19 @@ const count_nodes = (child: ts.Node): number => {
 export const checkCompleted = (
   original: ts.SourceFile,
   completed: ts.SourceFile
-): boolean => {
+): [boolean, number] => {
   let isCompleted = true;
+  let score = 0;
+  // checks completed types and scores them
   completed.forEachChild((child) => {
     typeTraversal(child, (ty) => {
-      if (ty && ty.kind === ts.SyntaxKind.TypeReference) {
+      // means codex removed the type
+      if (!ty) {
+        isCompleted = false;
+        return ty;
+      }
+
+      if (ty.kind === ts.SyntaxKind.TypeReference) {
         const typeReference = ty as ts.TypeReferenceNode;
         if (typeReference.typeName.getText(completed) === "_hole_") {
           isCompleted = false;
@@ -25,8 +33,9 @@ export const checkCompleted = (
       return ty;
     });
   });
+
   if (!completed) {
-    return false;
+    return [false, score];
   }
 
   // now, strip types out of the original and completed
@@ -51,7 +60,5 @@ export const checkCompleted = (
     isCompleted = false;
   }
 
-  // TODO: strip types off completed, then check number of nodes
-
-  return isCompleted;
+  return [isCompleted, score];
 };

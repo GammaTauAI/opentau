@@ -33,7 +33,7 @@ pub trait LangClient {
         &self,
         original: &str,
         completed: &str,
-    ) -> Result<bool, LangClientError>;
+    ) -> Result<(bool, i64), LangClientError>;
 
     // type checks the given code. returns true if it type checks, false otherwise.
     // may return an error.

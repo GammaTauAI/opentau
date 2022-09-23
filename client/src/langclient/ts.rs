@@ -109,7 +109,7 @@ impl LangClient for TsClient {
         &self,
         original: &str,
         completed: &str,
-    ) -> Result<bool, LangClientError> {
+    ) -> Result<(bool, i64), LangClientError> {
         // encode original and completed into json: {original: "", completed: ""}
         let req = LCCheckReq {
             cmd: "check".to_string(),
@@ -118,7 +118,10 @@ impl LangClient for TsClient {
         };
 
         let resp = self.send_req(&req).await?;
-        Ok(resp["text"].as_bool().unwrap())
+        Ok((
+            resp["text"].as_bool().unwrap(),
+            resp["score"].as_i64().unwrap(),
+        ))
     }
 
     async fn type_check(&self, code: &str) -> Result<bool, LangClientError> {

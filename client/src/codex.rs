@@ -21,17 +21,18 @@ impl CodexClient {
     /// num_comps is the number of completions to return per request.
     /// retries is the number of requests to make to codex, which creates duplicates, so we filter
     /// them out.
+    /// fallback is whether to fallback to "any" if we don't get any completions.
     pub async fn complete(
         &self,
         input: &str,
         num_comps: usize,
         mut retries: usize,
+        fallback: bool,
     ) -> Result<Vec<String>, CodexError> {
-        // TODO: implement scoring, sort resulting vec by score,
-        //       and fall back to "any" in worst case (last elem in vec)
-
         // we filter incomplete completions
-        let filtered_completions: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        // scored vec: implemented scoring, sort resulting vec by score,
+        //             and fall back to all "any" in worst case (if enabled)
+        let filtered_completions: Arc<Mutex<Vec<(String, i64)>>> = Arc::new(Mutex::new(Vec::new()));
         let mut handles: Vec<JoinHandle<Result<(), CodexError>>> = Vec::new();
 
         while retries > 0 {
@@ -72,19 +73,21 @@ impl CodexClient {
                             continue;
                         }
                     };
+
                     // check first if it's duplicate in our filtered completions
-                    if filtered_completions.contains(&text) {
+                    if filtered_completions.iter().any(|(c, _)| c == &text) {
                         continue;
                     }
-                    let is_complete = lang_client
+
+                    let (is_complete, score) = lang_client
                         .check_complete(&input, &text)
                         .await
                         .unwrap_or_else(|e| {
                             println!("Error checking completion: {}", e);
-                            false // if there is an error, we assume it is not complete
+                            (false, 0) // if there is an error, we assume it is not complete
                         });
                     if is_complete {
-                        filtered_completions.push(text);
+                        filtered_completions.push((text, score));
                     }
                 }
 
@@ -107,7 +110,28 @@ impl CodexClient {
             }
         }
 
-        let final_completions = filtered_completions.lock().await.to_vec();
+        // sort the vec by score, low..high
+        filtered_completions
+            .lock()
+            .await
+            .sort_by(|(_, s1), (_, s2)| s1.cmp(s2));
+
+        let mut final_completions = filtered_completions
+            .lock()
+            .await
+            .iter()
+            .map(|(c, _)| c.to_string())
+            .collect::<Vec<String>>();
+
+        if fallback {
+            final_completions.push(
+                self.lang_client
+                    .lock()
+                    .await
+                    .pretty_print(input, "any")
+                    .await?,
+            );
+        }
 
         if rate_limited {
             // if we rate limit, we still want to return the completions we have
@@ -118,6 +142,13 @@ impl CodexClient {
         if final_completions.is_empty() {
             return Err(CodexError::CodexCouldNotComplete);
         }
+
+        // print out scores
+        print!("Scores: ");
+        for (_, score) in filtered_completions.lock().await.iter() {
+            print!("{}, ", score);
+        }
+        println!();
 
         Ok(final_completions)
     }
