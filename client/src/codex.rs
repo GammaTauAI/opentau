@@ -3,13 +3,13 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tokio::{sync::Mutex, task::JoinHandle};
 
-use crate::langclient::{LangClient, LangClientError};
+use crate::langserver::{LangServer, LangServerError};
 
 pub struct CodexClient {
     pub client: reqwest::Client,
     pub token: String,
     // NOTE: mutex so that we make sure the socket is only used by one thread at a time
-    pub lang_client: Arc<Mutex<dyn LangClient + Send + Sync>>,
+    pub lang_server: Arc<Mutex<dyn LangServer + Send + Sync>>,
     pub file_contents: String,
 }
 
@@ -37,7 +37,7 @@ impl CodexClient {
 
         while retries > 0 {
             let filtered_completions = Arc::clone(&filtered_completions);
-            let lang_client = self.lang_client.clone();
+            let lang_client = self.lang_server.clone();
             let input = input.to_string();
             let client = self.client.clone(); // NOTE: reqwest uses Arc internally
             let token = self.token.clone();
@@ -125,7 +125,7 @@ impl CodexClient {
 
         if fallback {
             final_completions.push(
-                self.lang_client
+                self.lang_server
                     .lock()
                     .await
                     .pretty_print(input, "any")
@@ -200,14 +200,14 @@ pub enum CodexError {
     CodexCouldNotComplete,
     // where the Vec<String> is the list of completions we got before the rate limit
     RateLimit(Vec<String>),
-    LangClient(LangClientError),
+    LangServer(LangServerError),
     Reqwest(reqwest::Error),
     Serde(serde_json::Error),
 }
 
-impl From<LangClientError> for CodexError {
-    fn from(e: LangClientError) -> Self {
-        CodexError::LangClient(e)
+impl From<LangServerError> for CodexError {
+    fn from(e: LangServerError) -> Self {
+        CodexError::LangServer(e)
     }
 }
 
@@ -226,7 +226,7 @@ impl From<serde_json::Error> for CodexError {
 impl std::fmt::Display for CodexError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CodexError::LangClient(e) => write!(f, "Language client error: {}", e),
+            CodexError::LangServer(e) => write!(f, "Language client error: {}", e),
             CodexError::Reqwest(e) => write!(f, "Reqwest error: {}", e),
             CodexError::Serde(e) => write!(f, "Serde error: {}", e),
             CodexError::ErrorResponse(s) => write!(f, "Codex error response: {}", s),

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use codex_types::{
     codex::{CodexError, EditReq, EditResp, EditRespError},
-    langclient::{ts::TsClient, LangClient},
+    langserver::{ts::TsServer, LangServer},
 };
 use tokio::sync::Mutex;
 
@@ -47,17 +47,17 @@ struct Args {
 }
 
 impl Args {
-    async fn lang_client(&self) -> Arc<Mutex<dyn LangClient + Send + Sync>> {
+    async fn lang_client(&self) -> Arc<Mutex<dyn LangServer + Send + Sync>> {
         match self.lang.as_str() {
             "ts" => {
-                let client_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                     .parent()
                     .unwrap()
                     .join("ts-ast")
                     .to_str()
                     .unwrap()
                     .to_string();
-                Arc::new(Mutex::new(TsClient::make(&client_path).await.unwrap()))
+                Arc::new(Mutex::new(TsServer::make(&path).await.unwrap()))
             }
             "py" => todo!("python client"),
             _ => {
@@ -79,7 +79,7 @@ async fn main() {
     let codex = codex_types::codex::CodexClient {
         client: reqwest::Client::new(),
         token: args.token,
-        lang_client,
+        lang_server: lang_client,
         file_contents,
     };
 
@@ -87,7 +87,7 @@ async fn main() {
     let completed: String = match args.strategy.as_str() {
         "simple" => {
             let printed = codex
-                .lang_client
+                .lang_server
                 .lock()
                 .await
                 .pretty_print(&codex.file_contents, "_hole_")
@@ -111,7 +111,7 @@ async fn main() {
                 }
             };
 
-            let lang_client = codex.lang_client.lock().await;
+            let lang_client = codex.lang_server.lock().await;
             let mut maybe_comp: Option<String> = None;
             for (i, comp) in resp.into_iter().enumerate() {
                 println!("comp {}:\n {}", i, comp);

@@ -10,17 +10,17 @@ use tokio::{
 
 use crate::tree::CodeBlockTree;
 
-use super::{socket_transaction, LCCheckReq, LCPrintReq, LCReq, LangClient, LangClientError};
+use super::{socket_transaction, LSCheckReq, LSPrintReq, LSReq, LangServer, LangServerError};
 
 #[derive(Debug)]
-pub struct TsClient {
+pub struct TsServer {
     pub socket_path: String,
     pub process: tokio::process::Child,
 }
 
 #[async_trait]
-impl LangClient for TsClient {
-    async fn make(client_path: &str) -> Result<Self, LangClientError> {
+impl LangServer for TsServer {
+    async fn make(server_path: &str) -> Result<Self, LangServerError> {
         let pid = std::process::id();
         let tmp_dir = std::env::temp_dir();
         let tmp_socket_file = tmp_dir.join(format!("codex-{}.sock", pid));
@@ -29,7 +29,7 @@ impl LangClient for TsClient {
         let mut process = match tokio::process::Command::new("npm")
             .args([
                 "--prefix",
-                client_path,
+                server_path,
                 "start",
                 tmp_socket_file.to_str().unwrap(),
                 pid.to_string().as_str(),
@@ -39,7 +39,7 @@ impl LangClient for TsClient {
             .spawn()
         {
             Ok(p) => p,
-            Err(_) => return Err(LangClientError::ProcessSpawn),
+            Err(_) => return Err(LangServerError::ProcessSpawn),
         };
 
         // before allowing to connect, wait for the process to output "Listening"
@@ -64,8 +64,8 @@ impl LangClient for TsClient {
         })
     }
 
-    async fn pretty_print(&self, code: &str, type_name: &str) -> Result<String, LangClientError> {
-        let req = LCPrintReq {
+    async fn pretty_print(&self, code: &str, type_name: &str) -> Result<String, LangServerError> {
+        let req = LSPrintReq {
             cmd: "print".to_string(),
             text: base64::encode(code),
             type_name: type_name.to_string(),
@@ -78,8 +78,8 @@ impl LangClient for TsClient {
         Ok(String::from_utf8(resp).unwrap())
     }
 
-    async fn to_tree(&self, code: &str) -> Result<CodeBlockTree, LangClientError> {
-        let req = LCReq {
+    async fn to_tree(&self, code: &str) -> Result<CodeBlockTree, LangServerError> {
+        let req = LSReq {
             cmd: "tree".to_string(),
             text: base64::encode(code),
         };
@@ -92,8 +92,8 @@ impl LangClient for TsClient {
         Ok(serde_json::from_slice(&tree).unwrap())
     }
 
-    async fn stub(&self, code: &str) -> Result<String, LangClientError> {
-        let req = LCReq {
+    async fn stub(&self, code: &str) -> Result<String, LangServerError> {
+        let req = LSReq {
             cmd: "stub".to_string(),
             text: base64::encode(code),
         };
@@ -109,9 +109,9 @@ impl LangClient for TsClient {
         &self,
         original: &str,
         completed: &str,
-    ) -> Result<(bool, i64), LangClientError> {
+    ) -> Result<(bool, i64), LangServerError> {
         // encode original and completed into json: {original: "", completed: ""}
-        let req = LCCheckReq {
+        let req = LSCheckReq {
             cmd: "check".to_string(),
             text: base64::encode(completed),
             original: base64::encode(original),
@@ -124,7 +124,7 @@ impl LangClient for TsClient {
         ))
     }
 
-    async fn type_check(&self, code: &str) -> Result<bool, LangClientError> {
+    async fn type_check(&self, code: &str) -> Result<bool, LangServerError> {
         // get a temp file (overwrite if exists)
         let tmp_dir = std::env::temp_dir();
         let tmp_file = tmp_dir.join(format!("codex-{}.ts", std::process::id()));
@@ -143,7 +143,7 @@ impl LangClient for TsClient {
             .spawn()
         {
             Ok(p) => p,
-            Err(_) => return Err(LangClientError::ProcessSpawn),
+            Err(_) => return Err(LangServerError::ProcessSpawn),
         };
 
         // check if the process exited with code 0
@@ -152,8 +152,8 @@ impl LangClient for TsClient {
     }
 }
 
-impl TsClient {
-    pub async fn send_req<T>(&self, req: &T) -> Result<serde_json::Value, LangClientError>
+impl TsServer {
+    pub async fn send_req<T>(&self, req: &T) -> Result<serde_json::Value, LangServerError>
     where
         T: ?Sized + Serialize,
     {
@@ -164,7 +164,7 @@ impl TsClient {
 
         // check if the response is not an error
         if resp["type"] == "error" {
-            return Err(LangClientError::LC(resp["message"].to_string()));
+            return Err(LangServerError::LC(resp["message"].to_string()));
         }
 
         Ok(resp)

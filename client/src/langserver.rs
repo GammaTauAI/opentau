@@ -6,68 +6,68 @@ use tokio::{
 };
 
 use crate::tree::CodeBlockTree;
-pub mod ts; // the typescript client
+pub mod ts; // the typescript server
 
 // TODO:
-// pub mod py; // the python client
+// pub mod py; // the python server
 
-// This is the trait that defines operations on the language server client.
+// This is the trait that defines operations on the language server.
 #[async_trait]
-pub trait LangClient {
-    // create a new client, given a path to the language server executable
-    async fn make(client_path: &str) -> Result<Self, LangClientError>
+pub trait LangServer {
+    // create a new server socket connection, given a path to the language server executable
+    async fn make(path: &str) -> Result<Self, LangServerError>
     where
         Self: std::marker::Sized;
 
     // pretty print the given code, making all missing types the given type token
-    async fn pretty_print(&self, code: &str, type_name: &str) -> Result<String, LangClientError>;
+    async fn pretty_print(&self, code: &str, type_name: &str) -> Result<String, LangServerError>;
 
     // transforms the given code into a tree of code blocks
-    async fn to_tree(&self, code: &str) -> Result<CodeBlockTree, LangClientError>;
+    async fn to_tree(&self, code: &str) -> Result<CodeBlockTree, LangServerError>;
 
     // makes all functions/classes/methods that are one level deep into a stub
-    async fn stub(&self, code: &str) -> Result<String, LangClientError>;
+    async fn stub(&self, code: &str) -> Result<String, LangServerError>;
 
     // checks if the given code is complete, comparing it to the original input
     async fn check_complete(
         &self,
         original: &str,
         completed: &str,
-    ) -> Result<(bool, i64), LangClientError>;
+    ) -> Result<(bool, i64), LangServerError>;
 
     // type checks the given code. returns true if it type checks, false otherwise.
     // may return an error.
-    async fn type_check(&self, code: &str) -> Result<bool, LangClientError>;
+    async fn type_check(&self, code: &str) -> Result<bool, LangServerError>;
 }
 
-// Request to the language client server, with a given command and text
+// Request to the language server, with a given command and text
 // in the format of {cmd: "the-cmd", text: "the-text"}
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LCReq {
+pub struct LSReq {
     pub cmd: String,
     pub text: String,
 }
 
-// Request to the language client server, for the printer command.
+// Request to the language server, for the printer command.
 // in the format of {cmd: "the-cmd", text: "the-text", typeName: "the-type-name"}
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LCPrintReq {
+pub struct LSPrintReq {
     pub cmd: String,
     pub text: String,
     #[serde(rename = "typeName")]
     pub type_name: String,
 }
 
-// Request to the language client server, for the check command.
+// Request to the language server, for the check command.
 // in the format of {cmd: "the-cmd", text: "the-completed-text", original: "the-original-text"}
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LCCheckReq {
+pub struct LSCheckReq {
     pub cmd: String,
     pub text: String,
     pub original: String,
 }
 
-pub async fn socket_transaction<T>(socket_path: &str, req: &T) -> Result<String, LangClientError>
+pub async fn socket_transaction<T>(socket_path: &str, req: &T) -> Result<String, LangServerError>
 where
     T: ?Sized + Serialize,
 {
@@ -84,28 +84,28 @@ where
 }
 
 #[derive(Debug, Clone)]
-pub enum LangClientError {
+pub enum LangServerError {
     LC(String), // actual error from the language client
     ProcessSpawn,
     SocketConnect,
     SocketIO,
 }
 
-impl From<std::io::Error> for LangClientError {
+impl From<std::io::Error> for LangServerError {
     fn from(_: std::io::Error) -> Self {
-        LangClientError::SocketIO
+        LangServerError::SocketIO
     }
 }
 
-impl std::fmt::Display for LangClientError {
+impl std::fmt::Display for LangServerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LangClientError::LC(s) => write!(f, "Language client error: {}", s),
-            LangClientError::ProcessSpawn => write!(f, "could not spawn language server"),
-            LangClientError::SocketConnect => write!(f, "Socket connection error"),
-            LangClientError::SocketIO => write!(f, "Socket IO error"),
+            LangServerError::LC(s) => write!(f, "Language client error: {}", s),
+            LangServerError::ProcessSpawn => write!(f, "could not spawn language server"),
+            LangServerError::SocketConnect => write!(f, "Socket connection error"),
+            LangServerError::SocketIO => write!(f, "Socket IO error"),
         }
     }
 }
 
-impl std::error::Error for LangClientError {}
+impl std::error::Error for LangServerError {}

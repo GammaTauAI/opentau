@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use codex_types::{
     codex::{EditReq, EditResp},
-    langclient::{ts::TsClient, LangClient},
+    langserver::{ts::TsServer, LangServer},
 };
 use tokio::sync::Mutex;
 
@@ -25,18 +25,18 @@ async fn main() {
         .unwrap()
         .to_string();
 
-    let lang_client = Arc::new(Mutex::new(TsClient::make(&client_path).await.unwrap()));
+    let lang_server = Arc::new(Mutex::new(TsServer::make(&client_path).await.unwrap()));
     let codex = codex_types::codex::CodexClient {
         client: reqwest::Client::new(),
         token,
-        lang_client,
+        lang_server,
         file_contents: input,
     };
 
     // TODO: make this into actual logic
     {
         let printed = codex
-            .lang_client
+            .lang_server
             .lock()
             .await
             .pretty_print(&codex.file_contents, "_hole_")
@@ -54,7 +54,7 @@ async fn main() {
     // testing out "tree"
     {
         let tree = codex
-            .lang_client
+            .lang_server
             .lock()
             .await
             .to_tree(&codex.file_contents)
@@ -66,7 +66,7 @@ async fn main() {
     // testing out "stub"
     {
         let stub = codex
-            .lang_client
+            .lang_server
             .lock()
             .await
             .stub(&codex.file_contents)

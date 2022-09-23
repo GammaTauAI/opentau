@@ -1,3 +1,3 @@
 pub mod codex;
-pub mod langclient;
+pub mod langserver;
 pub mod tree;
