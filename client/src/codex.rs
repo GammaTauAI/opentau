@@ -61,21 +61,30 @@ impl CodexClient {
                     Err(_) => return Err(CodexError::ErrorResponse(body)),
                 };
 
+                println!("Got {} responses from codex", resp.choices.len());
+
                 let lang_client = lang_client.lock().await;
                 for comp in resp.choices.into_iter() {
+                    let text = match comp {
+                        EditRespChoice::Text { text } => text,
+                        EditRespChoice::Error { error: e } => {
+                            println!("Got error from codex: {}", e);
+                            continue;
+                        }
+                    };
                     // check first if it's duplicate in our filtered completions
-                    if filtered_completions.contains(&comp.text) {
+                    if filtered_completions.contains(&text) {
                         continue;
                     }
                     let is_complete = lang_client
-                        .check_complete(&input, &comp.text)
+                        .check_complete(&input, &text)
                         .await
                         .unwrap_or_else(|e| {
                             println!("Error checking completion: {}", e);
                             false // if there is an error, we assume it is not complete
                         });
                     if is_complete {
-                        filtered_completions.push(comp.text);
+                        filtered_completions.push(text);
                     }
                 }
 
@@ -91,6 +100,8 @@ impl CodexClient {
             let res = handle.await.unwrap();
             if let Err(e) = res {
                 if let CodexError::ErrorResponse(body) = &e {
+                    // codex is crappy, and has different error responses for the same error
+                    // so we have to check for both. best way is to just check for string contains.
                     if body.contains("Rate limit reached") {
                         println!("Rate limited by codex.");
                         rate_limited = true;
@@ -129,18 +140,24 @@ pub struct EditResp {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct EditRespChoice {
-    pub text: String,
-    pub index: usize,
+#[serde(untagged)]
+pub enum EditRespChoice {
+    Text { text: String },
+    Error { error: EditRespError },
 }
 
-impl std::fmt::Display for EditResp {
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(tag = "type")]
+pub enum EditRespError {
+    #[serde(rename = "invalid_edit")]
+    InvalidEdit { message: String },
+}
+
+impl std::fmt::Display for EditRespError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Choices given: ")?;
-        for choice in &self.choices {
-            writeln!(f, "- {}:\n{}", choice.index, choice.text)?;
+        match self {
+            EditRespError::InvalidEdit { message } => write!(f, "Invalid edit: {}", message),
         }
-        Ok(())
     }
 }
 
