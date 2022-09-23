@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use codex_types::{
-    codex::{EditReq, EditResp},
+    codex::{CodexError, EditReq, EditResp, EditRespError},
     langclient::{ts::TsClient, LangClient},
 };
 use tokio::sync::Mutex;
@@ -94,7 +94,18 @@ async fn main() {
 
             println!("pretty:\n{}", printed);
 
-            let resp = codex.complete(&printed, args.n, args.retries).await.unwrap();
+            let resp = match codex.complete(&printed, args.n, args.retries).await {
+                Ok(r) => r,
+                Err(CodexError::RateLimit(r)) => {
+                    eprintln!("Rate limited, but got {} completions before.", r.len());
+                    r
+                }
+                Err(e) => {
+                    eprintln!("Fatal error: {}", e);
+                    std::process::exit(1);
+                }
+            };
+
             let lang_client = codex.lang_client.lock().await;
             let mut maybe_comp: Option<String> = None;
             for (i, comp) in resp.into_iter().enumerate() {

@@ -18,16 +18,17 @@ const INSTRUCTIONS: &str = "Substitute the token _hole_ with the correct type.";
 impl CodexClient {
     /// Completes the given input code using the codex API. The given input code has to be pretty
     /// printed such that unknown types are represented by "_hole_".
-    /// num_comps is the number of completions to return per request. Codex will fail completely if
-    /// it cannot give you the exact number of completions you ask for. retries is the number of
-    /// requests to make to codex. There is a rate-limit of 20 requests per minute.
+    /// num_comps is the number of completions to return per request.
+    /// retries is the number of requests to make to codex, which creates duplicates, so we filter
+    /// them out.
     pub async fn complete(
         &self,
         input: &str,
         num_comps: usize,
         mut retries: usize,
     ) -> Result<Vec<String>, CodexError> {
-        // TODO: fall back to "any" in worst case
+        // TODO: implement scoring, sort resulting vec by score,
+        //       and fall back to "any" in worst case (last elem in vec)
 
         // we filter incomplete completions
         let filtered_completions: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
@@ -55,16 +56,15 @@ impl CodexClient {
                     .timeout(std::time::Duration::from_secs(30));
                 let res = req.send().await?;
                 let body = res.text().await?;
-                let resp: EditResp = match serde_json::from_str(&body) {
-                    Ok(p) => p,
-                    // this means it's an error response.
-                    Err(_) => return Err(CodexError::ErrorResponse(body)),
+                let choices: Vec<EditRespChoice> = match serde_json::from_str::<EditResp>(&body)? {
+                    EditResp::Choices { choices } => choices,
+                    EditResp::Error { error } => return Err(CodexError::ErrorResponse(error)),
                 };
 
-                println!("Got {} responses from codex", resp.choices.len());
+                println!("Got {} responses from codex", choices.len());
 
                 let lang_client = lang_client.lock().await;
-                for comp in resp.choices.into_iter() {
+                for comp in choices.into_iter() {
                     let text = match comp {
                         EditRespChoice::Text { text } => text,
                         EditRespChoice::Error { error: e } => {
@@ -99,13 +99,9 @@ impl CodexClient {
         for handle in handles {
             let res = handle.await.unwrap();
             if let Err(e) = res {
-                if let CodexError::ErrorResponse(body) = &e {
-                    // codex is crappy, and has different error responses for the same error
-                    // so we have to check for both. best way is to just check for string contains.
-                    if body.contains("Rate limit reached") {
-                        println!("Rate limited by codex.");
-                        rate_limited = true;
-                    }
+                if let CodexError::ErrorResponse(EditRespError::RateLimited { message: _ }) = &e {
+                    println!("Rate limited by codex.");
+                    rate_limited = true;
                 }
                 println!("Error in completion thread: {:?}", e);
             }
@@ -118,6 +114,7 @@ impl CodexClient {
             return Err(CodexError::RateLimit(final_completions));
         }
 
+        // if we have no completions, we return an error
         if final_completions.is_empty() {
             return Err(CodexError::CodexCouldNotComplete);
         }
@@ -135,8 +132,10 @@ pub struct EditReq {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct EditResp {
-    pub choices: Vec<EditRespChoice>,
+#[serde(untagged)]
+pub enum EditResp {
+    Choices { choices: Vec<EditRespChoice> },
+    Error { error: EditRespError },
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -151,19 +150,22 @@ pub enum EditRespChoice {
 pub enum EditRespError {
     #[serde(rename = "invalid_edit")]
     InvalidEdit { message: String },
+    #[serde(rename = "requests")]
+    RateLimited { message: String },
 }
 
 impl std::fmt::Display for EditRespError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             EditRespError::InvalidEdit { message } => write!(f, "Invalid edit: {}", message),
+            EditRespError::RateLimited { message } => write!(f, "Rate limited: {}", message),
         }
     }
 }
 
 #[derive(Debug)]
 pub enum CodexError {
-    ErrorResponse(String),
+    ErrorResponse(EditRespError),
     CodexCouldNotComplete,
     // where the Vec<String> is the list of completions we got before the rate limit
     RateLimit(Vec<String>),
