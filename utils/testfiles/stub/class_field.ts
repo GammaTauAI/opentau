@@ -1,0 +1,3 @@
+class MyClass {
+  myField: string;
+}
