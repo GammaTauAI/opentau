@@ -24,31 +24,45 @@ pub type NaiveCompletionLevels = Vec<Vec<(Vec<usize>, String, String)>>;
 
 impl From<CodeBlockTree> for NaiveCompletionLevels {
     fn from(tree: CodeBlockTree) -> Self {
+        // dyanmic programming solution. took me a while to figure out how to do this.
+
+        // here we have the levels of the tree
         let mut levels = vec![];
+        // this is a memoization table, where we store the nodes of the tree at each level,
+        // with the children idx that need to be patched in the level after
         let mut nodes = vec![(vec![], tree.name, tree.code)];
-        let mut children = vec![(0, tree.children)];
+        // here we store the children of the nodes, and the idx of the node that they belong to
+        let mut p_children = vec![(0, tree.children)];
+
         while !nodes.is_empty() {
+            // we push the level of nodes that we got the iteration before
             levels.push(nodes);
+            // new nodes!
             nodes = vec![];
+
+            // new children memoization, that we build up in this iteration
             let mut new_children = vec![];
-            for (p_idx, children) in children {
+            // for each node
+            for (p_idx, children) in p_children {
+                // for each children
                 for child in children {
+                    // the idx of the level that we will be patching in the next iteration
                     let idx = nodes.len();
 
+                    // we patch the children idxs of the parent of the children
                     let level = levels.len() - 1;
-                    levels
-                        .get_mut(level)
-                        .unwrap()
-                        .get_mut(p_idx)
-                        .unwrap()
-                        .0
-                        .push(idx);
+                    let (children_idxs, _, _) =
+                        levels.get_mut(level).unwrap().get_mut(p_idx).unwrap();
+                    children_idxs.push(idx);
 
+                    // push unpatched node
                     nodes.push((vec![], child.name, child.code));
+                    // push children
                     new_children.push((idx, child.children));
                 }
             }
-            children = new_children;
+            // reassign children
+            p_children = new_children;
         }
         levels
     }
