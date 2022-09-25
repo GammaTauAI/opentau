@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use codex_types::{
     codex::{CodexError, EditReq, EditResp, EditRespError},
-    langserver::{ts::TsServer, LangServer},
+    langserver::{py::PyServer, ts::TsServer, LangServer},
 };
 use tokio::sync::Mutex;
 
@@ -57,9 +57,26 @@ impl Args {
                     .to_str()
                     .unwrap()
                     .to_string();
-                Arc::new(Mutex::new(TsServer::make(&path).await.unwrap()))
+                Arc::new(Mutex::new(
+                    TsServer::make(&path)
+                        .await
+                        .expect("failed to make ts server"),
+                ))
             }
-            "py" => todo!("python client"),
+            "py" => {
+                let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .parent()
+                    .unwrap()
+                    .join("py-ast")
+                    .to_str()
+                    .unwrap()
+                    .to_string();
+                Arc::new(Mutex::new(
+                    PyServer::make(&path)
+                        .await
+                        .expect("failed to make py server"),
+                ))
+            }
             _ => {
                 eprintln!("Unknown language, {}", self.lang);
                 std::process::exit(1);

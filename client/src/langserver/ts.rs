@@ -1,21 +1,17 @@
 use std::process::Stdio;
 
 use async_trait::async_trait;
-use serde::Serialize;
-use serde_json::json;
-use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt},
-    net::UnixStream,
-};
+use tokio::io::AsyncBufReadExt;
 
 use crate::tree::CodeBlockTree;
 
-use super::{socket_transaction, LSCheckReq, LSPrintReq, LSReq, LangServer, LangServerError};
+use super::{
+    abstraction::SocketAbstraction, LSCheckReq, LSPrintReq, LSReq, LangServer, LangServerError,
+};
 
 #[derive(Debug)]
 pub struct TsServer {
-    pub socket_path: String,
-    pub process: tokio::process::Child,
+    socket: SocketAbstraction,
 }
 
 #[async_trait]
@@ -58,10 +54,11 @@ impl LangServer for TsServer {
 
         println!("client ready to connect to socket!");
         let socket_path = tmp_socket_file.to_str().unwrap().to_string();
-        Ok(Self {
+        let socket = SocketAbstraction {
             socket_path,
             process,
-        })
+        };
+        Ok(Self { socket })
     }
 
     async fn pretty_print(&self, code: &str, type_name: &str) -> Result<String, LangServerError> {
@@ -71,7 +68,7 @@ impl LangServer for TsServer {
             type_name: type_name.to_string(),
         };
 
-        let resp = self.send_req(&req).await?;
+        let resp = self.socket.send_req(&req).await?;
         // decode the response
         let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
 
@@ -84,7 +81,7 @@ impl LangServer for TsServer {
             text: base64::encode(code),
         };
 
-        let resp = self.send_req(&req).await?;
+        let resp = self.socket.send_req(&req).await?;
 
         // decode the response
         let tree = base64::decode(resp["text"].as_str().unwrap()).unwrap();
@@ -98,7 +95,7 @@ impl LangServer for TsServer {
             text: base64::encode(code),
         };
 
-        let resp = self.send_req(&req).await?;
+        let resp = self.socket.send_req(&req).await?;
         // decode the response
         let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
 
@@ -117,7 +114,7 @@ impl LangServer for TsServer {
             original: base64::encode(original),
         };
 
-        let resp = self.send_req(&req).await?;
+        let resp = self.socket.send_req(&req).await?;
         Ok((
             resp["text"].as_bool().unwrap(),
             resp["score"].as_i64().unwrap(),
@@ -149,24 +146,5 @@ impl LangServer for TsServer {
         // check if the process exited with code 0
         let status = process.wait().await?;
         Ok(status.success())
-    }
-}
-
-impl TsServer {
-    pub async fn send_req<T>(&self, req: &T) -> Result<serde_json::Value, LangServerError>
-    where
-        T: ?Sized + Serialize,
-    {
-        let buf = socket_transaction(&self.socket_path, &req).await?;
-
-        // into json object
-        let resp: serde_json::Value = serde_json::from_str(&buf).unwrap();
-
-        // check if the response is not an error
-        if resp["type"] == "error" {
-            return Err(LangServerError::LC(resp["message"].to_string()));
-        }
-
-        Ok(resp)
     }
 }
