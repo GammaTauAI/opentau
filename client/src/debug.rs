@@ -3,6 +3,7 @@ use std::sync::Arc;
 use codex_types::{
     codex::{EditReq, EditResp},
     langserver::{ts::TsServer, LangServer},
+    tree::NaiveCompletionLevels,
 };
 use tokio::sync::Mutex;
 
@@ -33,23 +34,22 @@ async fn main() {
         file_contents: input,
     };
 
-    // TODO: make this into actual logic
-    {
-        let printed = codex
-            .lang_server
-            .lock()
-            .await
-            .pretty_print(&codex.file_contents, "_hole_")
-            .await
-            .unwrap();
+    // {
+    // let printed = codex
+    // .lang_server
+    // .lock()
+    // .await
+    // .pretty_print(&codex.file_contents, "_hole_")
+    // .await
+    // .unwrap();
 
-        println!("pretty:\n{}", printed);
+    // println!("pretty:\n{}", printed);
 
-        let resp = codex.complete(&printed, 1, 4, false).await.unwrap();
-        for (i, comp) in resp.into_iter().enumerate() {
-            println!("comp {}:\n {}", i, comp);
-        }
-    }
+    // let resp = codex.complete(&printed, 1, 4, false).await.unwrap();
+    // for (i, comp) in resp.into_iter().enumerate() {
+    // println!("comp {}:\n {}", i, comp);
+    // }
+    // }
 
     // testing out "tree"
     {
@@ -60,18 +60,19 @@ async fn main() {
             .to_tree(&codex.file_contents)
             .await
             .unwrap();
-        println!("tree: {:#?}", tree);
+        let naive: NaiveCompletionLevels = tree.into();
+        println!("tree: {:#?}", naive);
     }
 
     // testing out "stub"
-    {
-        let stub = codex
-            .lang_server
-            .lock()
-            .await
-            .stub(&codex.file_contents)
-            .await
-            .unwrap();
-        println!("stub: {}", stub);
-    }
+    // {
+    // let stub = codex
+    // .lang_server
+    // .lock()
+    // .await
+    // .stub(&codex.file_contents)
+    // .await
+    // .unwrap();
+    // println!("stub: {}", stub);
+    // }
 }
