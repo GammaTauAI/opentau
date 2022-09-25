@@ -34,11 +34,11 @@ struct Args {
     strategy: String,
 
     /// The number of completions to return
-    #[clap(short, long, value_parser, default_value = "1")]
+    #[clap(short, long, value_parser, default_value = "3")]
     n: usize,
 
     /// The number of retries to make to codex
-    #[clap(short, long, value_parser, default_value = "3")]
+    #[clap(short, long, value_parser, default_value = "1")]
     retries: usize,
 
     /// Whether to fallback to any or not
