@@ -1,5 +1,6 @@
 import ts from "typescript";
 import { typeTraversal, createFakeType } from "./printer";
+import { codePrinter } from "./main";
 
 const count_nodes = (child: ts.Node): number => {
   let count = 1;
@@ -24,17 +25,26 @@ export const checkCompleted = (
         return ty;
       }
 
-      if (ty.kind === ts.SyntaxKind.TypeReference) {
-        const typeReference = ty as ts.TypeReferenceNode;
-        if (typeReference.typeName.getText(completed) === "_hole_") {
-          isCompleted = false;
-        }
+      const tyString = codePrinter
+        .printNode(ts.EmitHint.Unspecified, ty, completed)
+        .trim();
+
+      if (tyString.includes("_hole_")) {
+        isCompleted = false;
+      } else if (tyString.includes("any")) {
+        score += 5;
+      } else if (tyString.includes("unknown")) {
+        score += 3;
+      } else if (tyString.includes("undefined")) {
+        score += 2;
       }
+
       return ty;
     });
   });
 
-  if (!completed) {
+  // short circuit if not completed
+  if (!isCompleted) {
     return [false, score];
   }
 
@@ -56,9 +66,5 @@ export const checkCompleted = (
   const originalCount = count_nodes(originalStripped);
   const completedCount = count_nodes(completedStripped);
 
-  if (originalCount !== completedCount) {
-    isCompleted = false;
-  }
-
-  return [isCompleted, score];
+  return [originalCount === completedCount, score];
 };
