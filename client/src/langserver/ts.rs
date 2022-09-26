@@ -133,6 +133,8 @@ impl LangServer for TsServer {
                 "--allowJs",
                 "--checkJs",
                 "--noEmit",
+                "--target",
+                "es2022",
                 tmp_file.to_str().unwrap(),
             ])
             .stdout(Stdio::piped())
