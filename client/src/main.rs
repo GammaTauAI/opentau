@@ -42,7 +42,7 @@ struct Args {
     retries: usize,
 
     /// Whether to fallback to any or not
-    #[clap(short, long, value_parser, default_value = "true")]
+    #[clap(short, long, value_parser, default_value_t = false)]
     fallback: bool,
 }
 
