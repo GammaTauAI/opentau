@@ -10,7 +10,8 @@ pub struct CodexClient {
     pub token: String,
     // NOTE: mutex so that we make sure the socket is only used by one thread at a time
     pub lang_server: Arc<Mutex<dyn LangServer + Send + Sync>>,
-    pub file_contents: String,
+    // the codex URL endpoint
+    pub endpoint: String,
 }
 
 const INSTRUCTIONS: &str = "Substitute the token _hole_ with the correct type.";
@@ -41,11 +42,12 @@ impl CodexClient {
             let input = input.to_string();
             let client = self.client.clone(); // NOTE: reqwest uses Arc internally
             let token = self.token.clone();
+            let endpoint = self.endpoint.clone();
 
             handles.push(tokio::spawn(async move {
                 let mut filtered_completions = filtered_completions.lock().await;
                 let req = client
-                    .post("https://api.openai.com/v1/edits")
+                    .post(&endpoint)
                     .bearer_auth(token)
                     .header("Content-Type", "application/json")
                     .body(serde_json::to_string(&EditReq {
@@ -54,7 +56,10 @@ impl CodexClient {
                         n: num_comps,
                         instruction: INSTRUCTIONS.to_string(),
                     })?)
-                    .timeout(std::time::Duration::from_secs(30));
+                    .timeout(std::time::Duration::from_secs(std::cmp::max(
+                        30, // make timeout scale up with number of completions
+                        (num_comps * 10) as u64,
+                    )));
                 let res = req.send().await?;
                 let body = res.text().await?;
                 let choices: Vec<EditRespChoice> = match serde_json::from_str::<EditResp>(&body)? {

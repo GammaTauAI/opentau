@@ -31,7 +31,7 @@ async fn main() {
         client: reqwest::Client::new(),
         token,
         lang_server,
-        file_contents: input,
+        endpoint: "https://api.openai.com/v1/edits".to_string(),
     };
 
     // {
@@ -57,7 +57,7 @@ async fn main() {
             .lang_server
             .lock()
             .await
-            .to_tree(&codex.file_contents)
+            .to_tree(&input)
             .await
             .unwrap();
         let naive: NaiveCompletionLevels = tree.into();

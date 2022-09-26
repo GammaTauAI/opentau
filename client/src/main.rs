@@ -44,6 +44,15 @@ struct Args {
     /// Whether to fallback to any or not
     #[clap(short, long, value_parser, default_value_t = false)]
     fallback: bool,
+
+    /// The url of the codex endpoint
+    #[clap(
+        short,
+        long,
+        value_parser,
+        default_value = "https://api.openai.com/v1/edits"
+    )]
+    endpoint: String,
 }
 
 impl Args {
@@ -97,7 +106,7 @@ async fn main() {
         client: reqwest::Client::new(),
         token: args.token,
         lang_server: lang_client,
-        file_contents,
+        endpoint: args.endpoint,
     };
 
     // the completed code. here if we get errors we exit with 1
@@ -107,7 +116,7 @@ async fn main() {
                 .lang_server
                 .lock()
                 .await
-                .pretty_print(&codex.file_contents, "_hole_")
+                .pretty_print(&file_contents, "_hole_")
                 .await
                 .unwrap();
 
