@@ -31,6 +31,7 @@ async fn main() {
         client: reqwest::Client::new(),
         token,
         lang_server,
+        temperature: 1.0,
         endpoint: "https://api.openai.com/v1/edits".to_string(),
     };
 

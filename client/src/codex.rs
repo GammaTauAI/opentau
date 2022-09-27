@@ -12,6 +12,8 @@ pub struct CodexClient {
     pub lang_server: Arc<Mutex<dyn LangServer + Send + Sync>>,
     // the codex URL endpoint
     pub endpoint: String,
+    // the temperature to use for the completion
+    pub temperature: f64,
 }
 
 const INSTRUCTIONS: &str = "Substitute the token _hole_ with the correct type.";
@@ -43,6 +45,7 @@ impl CodexClient {
             let client = self.client.clone(); // NOTE: reqwest uses Arc internally
             let token = self.token.clone();
             let endpoint = self.endpoint.clone();
+            let temp = self.temperature;
 
             handles.push(tokio::spawn(async move {
                 let mut filtered_completions = filtered_completions.lock().await;
@@ -54,6 +57,7 @@ impl CodexClient {
                         model: "code-davinci-edit-001".to_string(),
                         input: input.to_string(),
                         n: num_comps,
+                        temperature: temp,
                         instruction: INSTRUCTIONS.to_string(),
                     })?)
                     .timeout(std::time::Duration::from_secs(std::cmp::max(
@@ -165,6 +169,7 @@ pub struct EditReq {
     pub input: String,
     pub instruction: String,
     pub n: usize,
+    pub temperature: f64,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

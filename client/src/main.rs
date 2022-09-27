@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{io::Write, sync::Arc};
 
 use codex_types::{
     codex::{CodexError, EditReq, EditResp, EditRespError},
@@ -53,6 +53,10 @@ struct Args {
         default_value = "https://api.openai.com/v1/edits"
     )]
     endpoint: String,
+
+    /// The temperature to use for the completion
+    #[clap(long, value_parser, default_value_t = 1.0)]
+    temp: f64,
 }
 
 impl Args {
@@ -107,6 +111,7 @@ async fn main() {
         token: args.token,
         lang_server: lang_client,
         endpoint: args.endpoint,
+        temperature: args.temp,
     };
 
     // the completed code. here if we get errors we exit with 1
@@ -133,6 +138,7 @@ async fn main() {
                 }
                 Err(e) => {
                     eprintln!("Fatal error: {}", e);
+                    std::io::stderr().flush().unwrap();
                     std::process::exit(1);
                 }
             };
@@ -149,6 +155,7 @@ async fn main() {
             }
             maybe_comp.unwrap_or_else(|| {
                 eprintln!("No completions type checked");
+                std::io::stderr().flush().unwrap();
                 std::process::exit(1);
             })
         }
@@ -158,6 +165,7 @@ async fn main() {
             std::process::exit(1);
         }
     };
+    std::io::stdout().flush().unwrap();
     println!("completed:\n {}", completed);
 
     tokio::fs::write(&args.output, completed).await.unwrap();

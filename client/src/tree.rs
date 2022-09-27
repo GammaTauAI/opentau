@@ -19,6 +19,8 @@ pub struct CodeBlockTree {
 // - Step 5: we repeat step 4 until we reach the root level. we have a completed code block tree.
 // - Step 6: we disassemble the code block tree and substitute the completed types into the original
 //   code. we type check the code, and if it passes, we return the code. if it fails, we go to step 3.
+//
+// Why the nested array instead of just using DFS? This representation allows to complete concurrently
 
 pub type NaiveCompletionLevels = Vec<Vec<(Vec<usize>, String, String)>>;
 
