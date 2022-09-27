@@ -25,7 +25,7 @@ struct Args {
     #[clap(short, long, value_parser)]
     file: String,
 
-    /// Output file path
+    /// Output file directory path
     #[clap(short, long, value_parser)]
     output: String,
 
@@ -57,6 +57,10 @@ struct Args {
     /// The temperature to use for the completion
     #[clap(long, value_parser, default_value_t = 1.0)]
     temp: f64,
+
+    /// The maximum number of type-checkable completions to return
+    #[clap(long, value_parser, default_value_t = 1)]
+    stop_at: usize,
 }
 
 impl Args {
@@ -114,8 +118,8 @@ async fn main() {
         temperature: args.temp,
     };
 
-    // the completed code. here if we get errors we exit with 1
-    let completed: String = match args.strategy.as_str() {
+    // the typechecked and completed code(s). here if we get errors we exit with 1
+    let good_ones: Vec<String> = match args.strategy.as_str() {
         "simple" => {
             let printed = codex
                 .lang_server
@@ -144,20 +148,18 @@ async fn main() {
             };
 
             let lang_client = codex.lang_server.lock().await;
-            let mut maybe_comp: Option<String> = None;
+            let mut comps: Vec<String> = vec![];
             for (i, comp) in resp.into_iter().enumerate() {
                 println!("comp {}:\n {}", i, comp);
                 let type_checks = lang_client.type_check(&comp).await.unwrap();
                 if type_checks {
-                    maybe_comp = Some(comp);
+                    comps.push(comp);
+                }
+                if comps.len() >= args.stop_at {
                     break;
                 }
             }
-            maybe_comp.unwrap_or_else(|| {
-                eprintln!("No completions type checked");
-                std::io::stderr().flush().unwrap();
-                std::process::exit(1);
-            })
+            comps
         }
         "tree" => todo!("tree completion"),
         _ => {
@@ -166,7 +168,27 @@ async fn main() {
         }
     };
     std::io::stdout().flush().unwrap();
-    println!("completed:\n {}", completed);
 
-    tokio::fs::write(&args.output, completed).await.unwrap();
+    if good_ones.is_empty() {
+        eprintln!("No completions type checked");
+        std::io::stderr().flush().unwrap();
+        std::process::exit(1);
+    }
+
+    println!("completed:\n");
+    for comp in &good_ones {
+        println!("{}", comp);
+    }
+
+    // if the completed dir does not exist, create it
+    let output_dir = std::path::Path::new(&args.output);
+    if !output_dir.exists() {
+        tokio::fs::create_dir_all(output_dir).await.unwrap();
+    }
+
+    // write to the output dir
+    for (i, comp) in good_ones.into_iter().enumerate() {
+        let output_path = format!("{}/{}.{}", args.output, i, args.lang);
+        tokio::fs::write(&output_path, comp).await.unwrap();
+    }
 }
