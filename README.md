@@ -76,7 +76,7 @@ const findAllPeople: (
   meetings: number[][],
   firstPerson: number
 ) => number[] = function (n, meetings, firstPerson) {
-  meetings.sort((a: number[], b: number[]) => a[2] - b[2]);
+  meetings.sort((a, b) => a[2] - b[2]);
   const uf: UnionFind = new UnionFind(n);
   uf.connect(0, firstPerson);
   let ppl: number[] = [];
