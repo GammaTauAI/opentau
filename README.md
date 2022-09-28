@@ -172,3 +172,5 @@ class UnionFind {
   }
 }
 ```
+
+Note that TypeScript's inference type annotated non let-bound arrow functions, while our system didn't. We believe that these functions should be left untyped, as the signature of the function that calls them should be typed, and TypeScript should enforce those rules. In essence, our system does not replace TypeScript's type-inference, it works with it.
