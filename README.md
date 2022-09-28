@@ -174,3 +174,69 @@ class UnionFind {
 ```
 
 Note that TypeScript's inference type annotated non let-bound arrow functions, while our system didn't. We believe that these functions should be left untyped, as the signature of the function that calls them should be typed, and TypeScript's type-inference should enforce those rules. Our system will not battle with TypeScript's type-inference, it will try to work alongside it. Additionally, our system will not perform any type-migrations, i.e. it will not change already defined types. This is to further enforce the coalition between our system and TypeScript's.
+
+#### Another Example: Generics Inference
+
+Our system is able to fill out generic types.
+
+```ts
+var sumFourDivisors = function (nums) {
+  let res = 0;
+
+  for (const e of nums) {
+    const set = helper(e);
+    if (set.size === 4) {
+      for (const i of set) res += i;
+    }
+  }
+
+  return res;
+
+  function helper(num) {
+    const set = new Set();
+    const r = ~~(Math.sqrt(num) + 1);
+    for (let i = 1; i < r; i++) {
+      if (num % i === 0) {
+        set.add(i);
+        set.add(num / i);
+      }
+    }
+    return set;
+  }
+};
+```
+
+to
+
+```ts
+var sumFourDivisors: (nums: number[]) => number = function (nums) {
+  let res: number = 0;
+  for (const e of nums) {
+    const set: Set<number> = helper(e);
+    if (set.size === 4) {
+      for (const i of set) res += i;
+    }
+  }
+  return res;
+  function helper(num: number): Set<number> {
+    const set: Set<number> = new Set();
+    const r: number = ~~(Math.sqrt(num) + 1);
+    for (let i = 1; i < r; i++) {
+      if (num % i === 0) {
+        set.add(i);
+        set.add(num / i);
+      }
+    }
+    return set;
+  }
+};
+```
+
+while TypeScript's inference couldn't give us a type-checkable answer:
+
+```
+7:28 - error TS2365: Operator '+=' cannot be applied to types 'number' and 'unknown'.
+
+7       for (const i of set) res += i;
+                             ~~~~~~~~
+```
