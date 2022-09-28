@@ -1,7 +1,7 @@
 from typing import List
 
 
-def twoSum(self, nums, target):
+def twoSum(nums, target):
     nums_index = [(v, index) for index, v in enumerate(nums)]
     nums_index.sort()
     begin, end = 0, len(nums) - 1

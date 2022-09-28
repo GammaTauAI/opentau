@@ -3,6 +3,7 @@ import sys
 import subprocess
 
 
+# FIXME: find better way to do this
 def stub(file: str) -> str:
     cmd = f'stubgen {file} --output . --no-import'
     sp = subprocess.Popen(cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
