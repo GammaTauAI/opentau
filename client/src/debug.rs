@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use codex_types::{
-    codex::{EditReq, EditResp},
     langserver::{ts::TsServer, LangServer},
     tree::NaiveCompletionLevels,
 };

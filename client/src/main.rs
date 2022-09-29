@@ -3,7 +3,7 @@ use std::{io::Write, sync::Arc};
 use codex_types::{
     cache::Cache,
     codex::{
-        CodexClient, CodexError, Completion, CompletionQuery, EditReq, EditResp, EditRespError,
+        CodexClient, CodexError, Completion, CompletionQuery,
     },
     langserver::{py::PyServer, ts::TsServer, LangServer},
 };
