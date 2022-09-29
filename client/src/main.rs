@@ -201,10 +201,12 @@ async fn main() {
         tokio::fs::create_dir_all(output_dir).await.unwrap();
     }
 
-    // cache the type-checked compeltions if we have a cache
-    // NOTE:
-    //  - if we have fallback, we don't cache the fallback completions
-    //  - we have to be careful of stop_at
+    if let Some(cache) = &codex.cache {
+        let mut cache = cache.lock().await;
+        for comp in &good_ones {
+            // cache.cache(&comp).await.unwrap();
+        }
+    }
 
     // write to the output dir
     for (i, comp) in good_ones.into_iter().enumerate() {

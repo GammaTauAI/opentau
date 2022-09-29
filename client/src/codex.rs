@@ -21,6 +21,18 @@ pub struct CodexClient {
     pub cache: Option<Arc<Mutex<Cache>>>,
 }
 
+pub struct CompletionQuery {
+    pub input: String,
+    pub num_comps: usize,
+    pub retries: usize,
+    pub fallback: bool,
+}
+
+pub struct Completion {
+    pub completion: String,
+    pub score: i64,
+}
+
 const INSTRUCTIONS: &str = "Substitute the token _hole_ with the correct type.";
 
 impl CodexClient {
@@ -45,6 +57,18 @@ impl CodexClient {
 
         // check cache first, if the cache is set
         // NOTE: we need to query a list of comps with the same (input, num_comps, retries) tuple
+
+        if let Some(cache) = &self.cache {
+            let mut cache = cache.lock().await;
+            let cached_completions = cache.retrieve((input, num_comps, retries)).unwrap();
+            if let Some(cached_completions) = cached_completions {
+                filtered_completions
+                    .lock()
+                    .await
+                    .extend(cached_completions.into_iter().map(|c| (c, 0)));
+                retries = 0; // so we don't make any requests to codex
+            }
+        }
 
         while retries > 0 {
             let filtered_completions = Arc::clone(&filtered_completions);
