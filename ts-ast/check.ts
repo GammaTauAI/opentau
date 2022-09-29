@@ -10,6 +10,20 @@ const count_nodes = (child: ts.Node): number => {
   return count;
 };
 
+// gets the number of comments from a source file. both trailing and leading
+const get_comments = (s: ts.SourceFile): number => {
+  let count = 0;
+  const leading = ts.getLeadingCommentRanges(s.getFullText(), 0);
+  const trailing = ts.getTrailingCommentRanges(s.getFullText(), 0);
+  if (leading) {
+    count += leading.length;
+  }
+  if (trailing) {
+    count += trailing.length;
+  }
+  return count;
+};
+
 export const checkCompleted = (
   original: ts.SourceFile,
   completed: ts.SourceFile
@@ -53,26 +67,15 @@ export const checkCompleted = (
   const completedStripped = ts.getMutableClone(completed);
 
   // check if it added any weird comments
-  const originalComments = ts.getLeadingCommentRanges(
-    originalStripped.getFullText(),
-    0
-  );
+  let originalComments = get_comments(originalStripped);
+  let completedComments = get_comments(completedStripped);
 
-  const completedComments = ts.getLeadingCommentRanges(
-    completedStripped.getFullText(),
-    0
-  );
-
-  if (originalComments && completedComments) {
-    if (originalComments.length !== completedComments.length) {
-      isCompleted = false;
-    }
-  } else if (originalComments || completedComments) {
-    isCompleted = false;
+  // short circuit if it added comments
+  if (originalComments !== completedComments) {
+    return [false, score];
   }
 
   // now strip types
-
   const stripTypes = (_: ts.TypeNode | undefined): ts.TypeNode =>
     createFakeType("bleh"); // does not matter what we return here
 
