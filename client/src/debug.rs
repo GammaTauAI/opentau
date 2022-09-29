@@ -33,6 +33,7 @@ async fn main() {
         lang_server,
         temperature: 1.0,
         endpoint: "https://api.openai.com/v1/edits".to_string(),
+        cache: None,
     };
 
     // {

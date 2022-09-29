@@ -3,7 +3,10 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tokio::{sync::Mutex, task::JoinHandle};
 
-use crate::langserver::{LangServer, LangServerError};
+use crate::{
+    cache::Cache,
+    langserver::{LangServer, LangServerError},
+};
 
 pub struct CodexClient {
     pub client: reqwest::Client,
@@ -14,6 +17,8 @@ pub struct CodexClient {
     pub endpoint: String,
     // the temperature to use for the completion
     pub temperature: f64,
+    // The cache to use for the completions
+    pub cache: Option<Arc<Mutex<Cache>>>,
 }
 
 const INSTRUCTIONS: &str = "Substitute the token _hole_ with the correct type.";
@@ -37,6 +42,9 @@ impl CodexClient {
         //             and fall back to all "any" in worst case (if enabled)
         let filtered_completions: Arc<Mutex<Vec<(String, i64)>>> = Arc::new(Mutex::new(Vec::new()));
         let mut handles: Vec<JoinHandle<Result<(), CodexError>>> = Vec::new();
+
+        // check cache first, if the cache is set
+        // NOTE: we need to query a list of comps with the same (input, num_comps, retries) tuple
 
         while retries > 0 {
             let filtered_completions = Arc::clone(&filtered_completions);

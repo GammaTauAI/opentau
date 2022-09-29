@@ -1,6 +1,7 @@
 use std::{io::Write, sync::Arc};
 
 use codex_types::{
+    cache::Cache,
     codex::{CodexError, EditReq, EditResp, EditRespError},
     langserver::{py::PyServer, ts::TsServer, LangServer},
 };
@@ -61,6 +62,10 @@ struct Args {
     /// The maximum number of type-checkable completions to return
     #[clap(long, value_parser, default_value_t = 1)]
     stop_at: usize,
+
+    /// The Redis URL for the cache
+    #[clap(short, long, value_parser)]
+    cache: Option<String>,
 }
 
 impl Args {
@@ -110,12 +115,22 @@ async fn main() {
 
     let file_contents = tokio::fs::read_to_string(&args.file).await.unwrap();
 
+    let cache: Option<Arc<Mutex<Cache>>> = args.cache.map(|u| {
+        Arc::new(Mutex::new(Cache::new(&u, args.stop_at).unwrap_or_else(
+            |e| {
+                eprintln!("Failed to connect to redis: {}", e);
+                std::process::exit(1);
+            },
+        )))
+    });
+
     let codex = codex_types::codex::CodexClient {
         client: reqwest::Client::new(),
         token: args.token,
         lang_server: lang_client,
         endpoint: args.endpoint,
         temperature: args.temp,
+        cache,
     };
 
     // the typechecked and completed code(s). here if we get errors we exit with 1
@@ -185,6 +200,11 @@ async fn main() {
     if !output_dir.exists() {
         tokio::fs::create_dir_all(output_dir).await.unwrap();
     }
+
+    // cache the type-checked compeltions if we have a cache
+    // NOTE:
+    //  - if we have fallback, we don't cache the fallback completions
+    //  - we have to be careful of stop_at
 
     // write to the output dir
     for (i, comp) in good_ones.into_iter().enumerate() {
