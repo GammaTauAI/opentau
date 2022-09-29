@@ -2,7 +2,9 @@ use std::{io::Write, sync::Arc};
 
 use codex_types::{
     cache::Cache,
-    codex::{CodexError, Completion, CompletionQuery, EditReq, EditResp, EditRespError},
+    codex::{
+        CodexClient, CodexError, Completion, CompletionQuery, EditReq, EditResp, EditRespError,
+    },
     langserver::{py::PyServer, ts::TsServer, LangServer},
 };
 use tokio::sync::Mutex;
@@ -133,68 +135,18 @@ async fn main() {
         cache,
     };
 
+    let ctx = MainCtx {
+        file_contents,
+        codex,
+        num_comps: args.n,
+        retries: args.retries,
+        fallback: args.fallback,
+        stop_at: args.stop_at,
+    };
+
     // the typechecked and completed code(s). here if we get errors we exit with 1
     let good_ones: Vec<Completion> = match args.strategy.as_str() {
-        "simple" => {
-            let printed = codex
-                .lang_server
-                .lock()
-                .await
-                .pretty_print(&file_contents, "_hole_")
-                .await
-                .unwrap();
-
-            println!("pretty:\n{}", printed);
-
-            let query = CompletionQuery::new(printed, args.n, args.retries, args.fallback);
-
-            let resp = match codex.complete(query.clone()).await {
-                Ok(r) => r,
-                Err(CodexError::RateLimit(r)) => {
-                    eprintln!("Rate limited, but got {} completions before.", r.len());
-                    r
-                }
-                Err(e) => {
-                    eprintln!("Fatal error: {}", e);
-                    std::io::stderr().flush().unwrap();
-                    std::process::exit(1);
-                }
-            };
-
-            let lang_client = codex.lang_server.lock().await;
-            let mut comps: Vec<Completion> = vec![];
-            for (i, comp) in resp.into_iter().enumerate() {
-                println!("comp {}:\n {}", i, comp.code);
-                let type_checks = lang_client.type_check(&comp.code).await.unwrap();
-                if type_checks {
-                    comps.push(comp);
-                }
-                if comps.len() >= args.stop_at {
-                    break;
-                }
-            }
-
-            // cache the type-checked completions if we have a cache
-            if let Some(cache) = &codex.cache {
-                // we want to get all the completions that are typechecked
-                // except the one that fallbacked (if there is any)
-                let comps_no_fallback = comps
-                    .iter()
-                    .filter(|c| !c.fallbacked)
-                    .map(|c| c.code.clone())
-                    .collect::<Vec<String>>();
-
-                if !comps_no_fallback.is_empty() {
-                    cache
-                        .lock()
-                        .await
-                        .store(&query, &comps_no_fallback)
-                        .expect("failed to store in cache");
-                }
-            }
-
-            comps
-        }
+        "simple" => ctx.simple_strategy().await,
         "tree" => todo!("tree completion"),
         _ => {
             eprintln!("Unknown strategy, {}", args.strategy);
@@ -224,5 +176,80 @@ async fn main() {
     for (i, comp) in good_ones.into_iter().enumerate() {
         let output_path = format!("{}/{}.{}", args.output, i, args.lang);
         tokio::fs::write(&output_path, comp.code).await.unwrap();
+    }
+}
+
+struct MainCtx {
+    codex: CodexClient,
+    file_contents: String,
+    num_comps: usize,
+    retries: usize,
+    fallback: bool,
+    stop_at: usize,
+}
+
+impl MainCtx {
+    /// Runs the simple completion strategy, which just runs the completion on the given file
+    /// without any transformation, other than adding "_hole_" to each unknwon type
+    async fn simple_strategy(self) -> Vec<Completion> {
+        let printed = self
+            .codex
+            .lang_server
+            .lock()
+            .await
+            .pretty_print(&self.file_contents, "_hole_")
+            .await
+            .unwrap();
+
+        println!("pretty:\n{}", printed);
+
+        let query = CompletionQuery::new(printed, self.num_comps, self.retries, self.fallback);
+
+        let resp = match self.codex.complete(query.clone()).await {
+            Ok(r) => r,
+            Err(CodexError::RateLimit(r)) => {
+                eprintln!("Rate limited, but got {} completions before.", r.len());
+                r
+            }
+            Err(e) => {
+                eprintln!("Fatal error: {}", e);
+                std::io::stderr().flush().unwrap();
+                std::process::exit(1);
+            }
+        };
+
+        let lang_client = self.codex.lang_server.lock().await;
+        let mut comps: Vec<Completion> = vec![];
+        for (i, comp) in resp.into_iter().enumerate() {
+            println!("comp {}:\n {}", i, comp.code);
+            let type_checks = lang_client.type_check(&comp.code).await.unwrap();
+            if type_checks {
+                comps.push(comp);
+            }
+            if comps.len() >= self.stop_at {
+                break;
+            }
+        }
+
+        // cache the type-checked completions if we have a cache
+        if let Some(cache) = &self.codex.cache {
+            // we want to get all the completions that are typechecked
+            // except the one that fallbacked (if there is any)
+            let comps_no_fallback = comps
+                .iter()
+                .filter(|c| !c.fallbacked)
+                .map(|c| c.code.clone())
+                .collect::<Vec<String>>();
+
+            if !comps_no_fallback.is_empty() {
+                cache
+                    .lock()
+                    .await
+                    .store(&query, &comps_no_fallback)
+                    .expect("failed to store in cache");
+            }
+        }
+
+        comps
     }
 }
