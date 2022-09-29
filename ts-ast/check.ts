@@ -52,6 +52,27 @@ export const checkCompleted = (
   const originalStripped = ts.getMutableClone(original);
   const completedStripped = ts.getMutableClone(completed);
 
+  // check if it added any weird comments
+  const originalComments = ts.getLeadingCommentRanges(
+    originalStripped.getFullText(),
+    0
+  );
+
+  const completedComments = ts.getLeadingCommentRanges(
+    completedStripped.getFullText(),
+    0
+  );
+
+  if (originalComments && completedComments) {
+    if (originalComments.length !== completedComments.length) {
+      isCompleted = false;
+    }
+  } else if (originalComments || completedComments) {
+    isCompleted = false;
+  }
+
+  // now strip types
+
   const stripTypes = (_: ts.TypeNode | undefined): ts.TypeNode =>
     createFakeType("bleh"); // does not matter what we return here
 

@@ -2,7 +2,7 @@ use std::{io::Write, sync::Arc};
 
 use codex_types::{
     cache::Cache,
-    codex::{CodexError, CompletionQuery, EditReq, EditResp, EditRespError},
+    codex::{CodexError, Completion, CompletionQuery, EditReq, EditResp, EditRespError},
     langserver::{py::PyServer, ts::TsServer, LangServer},
 };
 use tokio::sync::Mutex;
@@ -134,7 +134,7 @@ async fn main() {
     };
 
     // the typechecked and completed code(s). here if we get errors we exit with 1
-    let good_ones: Vec<String> = match args.strategy.as_str() {
+    let good_ones: Vec<Completion> = match args.strategy.as_str() {
         "simple" => {
             let printed = codex
                 .lang_server
@@ -148,7 +148,7 @@ async fn main() {
 
             let query = CompletionQuery::new(printed, args.n, args.retries, args.fallback);
 
-            let resp = match codex.complete(query).await {
+            let resp = match codex.complete(query.clone()).await {
                 Ok(r) => r,
                 Err(CodexError::RateLimit(r)) => {
                     eprintln!("Rate limited, but got {} completions before.", r.len());
@@ -162,10 +162,10 @@ async fn main() {
             };
 
             let lang_client = codex.lang_server.lock().await;
-            let mut comps: Vec<String> = vec![];
+            let mut comps: Vec<Completion> = vec![];
             for (i, comp) in resp.into_iter().enumerate() {
-                println!("comp {}:\n {}", i, comp);
-                let type_checks = lang_client.type_check(&comp).await.unwrap();
+                println!("comp {}:\n {}", i, comp.code);
+                let type_checks = lang_client.type_check(&comp.code).await.unwrap();
                 if type_checks {
                     comps.push(comp);
                 }
@@ -173,6 +173,26 @@ async fn main() {
                     break;
                 }
             }
+
+            // cache the type-checked completions if we have a cache
+            if let Some(cache) = &codex.cache {
+                // we want to get all the completions that are typechecked
+                // except the one that fallbacked (if there is any)
+                let comps_no_fallback = comps
+                    .iter()
+                    .filter(|c| !c.fallbacked)
+                    .map(|c| c.code.clone())
+                    .collect::<Vec<String>>();
+
+                if !comps_no_fallback.is_empty() {
+                    cache
+                        .lock()
+                        .await
+                        .store(&query, &comps_no_fallback)
+                        .expect("failed to store in cache");
+                }
+            }
+
             comps
         }
         "tree" => todo!("tree completion"),
@@ -191,7 +211,7 @@ async fn main() {
 
     println!("completed:\n");
     for comp in &good_ones {
-        println!("{}", comp);
+        println!("{}", comp.code);
     }
 
     // if the completed dir does not exist, create it
@@ -200,16 +220,9 @@ async fn main() {
         tokio::fs::create_dir_all(output_dir).await.unwrap();
     }
 
-    if let Some(cache) = &codex.cache {
-        let mut cache = cache.lock().await;
-        for comp in &good_ones {
-            // cache.cache(&comp).await.unwrap();
-        }
-    }
-
     // write to the output dir
     for (i, comp) in good_ones.into_iter().enumerate() {
         let output_path = format!("{}/{}.{}", args.output, i, args.lang);
-        tokio::fs::write(&output_path, comp).await.unwrap();
+        tokio::fs::write(&output_path, comp.code).await.unwrap();
     }
 }

@@ -21,6 +21,7 @@ pub struct CodexClient {
     pub cache: Option<Arc<Mutex<Cache>>>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompletionQuery {
     pub input: String,
     pub num_comps: usize,
@@ -39,10 +40,11 @@ impl CompletionQuery {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Completion {
-    pub completion: String,
+    pub code: String,
     pub score: i64,
-    pub query: CompletionQuery, // the query that generated this completion
+    pub fallbacked: bool, // is this completion from fallback?
 }
 
 const INSTRUCTIONS: &str = "Substitute the token _hole_ with the correct type.";
@@ -54,7 +56,10 @@ impl CodexClient {
     /// retries is the number of requests to make to codex, which creates duplicates, so we filter
     /// them out.
     /// fallback is whether to fallback to "any" if we don't get any completions.
-    pub async fn complete(&self, mut query: CompletionQuery) -> Result<Vec<String>, CodexError> {
+    pub async fn complete(
+        &self,
+        mut query: CompletionQuery,
+    ) -> Result<Vec<Completion>, CodexError> {
         // we filter incomplete completions
         // scored vec: implemented scoring, sort resulting vec by score,
         //             and fall back to all "any" in worst case (if enabled)
@@ -167,17 +172,24 @@ impl CodexClient {
             .lock()
             .await
             .iter()
-            .map(|(c, _)| c.to_string())
-            .collect::<Vec<String>>();
+            .map(|(c, i)| Completion {
+                code: c.to_string(),
+                score: *i,
+                fallbacked: false,
+            })
+            .collect::<Vec<Completion>>();
 
         if query.fallback {
-            final_completions.push(
-                self.lang_server
+            final_completions.push(Completion {
+                code: self
+                    .lang_server
                     .lock()
                     .await
                     .pretty_print(&query.input, "any")
                     .await?,
-            );
+                score: 999999999,
+                fallbacked: true,
+            });
         }
 
         if rate_limited {
@@ -247,7 +259,7 @@ pub enum CodexError {
     ErrorResponse(EditRespError),
     CodexCouldNotComplete,
     // where the Vec<String> is the list of completions we got before the rate limit
-    RateLimit(Vec<String>),
+    RateLimit(Vec<Completion>),
     LangServer(LangServerError),
     Reqwest(reqwest::Error),
     Serde(serde_json::Error),
