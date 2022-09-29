@@ -2,7 +2,7 @@ use std::{io::Write, sync::Arc};
 
 use codex_types::{
     cache::Cache,
-    codex::{CodexError, EditReq, EditResp, EditRespError},
+    codex::{CodexError, CompletionQuery, EditReq, EditResp, EditRespError},
     langserver::{py::PyServer, ts::TsServer, LangServer},
 };
 use tokio::sync::Mutex;
@@ -146,10 +146,9 @@ async fn main() {
 
             println!("pretty:\n{}", printed);
 
-            let resp = match codex
-                .complete(&printed, args.n, args.retries, args.fallback)
-                .await
-            {
+            let query = CompletionQuery::new(printed, args.n, args.retries, args.fallback);
+
+            let resp = match codex.complete(query).await {
                 Ok(r) => r,
                 Err(CodexError::RateLimit(r)) => {
                     eprintln!("Rate limited, but got {} completions before.", r.len());

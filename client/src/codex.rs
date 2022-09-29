@@ -28,9 +28,21 @@ pub struct CompletionQuery {
     pub fallback: bool,
 }
 
+impl CompletionQuery {
+    pub fn new(input: String, num_comps: usize, retries: usize, fallback: bool) -> Self {
+        Self {
+            input,
+            num_comps,
+            retries,
+            fallback,
+        }
+    }
+}
+
 pub struct Completion {
     pub completion: String,
     pub score: i64,
+    pub query: CompletionQuery, // the query that generated this completion
 }
 
 const INSTRUCTIONS: &str = "Substitute the token _hole_ with the correct type.";
@@ -42,13 +54,7 @@ impl CodexClient {
     /// retries is the number of requests to make to codex, which creates duplicates, so we filter
     /// them out.
     /// fallback is whether to fallback to "any" if we don't get any completions.
-    pub async fn complete(
-        &self,
-        input: &str,
-        num_comps: usize,
-        mut retries: usize,
-        fallback: bool,
-    ) -> Result<Vec<String>, CodexError> {
+    pub async fn complete(&self, mut query: CompletionQuery) -> Result<Vec<String>, CodexError> {
         // we filter incomplete completions
         // scored vec: implemented scoring, sort resulting vec by score,
         //             and fall back to all "any" in worst case (if enabled)
@@ -60,20 +66,20 @@ impl CodexClient {
 
         if let Some(cache) = &self.cache {
             let mut cache = cache.lock().await;
-            let cached_completions = cache.retrieve((input, num_comps, retries)).unwrap();
+            let cached_completions = cache.retrieve(&query).unwrap();
             if let Some(cached_completions) = cached_completions {
                 filtered_completions
                     .lock()
                     .await
                     .extend(cached_completions.into_iter().map(|c| (c, 0)));
-                retries = 0; // so we don't make any requests to codex
+                query.retries = 0; // so we don't make any requests to codex
             }
         }
 
-        while retries > 0 {
+        while query.retries > 0 {
             let filtered_completions = Arc::clone(&filtered_completions);
             let lang_client = self.lang_server.clone();
-            let input = input.to_string();
+            let input = query.input.to_string();
             let client = self.client.clone(); // NOTE: reqwest uses Arc internally
             let token = self.token.clone();
             let endpoint = self.endpoint.clone();
@@ -88,13 +94,13 @@ impl CodexClient {
                     .body(serde_json::to_string(&EditReq {
                         model: "code-davinci-edit-001".to_string(),
                         input: input.to_string(),
-                        n: num_comps,
+                        n: query.num_comps,
                         temperature: temp,
                         instruction: INSTRUCTIONS.to_string(),
                     })?)
                     .timeout(std::time::Duration::from_secs(std::cmp::max(
                         30, // make timeout scale up with number of completions
-                        (num_comps * 10) as u64,
+                        (query.num_comps * 10) as u64,
                     )));
                 let res = req.send().await?;
                 let body = res.text().await?;
@@ -135,7 +141,7 @@ impl CodexClient {
                 Ok(())
             }));
 
-            retries -= 1;
+            query.retries -= 1;
         }
 
         let mut rate_limited = false;
@@ -164,12 +170,12 @@ impl CodexClient {
             .map(|(c, _)| c.to_string())
             .collect::<Vec<String>>();
 
-        if fallback {
+        if query.fallback {
             final_completions.push(
                 self.lang_server
                     .lock()
                     .await
-                    .pretty_print(input, "any")
+                    .pretty_print(&query.input, "any")
                     .await?,
             );
         }
