@@ -1,4 +1,4 @@
-# Using OpenAI Codex for Gradual Type Inference
+# OpenTau: Using OpenAI Codex for Gradual Type Inference
 
 - Current implementation is focused on TypeScript
   - Python implementation comes next

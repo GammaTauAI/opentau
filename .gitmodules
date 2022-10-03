@@ -1,3 +1,3 @@
-[submodule "codex-types-test"]
-	path = codex-types-test
-	url = https://github.com/cassanof/codex-types-test.git
+[submodule "opentau-test"]
+	path = opentau-test
+	url = https://github.com/GammaTauAI/opentau-test
