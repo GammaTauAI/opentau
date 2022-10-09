@@ -6,9 +6,12 @@
 ## Requirements
 
 - `rust`
-- For type-inferring typescript:
+- TypeScript inference requirements:
   - `ts-node`
   - `tsc`
+- Python inference requirements:
+  - `mypy` | `pyright`
+
 
 ## Installation
 
