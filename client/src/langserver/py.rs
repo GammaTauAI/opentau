@@ -1,4 +1,4 @@
-
+use std::process::Stdio;
 
 use async_trait::async_trait;
 
@@ -46,9 +46,23 @@ impl LangServer for PyServer {
         Ok((true, 0))
     }
 
-    async fn type_check(&self, _code: &str) -> Result<bool, LangServerError> {
-        // TODO: implement this later, for now just return true
-        //       this needs to be implemented before check, tree and stub, but after make and print
-        Ok(true)
+    async fn type_check(&self, code: &str) -> Result<bool, LangServerError> {
+        let tmp_dir = std::env::temp_dir();
+        let tmp_file = tmp_dir.join(format!("codex-{}.py", std::process::id()));
+        tokio::fs::write(&tmp_file, code).await?;
+
+        // TODO: uses mypy for now, but pyright would be faster
+        let mut process = match tokio::process::Command::new("mypy")
+            .args([ tmp_file.to_str().unwrap() ])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+        {
+            Ok(p) => p,
+            Err(_) => return Err(LangServerError::ProcessSpawn)
+        };
+
+        let status = process.wait().await?;
+        Ok(status.success())
     }
 }
