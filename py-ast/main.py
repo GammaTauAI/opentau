@@ -39,12 +39,23 @@ def is_pid_running(pid: int) -> bool:
     else:
         return True
 
+def recvall(sock: socket.socket):
+    BUFF_SIZE = 4096
+    data = b''
+    while True:
+        part = sock.recv(BUFF_SIZE)
+        data += part
+        if len(part) < BUFF_SIZE:
+            # either 0 or end of data
+            break
+    return data
+
 def init_wait(s: socket.socket) -> None:
     while True:
         c, client_addr = s.accept()
         try:
             while True:
-                data = c.recv(64)
+                data = recvall(s)
                 obj = json.loads(data) # FIXME: try catch
                 decoded_text = base64.b64decode(obj.text)
                 if obj.cmd == 'print':
