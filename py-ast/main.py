@@ -5,6 +5,9 @@ import json
 import sched
 import base64
 import socket
+import signal
+from threading import Thread
+from functools import partial
 
 
 if len(sys.argv) != 4:
@@ -12,6 +15,7 @@ if len(sys.argv) != 4:
     sys.exit(1)
 
 SERVER_ADDR = sys.argv[2]
+BUFF_SIZE = 4096
 
 try:
     os.unlink(SERVER_ADDR)
@@ -39,48 +43,73 @@ def is_pid_running(pid: int) -> bool:
     else:
         return True
 
-def recvall(sock: socket.socket):
-    BUFF_SIZE = 4096
+class SocketManager:
+    def __init__(self) -> None:
+        self._sockets = [] 
+
+    def __call__(self, c: socket.socket) -> None:
+        self._sockets.append(c)
+
+    def close_all(self) -> None:
+        for s in self._sockets:
+            s.close()
+
+def recvall(s: socket.socket) -> bytes:
     data = b''
     while True:
-        part = sock.recv(BUFF_SIZE)
+        part = s.recv(BUFF_SIZE)
         data += part
         if len(part) < BUFF_SIZE:
-            # either 0 or end of data
             break
     return data
 
-def init_wait(s: socket.socket) -> None:
+def on_client(c: socket.socket) -> None:
+    try:
+        while True:
+            data = recvall(c)
+            obj = json.loads(data) # FIXME: try catch
+            decoded_text = base64.b64decode(obj.text)
+            if obj.cmd == 'print':
+                # TODO: send print
+                NotImplemented()
+            elif obj.cmd == 'tree':
+                # TODO: gen tree
+                NotImplemented()
+            elif obj.cmd == 'stub':
+                # TODO: gen stub
+                NotImplemented()
+            elif obj.cmd == 'check':
+                # TODO: check completion
+                NotImplemented()
+            else:
+                c.send(json.dumps({
+                    'type': 'error',
+                    'message': f'unknown command {obj.cmd}'
+                }).encode())
+
+    finally:
+        c.close()
+
+
+def init_wait(s: socket.socket, sm: SocketManager) -> None:
     while True:
-        c, client_addr = s.accept()
-        try:
-            while True:
-                data = recvall(c)
-                obj = json.loads(data) # FIXME: try catch
-                decoded_text = base64.b64decode(obj.text)
-                if obj.cmd == 'print':
-                    # TODO: send print
-                    NotImplemented()
-                elif obj.cmd == 'tree':
-                    # TODO: gen tree
-                    NotImplemented()
-                elif obj.cmd == 'stub':
-                    # TODO: gen stub
-                    NotImplemented()
-                elif obj.cmd == 'check':
-                    # TODO: check completion
-                    NotImplemented()
-                else:
-                    c.send(json.dumps({
-                        'type': 'error',
-                        'message': f'unknown command {obj.cmd}'
-                    }).encode())
+        c, _ = s.accept()
+        sm(c)
+        Thread(target=on_client, args=(c,))
 
-        finally:
-            c.close()
+def close(_, __, sm: SocketManager) -> None:
+    print(f'Closing {SERVER_ADDR}')
+    sm.close_all()
+    sys.exit(0)
 
+sm = SocketManager()
 sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 sock.bind(SERVER_ADDR)
 sock.listen(1)
+sm(sock)
+
+# this should work but should be tested
+# other way is to use a lambdas
+signal.signal(signal.SIGINT, partial(close, sm)) # type: ignore
 print(f'Listening on {SERVER_ADDR}\n')
-init_wait(sock)
+init_wait(sock, sm)
