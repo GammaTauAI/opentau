@@ -71,4 +71,5 @@ def init_wait(s: socket.socket) -> None:
 sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 sock.bind(SERVER_ADDR)
 sock.listen(1)
+print(f'Listening on {SERVER_ADDR}\n')
 init_wait(sock)
