@@ -39,7 +39,7 @@ def is_pid_running(pid: int) -> bool:
     else:
         return True
 
-def recvall(c: socket.socket):
+def recvall(sock: socket.socket):
     BUFF_SIZE = 4096
     data = b''
     while True:
