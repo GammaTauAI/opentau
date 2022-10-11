@@ -48,13 +48,14 @@ def is_pid_running(pid: int) -> bool:
 # used to store and close all sockets before exit
 class SocketManager:
     def __init__(self) -> None:
-        self._sockets = [] 
+        self._sockets = set()
 
     def __call__(self, c: socket.socket) -> None:
-        self._sockets.append(c)
+        self._sockets.add(c)
 
     def close_all(self) -> None:
-        for s in self._sockets:
+        while len(self._sockets) > 0:
+            s = self._sockets.pop()
             s.close()
 
 # an unbounded recv
