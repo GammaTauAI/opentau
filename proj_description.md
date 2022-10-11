@@ -8,11 +8,11 @@ output: pdf_document
 ## Authors and Division of Labor
 
 - Federico Cassano
-  - Rust client guy
-  - Typescript guy
+  - Responsible for designing and implementing the language server protocol and client implementation
+  - Responsible for implementing the TypeScript server.
 - Noah Shinn
-  - Evaluation guy
-  - Python guy
+  - Responsible for designing and implementing an evaluation framework for comparing our system to others.
+  - Responsible for implementing the Python server.
 
 ## Problem Description/Motivation
 
