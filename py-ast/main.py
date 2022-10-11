@@ -17,6 +17,7 @@ if len(sys.argv) != 4:
 SERVER_ADDR = sys.argv[2]
 BUFF_SIZE = 4096
 
+# checks if in use
 try:
     os.unlink(SERVER_ADDR)
 except OSError:
@@ -24,17 +25,18 @@ except OSError:
         print(f'{SERVER_ADDR} already exists')
         sys.exit(1)
 
-# periodically check rust proc
 rust_pid = int(sys.argv[3])
 
 s = sched.scheduler(time.time, time.sleep)
 
+# periodically check rust proc
 def run_func(sc):
     is_pid_running(rust_pid)
     sc.enter(3, 1, run_func, (sc,))
 s.enter(3, 1, run_func, (s,))
 s.run()
 
+# determines if rust proc is still running
 def is_pid_running(pid: int) -> bool:
     try:
         os.kill(pid, 0)
@@ -43,6 +45,7 @@ def is_pid_running(pid: int) -> bool:
     else:
         return True
 
+# used to store and close all sockets before exit
 class SocketManager:
     def __init__(self) -> None:
         self._sockets = [] 
@@ -54,6 +57,7 @@ class SocketManager:
         for s in self._sockets:
             s.close()
 
+# an unbounded recv
 def recvall(s: socket.socket) -> bytes:
     data = b''
     while True:
@@ -63,6 +67,7 @@ def recvall(s: socket.socket) -> bytes:
             break
     return data
 
+# handles a single client
 def on_client(c: socket.socket) -> None:
     try:
         while True:
@@ -90,22 +95,25 @@ def on_client(c: socket.socket) -> None:
     finally:
         c.close()
 
-
+# listen for clients
 def init_wait(s: socket.socket, sm: SocketManager) -> None:
     while True:
         c, _ = s.accept()
         sm(c)
         Thread(target=on_client, args=(c,))
 
+# called on exit signal
 def close(_, __, sm: SocketManager) -> None:
     print(f'Closing {SERVER_ADDR}')
     sm.close_all()
     sys.exit(0)
 
+# init socket manager
 sm = SocketManager()
 sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 sock.bind(SERVER_ADDR)
 sock.listen(1)
+# store socket for future close
 sm(sock)
 
 # this should work but should be tested
