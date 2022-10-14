@@ -24,4 +24,20 @@ For type annotation generation, we utilize Codex's `davinci-edit` model. `davinc
 
 ## Ideal Results and Outcomes
 
+### Minimal Viable Product
+Our minimal viable product will be a system that will type annotate and migrate JavaScript code to TypeScript code as well as simply type annotate TypeScript code. In the latter case, the input will be turned into a strictly typed program. We will evaluate the performance over a 100-file dataset of Leetcode JavaScript solutions. Our solution will ensure that the output code from Codex will only have type annotations, not any other artifact.
+
+### Stretch-Goal Product
+Our stretch goal will be to create a protocol (similar to the LSP) that allows type-annotation over an arbitrary set of languages. Our solution will utilize different prompt engineering techniques to maximize the quality of the resulting type annotations.
+
 ## Milestones + Expected Week-by-Week Schedule
+
+### Milestone 1 - Due 11/4
+By now, we will have implemented type-inference for TypeScript using a simple approach that does not involve prompt engineering. This approach would allow us to correctly type-check small files such as Leetcode JavaScript solutions.
+
+### Milestone 2 - Due 11/22
+By now, we will have implemented type-inference for Python and a prompt engineering approach that would allow us to type-infer larger files.
+
+### Final Submit - Due 12/13
+By the final submission, we will have a strong evaluation framework that will allow us to compare our solutions to other type inference systems for the given language. We will also have data created by our framework that shows the efficacy of our solutions. Efficacy will be defined as whether or not the solution type-checks as well as the quality of the type annotations.
+
