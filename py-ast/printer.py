@@ -36,17 +36,11 @@ class Visitor(ast.NodeTransformer):
         return new_func
 
 
-# FIXME: read file
-def print_source() -> None:
-    with open(_FILE, 'r') as f:
-        code = f.read() 
-        tree = ast.parse(code)
-        node_visitor = Visitor()
-        for c in ast.walk(tree):
-            if isinstance(c, ast.FunctionDef):
-                transformed = node_visitor.visit(c)
-                print(to_source(transformed))
+# FIXME: return print
+def print_source(source_file: ast.AST) -> None:
+    node_visitor = Visitor()
+    for c in ast.walk(source_file):
+        if isinstance(c, ast.FunctionDef):
+            transformed = node_visitor.visit(c)
+            print(to_source(transformed))
 
-
-if __name__ == '__main__':
-    print_source()

@@ -1,5 +1,6 @@
 import os
 import sys
+import ast
 import time
 import json
 import sched
@@ -8,6 +9,8 @@ import socket
 import signal
 from threading import Thread
 from functools import partial
+
+from printer import print_source
 
 
 if len(sys.argv) != 4:
@@ -75,17 +78,16 @@ def on_client(c: socket.socket) -> None:
             data = recvall(c)
             obj = json.loads(data) # FIXME: try catch
             decoded_text = base64.b64decode(obj.text)
+            source_file = ast.parse(decoded_text)
             if obj.cmd == 'print':
-                # TODO: send print
-                NotImplemented()
+                res = print_source(source_file)
+                base_64 = base64.b64encode(res) # type: ignore
+
             elif obj.cmd == 'tree':
-                # TODO: gen tree
                 NotImplemented()
             elif obj.cmd == 'stub':
-                # TODO: gen stub
                 NotImplemented()
             elif obj.cmd == 'check':
-                # TODO: check completion
                 NotImplemented()
             else:
                 c.send(json.dumps({
