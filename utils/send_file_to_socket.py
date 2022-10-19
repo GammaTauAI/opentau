@@ -4,8 +4,8 @@ import socket
 import base64
 
 
-if len(sys.argv) != 4:
-    print("Usage: {} <socket> <cmd> <file>".format(sys.argv[0]))
+if len(sys.argv) < 4:
+    print("Usage: {} <socket> <cmd> <file> [optional: other-file?]".format(sys.argv[0]))
     sys.exit(1)
 
 sock = sys.argv[1]
@@ -19,10 +19,17 @@ data = open(fileName, "rb").read()
 #   "text": "base64 encoded data"
 # }
 
-msg = {
-    "cmd": sys.argv[2],
-    "text": base64.b64encode(data).decode("utf-8")
-}
+if sys.argv[2] == "weave":
+    msg = {
+        "cmd": sys.argv[2],
+        "text": base64.b64encode(data).decode("utf-8"),
+        "nettle": base64.b64encode(open(sys.argv[4], "rb").read()).decode("utf-8")
+    }
+else:
+    msg = {
+        "cmd": sys.argv[2],
+        "text": base64.b64encode(data).decode("utf-8")
+    }
 
 print ("Sending msg: {}".format(msg))
 

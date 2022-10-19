@@ -6,7 +6,7 @@
         "noImplicitAny": true,
         "strictNullChecks": true,
         "moduleResolution": "node",
-        "noUnusedParameters": true,
+        "noUnusedParameters": false,
         "esModuleInterop": true,
         "noErrorTruncation": true
     }

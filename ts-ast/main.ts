@@ -1,9 +1,13 @@
 import ts from "typescript";
+import os from "os";
+import path from "path";
 import * as net from "net";
 import { printSource } from "./printer";
 import { makeTree } from "./tree";
 import { stubSource } from "./stubPrinter";
 import { checkCompleted } from "./check";
+import { weaveProgram } from "./weave";
+import fs from "fs";
 
 // the global printer object!
 export const codePrinter = ts.createPrinter({
@@ -158,6 +162,70 @@ var unixServer = net.createServer(function (client) {
               type: "checkResponse",
               text: res[0],
               score: res[1],
+            })
+          );
+        } catch (e) {
+          client.write(JSON.stringify({ type: "error", message: e.message }));
+        }
+        break;
+      }
+      // weaves the given text (has to be type-complete, could be stubbed) into the original text
+      // req: {cmd: "weage", text: "original text", nettle: "the text to weave in", level: 0}
+      case "weave": {
+        try {
+          const decodedNettle = Buffer.from(obj.nettle, "base64").toString(
+            "utf8"
+          );
+
+          if (obj.level == undefined) {
+            console.error("level not specified, defaulting to 0");
+            obj.level = 0;
+          }
+
+          // due to type information, we have to create a program, instead of just a source file
+
+          // write to a temp file
+          const tempFileOriginal = path.join(os.tmpdir(), "tempOriginal.ts");
+          const tempFileNettle = path.join(os.tmpdir(), "tempNettle.ts");
+          fs.writeFileSync(tempFileOriginal, decodedText);
+          fs.writeFileSync(tempFileNettle, decodedNettle);
+
+          const options = {
+            target: ts.ScriptTarget.Latest,
+            module: ts.ModuleKind.CommonJS,
+            strict: false,
+            noImplicitAny: false,
+            noImplicitThis: false,
+            noEmit: true,
+            noImplicitReturns: false,
+            allowJs: true,
+            checkJs: true,
+          };
+
+          const originalProgram = ts.createProgram({
+            rootNames: [tempFileOriginal],
+            options: options,
+          });
+
+          const nettleProgram = ts.createProgram({
+            rootNames: [tempFileNettle],
+            options: options,
+          });
+
+          const res = weaveProgram(
+            originalProgram,
+            tempFileOriginal,
+            nettleProgram,
+            tempFileNettle,
+            obj.level
+          );
+
+          const base64 = Buffer.from(res).toString("base64");
+
+          client.write(
+            JSON.stringify({
+              type: "weaveResponse",
+              text: base64,
             })
           );
         } catch (e) {
