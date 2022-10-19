@@ -38,209 +38,196 @@ function isPidRunning(pid: number): boolean {
   }
 }
 
+const handlePrint = (decodedText: string, req: any): string => {
+  // create the source file
+  const sourceFile = ts.createSourceFile(
+    "bleh.ts", // name does not matter until we save, which we don't from here
+    decodedText,
+    ts.ScriptTarget.Latest,
+    false, // for setParentNodes
+    ts.ScriptKind.TS
+  );
+  req.typeName = req.typeName || "_hole_"; // default to _hole_
+  const res = printSource(sourceFile, req.typeName);
+  const base64 = Buffer.from(res).toString("base64");
+  return JSON.stringify({
+    type: "printResponse",
+    text: base64,
+  });
+};
+
+const handleTree = (decodedText: string): string => {
+  // create the source file
+  const sourceFile = ts.createSourceFile(
+    "bleh.ts", // name does not matter until we save, which we don't from here
+    decodedText,
+    ts.ScriptTarget.Latest,
+    true, // for setParentNodes
+    ts.ScriptKind.TS
+  );
+  const res = makeTree(sourceFile);
+  const base64 = Buffer.from(JSON.stringify(res)).toString("base64");
+  return JSON.stringify({
+    type: "treeResponse",
+    text: base64,
+  });
+};
+
+const handleStub = (decodedText: string): string => {
+  // create the source file
+  const sourceFile = ts.createSourceFile(
+    "bleh.ts", // name does not matter until we save, which we don't from here
+    decodedText,
+    ts.ScriptTarget.Latest,
+    true, // for setParentNodes
+    ts.ScriptKind.TS
+  );
+  const res = stubSource(sourceFile);
+  const base64 = Buffer.from(res).toString("base64");
+  return JSON.stringify({
+    type: "stubResponse",
+    text: base64,
+  });
+};
+
+const handleCheck = (decodedText: string, req: any): string => {
+  const decodedOriginal = Buffer.from(req.original, "base64").toString("utf8");
+  // create the source file
+  const originalFile = ts.createSourceFile(
+    "bleh.ts", // name does not matter until we save, which we don't from here
+    decodedOriginal,
+    ts.ScriptTarget.Latest,
+    false, // for setParentNodes
+    ts.ScriptKind.TS
+  );
+
+  const completedFile = ts.createSourceFile(
+    "bleh.ts", // name does not matter until we save, which we don't from here
+    decodedText,
+    ts.ScriptTarget.Latest,
+    false, // for setParentNodes
+    ts.ScriptKind.TS
+  );
+
+  const res = checkCompleted(originalFile, completedFile);
+
+  return JSON.stringify({
+    type: "checkResponse",
+    text: res[0],
+    score: res[1],
+  });
+};
+
+const handleWeave = (decodedText: string, req: any): string => {
+  const decodedNettle = Buffer.from(req.nettle, "base64").toString("utf8");
+
+  if (req.level == undefined) {
+    console.error("level not specified, defaulting to 0");
+    req.level = 0;
+  }
+
+  // due to type information, we have to create a program, instead of just a source file
+
+  // write to a temp file
+  const tempFileOriginal = path.join(os.tmpdir(), "tempOriginal.ts");
+  const tempFileNettle = path.join(os.tmpdir(), "tempNettle.ts");
+  fs.writeFileSync(tempFileOriginal, decodedText);
+  fs.writeFileSync(tempFileNettle, decodedNettle);
+
+  const options = {
+    target: ts.ScriptTarget.Latest,
+    module: ts.ModuleKind.CommonJS,
+    strict: false,
+    noImplicitAny: false,
+    noImplicitThis: false,
+    noEmit: true,
+    noImplicitReturns: false,
+    allowJs: true,
+    checkJs: true,
+  };
+
+  const originalProgram = ts.createProgram({
+    rootNames: [tempFileOriginal],
+    options: options,
+  });
+
+  const nettleProgram = ts.createProgram({
+    rootNames: [tempFileNettle],
+    options: options,
+  });
+
+  const res = weaveProgram(
+    originalProgram,
+    tempFileOriginal,
+    nettleProgram,
+    tempFileNettle,
+    req.level
+  );
+
+  const base64 = Buffer.from(res).toString("base64");
+
+  return JSON.stringify({
+    type: "weaveResponse",
+    text: base64,
+  });
+};
+
 var unixServer = net.createServer(function (client) {
   client.on("data", function (data) {
     // try to parse the data as a json object
 
-    var obj; // in the format of {cmd: "the-cmd", text: "the-text"}
+    var req; // in the format of {cmd: "the-cmd", text: "the-text", ...}
     var decodedText;
     try {
-      obj = JSON.parse(data.toString());
-      decodedText = Buffer.from(obj.text, "base64").toString("utf8");
+      req = JSON.parse(data.toString());
+      decodedText = Buffer.from(req.text, "base64").toString("utf8");
     } catch (e) {
       client.write(JSON.stringify({ type: "error", message: e.message }));
       return;
     }
 
-    switch (obj.cmd) {
-      // simply print out the text (and puts unknown types).
-      // req: {cmd: "print", text: "the-text", typeName: "the-type"}
-      case "print": {
-        try {
-          // create the source file
-          const sourceFile = ts.createSourceFile(
-            "bleh.ts", // name does not matter until we save, which we don't from here
-            decodedText,
-            ts.ScriptTarget.Latest,
-            false, // for setParentNodes
-            ts.ScriptKind.TS
-          );
-          obj.typeName = obj.typeName || "_hole_"; // default to _hole_
-          const res = printSource(sourceFile, obj.typeName);
-          const base64 = Buffer.from(res).toString("base64");
+    try {
+      switch (req.cmd) {
+        // simply print out the text (and puts unknown types).
+        // req: {cmd: "print", text: "the-text", typeName: "the-type"}
+        case "print": {
+          client.write(handlePrint(decodedText, req));
+          break;
+        }
+        // generate the text tree from the given text (and puts unknown types)
+        case "tree": {
+          client.write(handleTree(decodedText));
+          break;
+        }
+        // generate a stub for the given node (that is type-annotated)
+        case "stub": {
+          client.write(handleStub(decodedText));
+          break;
+        }
+        // check if the given text is complete
+        // req: {cmd: "check", text: "the-completed-text", original: "the-original-text"}
+        // additionally, returns a score for the completion.
+        case "check": {
+          client.write(handleCheck(decodedText, req));
+          break;
+        }
+        // weaves the given text (has to be type-complete, could be stubbed) into the original text
+        // req: {cmd: "weage", text: "original text", nettle: "the text to weave in", level: 0}
+        case "weave": {
+          client.write(handleCheck(decodedText, req));
+          break;
+        }
+        default: {
           client.write(
             JSON.stringify({
-              type: "printResponse",
-              text: base64,
+              type: "error",
+              message: `unknown command ${req.cmd}`,
             })
           );
-        } catch (e) {
-          client.write(JSON.stringify({ type: "error", message: e.message }));
         }
-
-        break;
       }
-      // generate the text tree from the given text (and puts unknown types)
-      case "tree": {
-        // create the source file
-        const sourceFile = ts.createSourceFile(
-          "bleh.ts", // name does not matter until we save, which we don't from here
-          decodedText,
-          ts.ScriptTarget.Latest,
-          true, // for setParentNodes
-          ts.ScriptKind.TS
-        );
-        const res = makeTree(sourceFile);
-        try {
-          const base64 = Buffer.from(JSON.stringify(res)).toString("base64");
-          client.write(
-            JSON.stringify({
-              type: "treeResponse",
-              text: base64,
-            })
-          );
-        } catch (e) {
-          client.write(JSON.stringify({ type: "error", message: e.message }));
-        }
-
-        break;
-      }
-      // generate a stub for the given node (that is type-annotated)
-      case "stub": {
-        try {
-          // create the source file
-          const sourceFile = ts.createSourceFile(
-            "bleh.ts", // name does not matter until we save, which we don't from here
-            decodedText,
-            ts.ScriptTarget.Latest,
-            true, // for setParentNodes
-            ts.ScriptKind.TS
-          );
-          const res = stubSource(sourceFile);
-          const base64 = Buffer.from(res).toString("base64");
-          client.write(
-            JSON.stringify({
-              type: "stubResponse",
-              text: base64,
-            })
-          );
-        } catch (e) {
-          client.write(JSON.stringify({ type: "error", message: e.message }));
-        }
-
-        break;
-      }
-      // check if the given text is complete
-      // req: {cmd: "check", text: "the-completed-text", original: "the-original-text"}
-      // additionally, returns a score for the completion.
-      case "check": {
-        try {
-          const decodedOriginal = Buffer.from(obj.original, "base64").toString(
-            "utf8"
-          );
-          // create the source file
-          const originalFile = ts.createSourceFile(
-            "bleh.ts", // name does not matter until we save, which we don't from here
-            decodedOriginal,
-            ts.ScriptTarget.Latest,
-            false, // for setParentNodes
-            ts.ScriptKind.TS
-          );
-
-          const completedFile = ts.createSourceFile(
-            "bleh.ts", // name does not matter until we save, which we don't from here
-            decodedText,
-            ts.ScriptTarget.Latest,
-            false, // for setParentNodes
-            ts.ScriptKind.TS
-          );
-
-          const res = checkCompleted(originalFile, completedFile);
-
-          client.write(
-            JSON.stringify({
-              type: "checkResponse",
-              text: res[0],
-              score: res[1],
-            })
-          );
-        } catch (e) {
-          client.write(JSON.stringify({ type: "error", message: e.message }));
-        }
-        break;
-      }
-      // weaves the given text (has to be type-complete, could be stubbed) into the original text
-      // req: {cmd: "weage", text: "original text", nettle: "the text to weave in", level: 0}
-      case "weave": {
-        try {
-          const decodedNettle = Buffer.from(obj.nettle, "base64").toString(
-            "utf8"
-          );
-
-          if (obj.level == undefined) {
-            console.error("level not specified, defaulting to 0");
-            obj.level = 0;
-          }
-
-          // due to type information, we have to create a program, instead of just a source file
-
-          // write to a temp file
-          const tempFileOriginal = path.join(os.tmpdir(), "tempOriginal.ts");
-          const tempFileNettle = path.join(os.tmpdir(), "tempNettle.ts");
-          fs.writeFileSync(tempFileOriginal, decodedText);
-          fs.writeFileSync(tempFileNettle, decodedNettle);
-
-          const options = {
-            target: ts.ScriptTarget.Latest,
-            module: ts.ModuleKind.CommonJS,
-            strict: false,
-            noImplicitAny: false,
-            noImplicitThis: false,
-            noEmit: true,
-            noImplicitReturns: false,
-            allowJs: true,
-            checkJs: true,
-          };
-
-          const originalProgram = ts.createProgram({
-            rootNames: [tempFileOriginal],
-            options: options,
-          });
-
-          const nettleProgram = ts.createProgram({
-            rootNames: [tempFileNettle],
-            options: options,
-          });
-
-          const res = weaveProgram(
-            originalProgram,
-            tempFileOriginal,
-            nettleProgram,
-            tempFileNettle,
-            obj.level
-          );
-
-          const base64 = Buffer.from(res).toString("base64");
-
-          client.write(
-            JSON.stringify({
-              type: "weaveResponse",
-              text: base64,
-            })
-          );
-        } catch (e) {
-          client.write(JSON.stringify({ type: "error", message: e.message }));
-        }
-        break;
-      }
-      default: {
-        client.write(
-          JSON.stringify({
-            type: "error",
-            message: `unknown command ${obj.cmd}`,
-          })
-        );
-      }
+    } catch (e) { // yeah, pretty bad but we want this to work no matter what.
+      client.write(JSON.stringify({ type: "error", message: e.message }));
     }
   });
 });
