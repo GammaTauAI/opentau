@@ -5,7 +5,8 @@ import base64
 
 
 if len(sys.argv) < 4:
-    print("Usage: {} <socket> <cmd> <file> [optional: other-file?]".format(sys.argv[0]))
+    print(
+        "Usage: {} <socket> <cmd> <file> [optional: other-file?]".format(sys.argv[0]))
     sys.exit(1)
 
 sock = sys.argv[1]
@@ -23,7 +24,8 @@ if sys.argv[2] == "weave":
     msg = {
         "cmd": sys.argv[2],
         "text": base64.b64encode(data).decode("utf-8"),
-        "nettle": base64.b64encode(open(sys.argv[4], "rb").read()).decode("utf-8")
+        "nettle": base64.b64encode(open(sys.argv[4], "rb").read()).decode("utf-8"),
+        "level": sys.argv[5] if len(sys.argv) > 5 else 0 # super hacky
     }
 else:
     msg = {
@@ -31,7 +33,7 @@ else:
         "text": base64.b64encode(data).decode("utf-8")
     }
 
-print ("Sending msg: {}".format(msg))
+print("Sending msg: {}".format(msg))
 
 msg = json.dumps(msg)
 b = msg.encode("utf-8")

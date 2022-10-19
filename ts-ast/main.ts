@@ -214,7 +214,7 @@ var unixServer = net.createServer(function (client) {
         // weaves the given text (has to be type-complete, could be stubbed) into the original text
         // req: {cmd: "weage", text: "original text", nettle: "the text to weave in", level: 0}
         case "weave": {
-          client.write(handleCheck(decodedText, req));
+          client.write(handleWeave(decodedText, req));
           break;
         }
         default: {
@@ -226,7 +226,8 @@ var unixServer = net.createServer(function (client) {
           );
         }
       }
-    } catch (e) { // yeah, pretty bad but we want this to work no matter what.
+      // yeah, pretty bad to catch all, but we want this to work no matter what.
+    } catch (e) {
       client.write(JSON.stringify({ type: "error", message: e.message }));
     }
   });
