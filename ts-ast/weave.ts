@@ -30,10 +30,14 @@ export const weaveProgram = (
   // TODO: do other types
 
   function buildTypeMap(node: ts.Node, scope: string) {
-    if (ts.isVariableDeclaration(node)) {
-      const type = nettleChecker.getTypeAtLocation(node);
-      const name = node.name.getText();
-      typeMap.set(scope + name, nettleChecker.typeToTypeNode(type)!);
+    if (node.kind === ts.SyntaxKind.VariableDeclaration) {
+      const varDec = node as ts.VariableDeclaration;
+      // if name is not a ident, skip
+      if (varDec.name.kind === ts.SyntaxKind.Identifier) {
+        const type = nettleChecker.getTypeAtLocation(varDec);
+        const name = varDec.name.getText();
+        typeMap.set(scope + name, nettleChecker.typeToTypeNode(type)!);
+      }
     } else if (ts.isFunctionDeclaration(node)) {
       const type = nettleChecker.getTypeAtLocation(node);
       const name = node.name!.getText();
@@ -41,7 +45,21 @@ export const weaveProgram = (
       // we change the scope
       ts.forEachChild(node, (child) => buildTypeMap(child, scope + name + "$"));
       return;
+    } else if (ts.isFunctionExpression(node) || ts.isArrowFunction(node)) {
+      // we need some name for the function, so we check for a variable declaration
+      if (node.parent?.kind === ts.SyntaxKind.VariableDeclaration) {
+        const varDec = node.parent as ts.VariableDeclaration;
+        const type = nettleChecker.getTypeAtLocation(varDec);
+        const name = varDec.name.getText();
+        typeMap.set(scope + name, nettleChecker.typeToTypeNode(type)!);
+        // we change the scope
+        ts.forEachChild(node, (child) =>
+          buildTypeMap(child, scope + name + "$")
+        );
+        return;
+      }
     }
+    console.log("aaa");
     ts.forEachChild(node, (child) => buildTypeMap(child, scope));
   }
 
@@ -75,6 +93,24 @@ export const weaveProgram = (
       } else {
         ts.forEachChild(node, (child) => weaveNode(child, scope, level + 1));
         return;
+      }
+    } else if (ts.isFunctionExpression(node) || ts.isArrowFunction(node)) {
+      // we need some name for the function, so we check for a variable declaration
+      if (node.parent?.kind === ts.SyntaxKind.VariableDeclaration) {
+        const varDec = node.parent as ts.VariableDeclaration;
+        const name = varDec.name.getText();
+        const type = typeMap.get(scope + name);
+        varDec.type = type;
+        // we change the scope, if we are at the nettle level
+        if (level >= nettleLevel) {
+          ts.forEachChild(node, (child) =>
+            weaveNode(child, scope + name + "$", level + 1)
+          );
+          return;
+        } else {
+          ts.forEachChild(node, (child) => weaveNode(child, scope, level + 1));
+          return;
+        }
       }
     }
     ts.forEachChild(node, (child) => weaveNode(child, scope, level));
