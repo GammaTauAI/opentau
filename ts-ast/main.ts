@@ -228,7 +228,7 @@ var unixServer = net.createServer(function (client) {
       }
       // yeah, pretty bad to catch all, but we want this to work no matter what.
     } catch (e) {
-      client.write(JSON.stringify({ type: "error", message: e.message }));
+      client.write(JSON.stringify({ type: "error", message: e.message + "\ntrace: \n" + e.stack }));
     }
   });
 });

@@ -41,7 +41,7 @@ export const weaveProgram = (
   // the types from the nettle AST to the original AST
   const typeMap = new Map<string, ts.TypeNode>();
 
-  // TODO: do other types
+  // TODO: do other types: classes, methods
 
   function buildTypeMap(node: ts.Node, scope: string) {
     if (node.kind === ts.SyntaxKind.VariableDeclaration) {
@@ -70,6 +70,7 @@ export const weaveProgram = (
         ts.forEachChild(node, (child) =>
           buildTypeMap(child, scope + name + "$")
         );
+
         return;
       }
     }

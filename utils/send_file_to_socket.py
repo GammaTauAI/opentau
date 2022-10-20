@@ -57,7 +57,12 @@ try:
     print("Whole response is:\n {}".format(jsonDecoded))
     print("Text is:\n {}".format(base64Decoded))
 except:
-    print("Error decoding response")
-    print("Response is:\n {}".format(res))
+    try:
+        # try to get the error message
+        jsonDecoded = json.loads(res)
+        print("Error: {}".format(jsonDecoded["message"]))
+    except:
+        print("Error decoding response")
+        print("Response is:\n {}".format(res))
 
 s.close()
