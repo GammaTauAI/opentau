@@ -1,6 +1,20 @@
 import ts from "typescript";
 import { codePrinter } from "./main";
 
+// for debugging
+const typeMapPrint = (
+  typeMap: Map<string, ts.TypeNode>,
+  sourceFile: ts.SourceFile
+): string => {
+  let str = "";
+  typeMap.forEach((value, key) => {
+    str += `${key}: `;
+    str += codePrinter.printNode(ts.EmitHint.Unspecified, value, sourceFile);
+    str += "\n";
+  });
+  return str;
+};
+
 // IDEA:
 // - what we have:
 //  - we have an unwoven, uncompleted AST
@@ -59,12 +73,12 @@ export const weaveProgram = (
         return;
       }
     }
-    console.log("aaa");
     ts.forEachChild(node, (child) => buildTypeMap(child, scope));
   }
 
   nettleFile.forEachChild((child) => buildTypeMap(child, ""));
-  console.log("typeMap keys:", typeMap.keys());
+
+  console.log("typeMap:\n" + typeMapPrint(typeMap, nettleFile));
 
   // we weave the types into the original AST
   function weaveNode(node: ts.Node, scope: string, level: number) {
