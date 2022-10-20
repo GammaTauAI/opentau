@@ -117,6 +117,15 @@ impl LangServer for PyServer {
         todo!()
     }
 
+    async fn weave(
+        &self,
+        original: &str,
+        nettle: &str,
+        level: usize,
+    ) -> Result<String, LangServerError> {
+        todo!()
+    }
+
     async fn type_check(&self, code: &str) -> Result<bool, LangServerError> {
         // let tmp_dir = std::env::temp_dir();
         // let tmp_file = tmp_dir.join(format!("codex-{}.py", std::process::id()));

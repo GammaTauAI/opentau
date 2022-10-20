@@ -22,7 +22,22 @@ pub struct CodeBlockTree {
 //
 // Why the nested array instead of just using DFS? This representation allows to complete concurrently
 
-pub type NaiveCompletionLevels = Vec<Vec<(Vec<usize>, String, String)>>;
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct NaiveNode {
+    pub children_idxs: Vec<usize>,
+    pub name: String,
+    pub code: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct NaiveLevel {
+    pub nodes: Vec<NaiveNode>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct NaiveCompletionLevels {
+    pub levels: Vec<NaiveLevel>,
+}
 
 impl From<CodeBlockTree> for NaiveCompletionLevels {
     fn from(tree: CodeBlockTree) -> Self {
@@ -32,13 +47,17 @@ impl From<CodeBlockTree> for NaiveCompletionLevels {
         let mut levels = vec![];
         // this is a memoization table, where we store the nodes of the tree at each level,
         // with the children idx that need to be patched in the level after
-        let mut nodes = vec![(vec![], tree.name, tree.code)];
+        let mut nodes = vec![NaiveNode {
+            children_idxs: vec![],
+            name: tree.name,
+            code: tree.code,
+        }];
         // here we store the children of the nodes, and the idx of the node that they belong to
         let mut p_children = vec![(0, tree.children)];
 
         while !nodes.is_empty() {
             // we push the level of nodes that we got the iteration before
-            levels.push(nodes);
+            levels.push(NaiveLevel { nodes });
             // new nodes!
             nodes = vec![];
 
@@ -53,12 +72,21 @@ impl From<CodeBlockTree> for NaiveCompletionLevels {
 
                     // we patch the children idxs of the parent of the children
                     let level = levels.len() - 1;
-                    let (children_idxs, _, _) =
-                        levels.get_mut(level).unwrap().get_mut(p_idx).unwrap();
+                    let children_idxs = &mut levels
+                        .get_mut(level)
+                        .unwrap()
+                        .nodes
+                        .get_mut(p_idx)
+                        .unwrap()
+                        .children_idxs;
                     children_idxs.push(idx);
 
                     // push unpatched node
-                    nodes.push((vec![], child.name, child.code));
+                    nodes.push(NaiveNode {
+                        children_idxs: vec![],
+                        name: child.name,
+                        code: child.code,
+                    });
                     // push children
                     new_children.push((idx, child.children));
                 }
@@ -66,6 +94,6 @@ impl From<CodeBlockTree> for NaiveCompletionLevels {
             // reassign children
             p_children = new_children;
         }
-        levels
+        NaiveCompletionLevels { levels }
     }
 }

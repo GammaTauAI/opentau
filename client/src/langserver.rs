@@ -30,6 +30,16 @@ pub trait LangServer {
         completed: &str,
     ) -> Result<(bool, i64), LangServerError>;
 
+    /// performs a type weaving operation on the given `original` code, such that the types of the
+    /// `nettle` code are transplanted into the `original` code. The `level` parameter specifies the
+    /// level of the tree where the `nettle` block is located relative to `original`.
+    async fn weave(
+        &self,
+        original: &str,
+        nettle: &str,
+        level: usize,
+    ) -> Result<String, LangServerError>;
+
     /// type checks the given code. returns true if it type checks, false otherwise.
     /// may return an error.
     async fn type_check(&self, code: &str) -> Result<bool, LangServerError>;
@@ -60,6 +70,17 @@ pub struct LSCheckReq {
     pub cmd: String,
     pub text: String,
     pub original: String,
+}
+
+/// Request to the language server, for the weave command.
+/// in the format of {cmd: "the-cmd", text: "the-original-text",
+///                   nettle: "the-nettle-text", level: 0}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LSWeaveReq {
+    pub cmd: String,
+    pub text: String,
+    pub nettle: String,
+    pub level: usize,
 }
 
 #[derive(Debug, Clone)]

@@ -6,7 +6,8 @@ use tokio::io::AsyncBufReadExt;
 use crate::tree::CodeBlockTree;
 
 use super::{
-    abstraction::SocketAbstraction, LSCheckReq, LSPrintReq, LSReq, LangServer, LangServerError,
+    abstraction::SocketAbstraction, LSCheckReq, LSPrintReq, LSReq, LSWeaveReq, LangServer,
+    LangServerError,
 };
 
 #[derive(Debug)]
@@ -119,6 +120,26 @@ impl LangServer for TsServer {
             resp["text"].as_bool().unwrap(),
             resp["score"].as_i64().unwrap(),
         ))
+    }
+
+    async fn weave(
+        &self,
+        original: &str,
+        nettle: &str,
+        level: usize,
+    ) -> Result<String, LangServerError> {
+        let req = LSWeaveReq {
+            cmd: "weave".to_string(),
+            text: base64::encode(original),
+            nettle: base64::encode(nettle),
+            level,
+        };
+
+        let resp = self.socket.send_req(&req).await?;
+        // decode the response
+        let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
+
+        Ok(String::from_utf8(resp).unwrap())
     }
 
     async fn type_check(&self, code: &str) -> Result<bool, LangServerError> {

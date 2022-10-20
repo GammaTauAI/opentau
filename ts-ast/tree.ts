@@ -56,13 +56,13 @@ export const makeTree = (sourceFile: ts.SourceFile): CodeBlockTree => {
         const name = nameId.escapedText.toString();
         let thisNode = { name, code, children: [] };
 
-        func.body?.statements.forEach((child) => traverse(child, thisNode));
-
-        if (ctxNode) {
-          ctxNode.children.push(thisNode);
+        if (func.body.statements) {
+          func.body?.statements.forEach((child) => traverse(child, thisNode));
+          if (ctxNode) {
+            ctxNode.children.push(thisNode);
+          }
+          return;
         }
-
-        return;
       }
     }
 
