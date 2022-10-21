@@ -38,6 +38,45 @@ function isPidRunning(pid: number): boolean {
   }
 }
 
+const compilerOptions = {
+  target: ts.ScriptTarget.Latest,
+  module: ts.ModuleKind.CommonJS,
+  strict: false,
+  noImplicitAny: false,
+  noImplicitThis: false,
+  noEmit: true,
+  noImplicitReturns: false,
+  allowJs: true,
+  checkJs: true,
+};
+
+const defaultCompilerHost = ts.createCompilerHost(compilerOptions);
+
+const makeCompilerHost = (
+  filename: string,
+  sourceFile: ts.SourceFile
+): ts.CompilerHost => ({
+  getSourceFile: (name, languageVersion) => {
+    console.log(`getSourceFile ${name}`);
+
+    if (name === filename) {
+      return sourceFile;
+    } else {
+      return defaultCompilerHost.getSourceFile(name, languageVersion);
+    }
+  },
+  writeFile: (_filename, _data) => {},
+  getDefaultLibFileName: () =>
+    defaultCompilerHost.getDefaultLibFileName(compilerOptions),
+  useCaseSensitiveFileNames: () => false,
+  getCanonicalFileName: (filename) => filename,
+  getCurrentDirectory: () => "",
+  getNewLine: () => "\n",
+  getDirectories: () => [],
+  fileExists: () => true,
+  readFile: () => "",
+});
+
 const handlePrint = (decodedText: string, req: any): string => {
   // create the source file
   const sourceFile = ts.createSourceFile(
@@ -127,40 +166,32 @@ const handleWeave = (decodedText: string, req: any): string => {
   }
 
   // due to type information, we have to create a program, instead of just a source file
-
-  // write to a temp file
-  const tempFileOriginal = path.join(os.tmpdir(), "tempOriginal.ts");
-  const tempFileNettle = path.join(os.tmpdir(), "tempNettle.ts");
-  fs.writeFileSync(tempFileOriginal, decodedText);
-  fs.writeFileSync(tempFileNettle, decodedNettle);
-
-  const options = {
-    target: ts.ScriptTarget.Latest,
-    module: ts.ModuleKind.CommonJS,
-    strict: false,
-    noImplicitAny: false,
-    noImplicitThis: false,
-    noEmit: true,
-    noImplicitReturns: false,
-    allowJs: true,
-    checkJs: true,
-  };
+  const originalName = "original.ts";
+  const nettleName = "nettle.ts";
 
   const originalProgram = ts.createProgram({
-    rootNames: [tempFileOriginal],
-    options: options,
+    rootNames: [originalName],
+    options: compilerOptions,
+    host: makeCompilerHost(
+      originalName,
+      ts.createSourceFile(originalName, decodedText, ts.ScriptTarget.Latest)
+    ),
   });
 
   const nettleProgram = ts.createProgram({
-    rootNames: [tempFileNettle],
-    options: options,
+    rootNames: [nettleName],
+    options: compilerOptions,
+    host: makeCompilerHost(
+      nettleName,
+      ts.createSourceFile(nettleName, decodedNettle, ts.ScriptTarget.Latest)
+    ),
   });
 
   const res = weaveProgram(
     originalProgram,
-    tempFileOriginal,
+    originalName,
     nettleProgram,
-    tempFileNettle,
+    nettleName,
     req.level
   );
 
@@ -228,7 +259,12 @@ var unixServer = net.createServer(function (client) {
       }
       // yeah, pretty bad to catch all, but we want this to work no matter what.
     } catch (e) {
-      client.write(JSON.stringify({ type: "error", message: e.message + "\ntrace: \n" + e.stack }));
+      client.write(
+        JSON.stringify({
+          type: "error",
+          message: e.message + "\ntrace: \n" + e.stack,
+        })
+      );
     }
   });
 });
