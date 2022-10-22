@@ -5,52 +5,80 @@ use tokio::{sync::Mutex, task::JoinHandle};
 
 use crate::{
     cache::Cache,
-    langserver::{LangServer, LangServerError},
+    langserver::{ArcLangServer, LangServerError},
 };
 
 mod rl {
+    use dashmap::DashMap;
     use governor::{
-        clock::MonotonicClock,
+        clock::{QuantaClock, QuantaInstant},
         middleware::NoOpMiddleware,
-        state::{InMemoryState, NotKeyed},
+        state::InMemoryState,
         Quota, RateLimiter,
     };
-    use std::{sync::Arc, time::Instant};
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
 
-    // TODO: implement key rotation
+    type RL = Arc<
+        RateLimiter<
+            String,
+            DashMap<String, InMemoryState>,
+            QuantaClock,
+            NoOpMiddleware<QuantaInstant>,
+        >,
+    >;
+
     #[derive(Clone, Debug)]
-    pub(super) struct Limiter {
-        rl: Arc<RateLimiter<NotKeyed, InMemoryState, MonotonicClock, NoOpMiddleware<Instant>>>,
+    pub(super) struct LimiterPool {
+        tokens: Arc<Vec<String>>,
+        token_idx: Arc<Mutex<usize>>,
+        rl: RL,
     }
 
-    impl Limiter {
-        pub async fn wait(&self) {
-            println!("Waiting rl");
-            self.rl.until_ready().await;
+    impl LimiterPool {
+        async fn next_token(&self) -> String {
+            let mut token_idx = self.token_idx.lock().await;
+            let token = self.tokens[*token_idx].clone();
+            *token_idx = (*token_idx + 1) % self.tokens.len();
+            token
         }
-    }
 
-    impl Default for Limiter {
-        fn default() -> Self {
-            let clock = governor::clock::MonotonicClock::default();
+        /// Waits for a token to become available, then returns it.
+        pub async fn wait_token(&self) -> String {
+            println!("Waiting rl");
+            let token = self.next_token().await;
+            self.rl.until_key_ready(&token).await;
+            token
+        }
+
+        /// Creates a new limiter pool given the list of tokens.
+        ///
+        /// # Panics
+        /// Panics if the list of tokens is empty.
+        pub fn new(tokens: Vec<String>) -> Self {
+            assert!(!tokens.is_empty());
             let reset = 120 / 10; // 2 minutes / 10 cells = 12 seconds
-            let rate_limiter = Arc::new(RateLimiter::direct_with_clock(
+            let rate_limiter = Arc::new(RateLimiter::keyed(
                 Quota::with_period(std::time::Duration::from_secs(reset)) // we want to reset every 2 minutes
                     .unwrap()
                     .allow_burst(std::num::NonZeroU32::new(4).unwrap()), // max 4 requests per 12 seconds
-                &clock,
             ));
 
-            Self { rl: rate_limiter }
+            rate_limiter.check_key(&tokens[0]).unwrap();
+
+            Self {
+                rl: rate_limiter,
+                tokens: Arc::new(tokens),
+                token_idx: Arc::new(Mutex::new(0)),
+            }
         }
     }
 }
 
 pub struct CodexClient {
     pub client: reqwest::Client,
-    pub token: String,
     // NOTE: mutex so that we make sure the socket is only used by one thread at a time
-    pub lang_server: Arc<Mutex<dyn LangServer + Send + Sync>>,
+    pub lang_server: ArcLangServer,
     // the codex URL endpoint
     pub endpoint: String,
     // the temperature to use for the completion
@@ -58,23 +86,25 @@ pub struct CodexClient {
     // The cache to use for the completions
     pub cache: Option<Arc<Mutex<Cache>>>,
     // The rate limiter
-    rate_limiter: rl::Limiter,
+    rate_limiter: rl::LimiterPool,
 }
 
+#[derive(Clone)]
 pub struct CodexClientBuilder {
     pub client: Option<reqwest::Client>,
-    pub token: String,
-    pub lang_server: Arc<Mutex<dyn LangServer + Send + Sync>>,
+    pub tokens: Vec<String>,
+    pub lang_server: ArcLangServer,
     pub endpoint: Option<String>,
     pub temperature: Option<f64>,
     pub cache: Option<Arc<Mutex<Cache>>>,
 }
 
 impl CodexClientBuilder {
-    pub fn new(token: String, lang_server: Arc<Mutex<dyn LangServer + Send + Sync>>) -> Self {
+    // TODO: multiple tokens
+    pub fn new(tokens: Vec<String>, lang_server: ArcLangServer) -> Self {
         Self {
             client: None,
-            token,
+            tokens,
             lang_server,
             endpoint: None,
             temperature: None,
@@ -102,6 +132,7 @@ impl CodexClientBuilder {
         self
     }
 
+    /// Builds the client and consumes the builder
     pub fn build(&mut self) -> CodexClient {
         let client = self.client.take().unwrap_or_else(reqwest::Client::new);
         let endpoint = self
@@ -110,10 +141,9 @@ impl CodexClientBuilder {
             .unwrap_or_else(|| "https://api.openai.com/v1/edits".to_string());
         let temperature = self.temperature.take().unwrap_or(1.0);
         let cache = self.cache.take();
-        let rate_limiter = rl::Limiter::default();
+        let rate_limiter = rl::LimiterPool::new(self.tokens.drain(..).collect());
         CodexClient {
             client,
-            token: self.token.clone(),
             lang_server: self.lang_server.clone(),
             endpoint,
             temperature,
@@ -261,15 +291,14 @@ impl CodexClient {
         let lang_client = self.lang_server.clone();
         let input = query.input.to_string();
         let client = self.client.clone(); // NOTE: reqwest uses Arc internally
-        let token = self.token.clone();
         let endpoint = self.endpoint.clone();
         let temp = self.temperature;
         let num_comps = query.num_comps;
         let rl = self.rate_limiter.clone();
 
         tokio::spawn(async move {
-            rl.wait().await;
-            println!("Ready rl");
+            let token = rl.wait_token().await;
+            println!("Ready rl, {}", token);
             let req = client
                 .post(&endpoint)
                 .bearer_auth(token)

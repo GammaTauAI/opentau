@@ -1,11 +1,11 @@
-use std::{io::Write, sync::Arc};
+use std::sync::Arc;
 
 use codex_types::{
     cache::Cache,
     codex::{CodexClient, CodexClientBuilder, CodexError, Completion, CompletionQuery},
     langserver::{py::PyServer, ts::TsServer, LangServer},
 };
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::Mutex;
 
 use clap::Parser;
 
@@ -13,9 +13,9 @@ use clap::Parser;
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
-    /// Codex token to use
+    /// Codex tokens to use, separated by commas
     #[clap(short, long, value_parser)]
-    token: String,
+    tokens: String,
 
     /// The target language.
     /// Either `ts` or `py`
@@ -124,7 +124,13 @@ async fn main() {
         )))
     });
 
-    let mut codex = CodexClientBuilder::new(args.token, lang_client);
+    let tokens = args
+        .tokens
+        .split(',')
+        .map(|s| s.to_string())
+        .collect::<Vec<_>>();
+
+    let mut codex = CodexClientBuilder::new(tokens, lang_client);
     codex.endpoint(args.endpoint).temperature(args.temp);
 
     if let Some(cache) = cache {

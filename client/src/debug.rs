@@ -26,7 +26,7 @@ async fn main() {
         .to_string();
 
     let lang_server = Arc::new(Mutex::new(TsServer::make(&client_path).await.unwrap()));
-    let codex = CodexClientBuilder::new(token, lang_server).build();
+    let codex = CodexClientBuilder::new(vec![token], lang_server).build();
 
     // {
     // let printed = codex

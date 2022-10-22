@@ -45,6 +45,8 @@ pub trait LangServer {
     async fn type_check(&self, code: &str) -> Result<bool, LangServerError>;
 }
 
+pub type ArcLangServer = std::sync::Arc<tokio::sync::Mutex<dyn LangServer + Send + Sync>>;
+
 /// Request to the language server, with a given command and text
 /// in the format of {cmd: "the-cmd", text: "the-text"}
 #[derive(Debug, Clone, Serialize, Deserialize)]
