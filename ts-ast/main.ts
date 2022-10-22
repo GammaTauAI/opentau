@@ -135,15 +135,28 @@ const handleCheck = (decodedText: string, req: any): string => {
     ts.ScriptKind.TS
   );
 
-  const completedFile = ts.createSourceFile(
-    "bleh.ts", // name does not matter until we save, which we don't from here
-    decodedText,
-    ts.ScriptTarget.Latest,
-    false, // for setParentNodes
-    ts.ScriptKind.TS
-  );
+  const completedProgram = ts.createProgram({
+    rootNames: ["comp.ts"],
+    options: compilerOptions,
+    host: makeCompilerHost(
+      "comp.ts",
+      ts.createSourceFile(
+        "comp.ts",
+        decodedText,
+        ts.ScriptTarget.Latest,
+        false, // for setParentNodes
+        ts.ScriptKind.TS
+      )
+    ),
+  });
 
-  const res = checkCompleted(originalFile, completedFile);
+  const completedFile = completedProgram.getSourceFile("comp.ts")!;
+
+  const res = checkCompleted(
+    originalFile,
+    completedFile,
+    completedProgram.getTypeChecker()
+  );
 
   return JSON.stringify({
     type: "checkResponse",
