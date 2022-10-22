@@ -70,15 +70,18 @@ struct Args {
 
 impl Args {
     async fn lang_client(&self) -> Arc<Mutex<dyn LangServer + Send + Sync>> {
+        fn get_path(folder: String) -> String {
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .parent()
+                .unwrap()
+                .join(folder)
+                .to_str()
+                .unwrap()
+                .to_string()
+        }
         match self.lang.as_str() {
             "ts" => {
-                let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .parent()
-                    .unwrap()
-                    .join("ts-ast")
-                    .to_str()
-                    .unwrap()
-                    .to_string();
+                let path = get_path("ts-ast".to_string());
                 Arc::new(Mutex::new(
                     TsServer::make(&path)
                         .await
@@ -86,13 +89,7 @@ impl Args {
                 ))
             }
             "py" => {
-                let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .parent()
-                    .unwrap()
-                    .join("py-ast")
-                    .to_str()
-                    .unwrap()
-                    .to_string();
+                let path = get_path("py-ast".to_string());
                 Arc::new(Mutex::new(
                     PyServer::make(&path)
                         .await
@@ -196,8 +193,7 @@ impl MainCtx {
     async fn simple_strategy(self) -> Vec<Completion> {
         let printed = self
             .codex
-            .lang_server
-            .lock()
+            .get_ls()
             .await
             .pretty_print(&self.file_contents, "_hole_")
             .await
@@ -222,7 +218,7 @@ impl MainCtx {
             }
         };
 
-        let lang_client = self.codex.lang_server.lock().await;
+        let lang_client = self.codex.get_ls().await;
         let mut comps: Vec<Completion> = vec![];
         for (i, comp) in resp.into_iter().enumerate() {
             println!("comp {}:\n {}", i, comp.code);
@@ -236,7 +232,7 @@ impl MainCtx {
         }
 
         // cache the type-checked completions if we have a cache
-        if let Some(cache) = &self.codex.cache {
+        if let Some(mut cache) = self.codex.get_cache().await {
             // we want to get all the completions that are typechecked
             // except the one that fallbacked (if there is any)
             let comps_no_fallback = comps
@@ -247,8 +243,6 @@ impl MainCtx {
 
             if !comps_no_fallback.is_empty() {
                 cache
-                    .lock()
-                    .await
                     .store(&query, &comps_no_fallback)
                     .expect("failed to store in cache");
             }

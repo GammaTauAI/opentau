@@ -1,12 +1,18 @@
 use serde::{Deserialize, Serialize};
 
-use crate::codex::{CodexClient, CompletionQuery};
+use crate::codex::{CodexClient, Completion, CompletionQuery};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct CodeBlockTree {
     pub name: String,
     pub code: String,
     pub children: Vec<CodeBlockTree>,
+}
+
+#[async_trait::async_trait]
+pub trait TreeCompletion {
+    /// Completes the code block tree, mutating the tree in place.
+    async fn tree_complete(&mut self, codex: &CodexClient);
 }
 
 // NOTE: tree compeltion algo (naive and inefficient way, with only one single completion per code-block):
@@ -100,29 +106,61 @@ impl From<CodeBlockTree> for NaiveCompletionLevels {
     }
 }
 
-// impl NaiveCompletionLevels {
-// pub async fn tree_complete(mut self, codex: &CodexClient) -> Self {
-// // we start at the deepest level of the array, and we complete the code blocks
-// // at the level.
+#[async_trait::async_trait]
+impl TreeCompletion for NaiveCompletionLevels {
+    /// Completes the code block tree, mutating the tree in place.
+    async fn tree_complete(&mut self, codex: &CodexClient) {
+        async fn retry_query_until_ok(codex: &CodexClient, q: CompletionQuery) -> Completion {
+            let mut res = codex.complete(q.clone()).await;
+            while res.is_err() {
+                res = codex.complete(q.clone()).await;
+            }
+            res.unwrap().remove(0)
+        }
 
-// let num_levels = self.levels.len();
-// for level in (0..num_levels).rev() {
-// let mut nodes = self.levels[level].nodes;
-// for node in &mut nodes {
-// let printed = codex
-// .lang_server
-// .lock()
-// .await
-// .pretty_print(&node.code, "_hole_")
-// .await
-// .unwrap();
-// node.code = codex
-// .complete(CompletionQuery::new(printed, 1, 1, false))
-// .await;
-// }
-// self.levels[level].nodes = nodes;
-// }
+        // we start at the deepest level of the array, and we complete the code blocks
+        // at the level.
 
-// self
-// }
-// }
+        let num_levels = self.levels.len();
+        let mut prev_level = None;
+        for level in (0..num_levels).rev() {
+            println!("level: {}", level);
+            let nodes = &mut self.levels.get_mut(level).unwrap().nodes;
+            for node in nodes.iter_mut() {
+                // if we are not at a leaf, we need to patch the node with the children
+                let mut code = node.code.clone();
+                if !node.children_idxs.is_empty() {
+                    let level_below: &Vec<NaiveNode> = prev_level.as_ref().unwrap();
+                    for child_idx in node.children_idxs.iter() {
+                        let child = level_below.get(*child_idx).unwrap_or_else(|| {
+                            panic!(
+                                "child_idx {} should be in level_below, which has len {}",
+                                child_idx,
+                                level_below.len()
+                            )
+                        });
+                        code = codex
+                            .get_ls()
+                            .await
+                            .weave(&code, &child.code, 1)
+                            .await
+                            .unwrap();
+                    }
+                }
+                let printed = codex
+                    .get_ls()
+                    .await
+                    .pretty_print(&code, "_hole_")
+                    .await
+                    .unwrap();
+                println!("printed: \n{}", printed);
+                let q = CompletionQuery::new(printed, 1, 1, false);
+                let comp = retry_query_until_ok(codex, q).await;
+                println!("level comp: \n{}", comp.code);
+                node.code = comp.code;
+            }
+            println!("setting prev_level");
+            prev_level = Some(nodes.clone());
+        }
+    }
+}

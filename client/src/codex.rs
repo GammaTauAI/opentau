@@ -5,7 +5,7 @@ use tokio::{sync::Mutex, task::JoinHandle};
 
 use crate::{
     cache::Cache,
-    langserver::{ArcLangServer, LangServerError},
+    langserver::{ArcLangServer, LangServer, LangServerError},
 };
 
 mod rl {
@@ -29,13 +29,14 @@ mod rl {
     >;
 
     #[derive(Clone, Debug)]
-    pub(super) struct LimiterPool {
+    /// Rate limited pool of tokens that can be used to query codex
+    pub(super) struct RateLimitedTokenPool {
         tokens: Arc<Vec<String>>,
         token_idx: Arc<Mutex<usize>>,
         rl: RL,
     }
 
-    impl LimiterPool {
+    impl RateLimitedTokenPool {
         async fn next_token(&self) -> String {
             let mut token_idx = self.token_idx.lock().await;
             let token = self.tokens[*token_idx].clone();
@@ -45,7 +46,6 @@ mod rl {
 
         /// Waits for a token to become available, then returns it.
         pub async fn wait_token(&self) -> String {
-            println!("Waiting rl");
             let token = self.next_token().await;
             self.rl.until_key_ready(&token).await;
             token
@@ -78,15 +78,15 @@ mod rl {
 pub struct CodexClient {
     pub client: reqwest::Client,
     // NOTE: mutex so that we make sure the socket is only used by one thread at a time
-    pub lang_server: ArcLangServer,
+    lang_server: ArcLangServer,
     // the codex URL endpoint
     pub endpoint: String,
     // the temperature to use for the completion
     pub temperature: f64,
     // The cache to use for the completions
-    pub cache: Option<Arc<Mutex<Cache>>>,
-    // The rate limiter
-    rate_limiter: rl::LimiterPool,
+    cache: Option<Arc<Mutex<Cache>>>,
+    // The rate limited token pool, that produces the token used for this client
+    rate_limiter: rl::RateLimitedTokenPool,
 }
 
 #[derive(Clone)]
@@ -100,7 +100,6 @@ pub struct CodexClientBuilder {
 }
 
 impl CodexClientBuilder {
-    // TODO: multiple tokens
     pub fn new(tokens: Vec<String>, lang_server: ArcLangServer) -> Self {
         Self {
             client: None,
@@ -141,7 +140,7 @@ impl CodexClientBuilder {
             .unwrap_or_else(|| "https://api.openai.com/v1/edits".to_string());
         let temperature = self.temperature.take().unwrap_or(1.0);
         let cache = self.cache.take();
-        let rate_limiter = rl::LimiterPool::new(self.tokens.drain(..).collect());
+        let rate_limiter = rl::RateLimitedTokenPool::new(self.tokens.drain(..).collect());
         CodexClient {
             client,
             lang_server: self.lang_server.clone(),
@@ -263,7 +262,7 @@ impl CodexClient {
         }
 
         if rate_limit {
-            // if we rate limit, we still want to return the completions we have
+            // if we rate limit, we still want to return the completions we have (may not have any)
             return Err(CodexError::RateLimit(final_completions));
         }
 
@@ -298,7 +297,6 @@ impl CodexClient {
 
         tokio::spawn(async move {
             let token = rl.wait_token().await;
-            println!("Ready rl, {}", token);
             let req = client
                 .post(&endpoint)
                 .bearer_auth(token)
@@ -315,7 +313,6 @@ impl CodexClient {
                     (num_comps * 10) as u64,
                 )));
             let res = req.send().await?;
-            println!("Dropped rl");
             let body = res.text().await?;
             let choices: Vec<EditRespChoice> = match serde_json::from_str::<EditResp>(&body)? {
                 EditResp::Choices { choices } => choices,
@@ -354,6 +351,20 @@ impl CodexClient {
 
             Ok(())
         })
+    }
+
+    /// Gets a mutex guard to the language server from the codex client
+    pub async fn get_ls(&self) -> tokio::sync::MutexGuard<dyn LangServer + Send + Sync> {
+        self.lang_server.lock().await
+    }
+
+    /// Gets a mutex guard to the cache from the codex client, if a cache is being used
+    pub async fn get_cache(&self) -> Option<tokio::sync::MutexGuard<Cache>> {
+        if let Some(cache) = &self.cache {
+            Some(cache.lock().await)
+        } else {
+            None
+        }
     }
 }
 

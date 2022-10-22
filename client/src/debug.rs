@@ -3,7 +3,7 @@ use std::sync::Arc;
 use codex_types::{
     codex::CodexClientBuilder,
     langserver::{ts::TsServer, LangServer},
-    tree::NaiveCompletionLevels,
+    tree::{NaiveCompletionLevels, TreeCompletion},
 };
 use tokio::sync::Mutex;
 
@@ -47,15 +47,11 @@ async fn main() {
 
     // testing out "tree"
     {
-        let tree = codex
-            .lang_server
-            .lock()
-            .await
-            .to_tree(&input)
-            .await
-            .unwrap();
-        let naive: NaiveCompletionLevels = tree.into();
+        let tree = codex.get_ls().await.to_tree(&input).await.unwrap();
+        let mut naive: NaiveCompletionLevels = tree.into();
         println!("tree: {:#?}", naive);
+        naive.tree_complete(&codex).await;
+        println!("root comp: {}", naive.levels[0].nodes[0].code);
     }
 
     // testing out "stub"
