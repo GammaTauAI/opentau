@@ -12,6 +12,9 @@ from functools import partial
 
 from printer import print_source
 
+from typing import Any
+
+_FAKETYPE_ = '_hole_'
 
 if len(sys.argv) != 4:
     print(f'usage: [path to socket] [pid of rust proc]')
@@ -71,28 +74,43 @@ def recvall(s: socket.socket) -> bytes:
             break
     return data
 
+def handle_print(decoded: str, req: Any, source_file: ast.AST) -> str:
+    req.type_name = _FAKETYPE_
+    res = print_source(source_file)
+
+def handle_tree() -> str:
+    NotImplemented()
+def handle_stub() -> str:
+    NotImplemented()
+def handle_check() -> str:
+    NotImplemented()
+def handle_weave() -> str:
+    NotImplemented()
+
 # handles a single client
 def on_client(c: socket.socket) -> None:
     try:
         while True:
             data = recvall(c)
-            obj = json.loads(data) # FIXME: try catch
-            decoded_text = base64.b64decode(obj.text)
+            req = json.loads(data)
+            decoded_text = str(base64.b64decode(req.text))
             source_file = ast.parse(decoded_text)
-            if obj.cmd == 'print':
+            if req.cmd == 'print':
                 res = print_source(source_file)
-                base_64 = base64.b64encode(res) # type: ignore
+                c.send(handle_print(decoded_text, req, source_file))
 
-            elif obj.cmd == 'tree':
+            elif req.cmd == 'tree':
                 NotImplemented()
-            elif obj.cmd == 'stub':
+            elif req.cmd == 'stub':
                 NotImplemented()
-            elif obj.cmd == 'check':
+            elif req.cmd == 'check':
+                NotImplemented()
+            elif req.cmd == 'weave':
                 NotImplemented()
             else:
                 c.send(json.dumps({
                     'type': 'error',
-                    'message': f'unknown command {obj.cmd}'
+                    'message': f'unknown command {req.cmd}'
                 }).encode())
 
     finally:

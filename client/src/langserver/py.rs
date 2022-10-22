@@ -21,7 +21,9 @@ impl LangServer for PyServer {
 
         let mut process = match tokio::process::Command::new("python")
             .args([
-
+                  server_path,
+                  tmp_socket_file,
+                  pid.to_string().as_str(),
             ])
             .stdout(Stdio::piped())
             // stderr is open by default, we want to see the output
@@ -55,12 +57,12 @@ impl LangServer for PyServer {
 
     async fn pretty_print(&self, code: &str, type_name: &str) -> Result<String, LangServerError> {
         let req = LSPrintReq {
-        cmd: "print".to_string(),
-        text: base64::encode(code),
-        type_name: type_name.to_string(),
+            cmd: "print".to_string(),
+            text: base64::encode(code),
+            type_name: type_name.to_string(),
         };
-
         let resp = self.socket.send_req(&req).await?;
+
         // decode the response
         let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
 
@@ -72,7 +74,6 @@ impl LangServer for PyServer {
             cmd: "tree".to_string(),
             text: base64::encode(code),
         };
-
         let resp = self.socket.send_req(&req).await?;
 
         // decode the response
@@ -83,11 +84,11 @@ impl LangServer for PyServer {
 
     async fn stub(&self, _code: &str) -> Result<String, LangServerError> {
         let req = LSReq {
-        cmd: "stub".to_string(),
-        text: base64::encode(code),
+            cmd: "stub".to_string(),
+            text: base64::encode(code),
         };
-
         let resp = self.socket.send_req(&req).await?;
+
         // decode the response
         let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
 
@@ -95,10 +96,10 @@ impl LangServer for PyServer {
     }
 
     async fn check_complete(
-            &self,
-            _original: &str,
-            _completed: &str,
-        ) -> Result<(bool, i64), LangServerError> {
+        &self,
+        _original: &str,
+        _completed: &str,
+    ) -> Result<(bool, i64), LangServerError> {
         // encode original and completed into json: {original: "", completed: ""}
         let req = LSCheckReq {
             cmd: "check".to_string(),
