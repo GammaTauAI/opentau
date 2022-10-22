@@ -2,12 +2,10 @@ use std::{io::Write, sync::Arc};
 
 use codex_types::{
     cache::Cache,
-    codex::{
-        CodexClient, CodexError, Completion, CompletionQuery,
-    },
+    codex::{CodexClient, CodexClientBuilder, CodexError, Completion, CompletionQuery},
     langserver::{py::PyServer, ts::TsServer, LangServer},
 };
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 
 use clap::Parser;
 
@@ -126,14 +124,14 @@ async fn main() {
         )))
     });
 
-    let codex = codex_types::codex::CodexClient {
-        client: reqwest::Client::new(),
-        token: args.token,
-        lang_server: lang_client,
-        endpoint: args.endpoint,
-        temperature: args.temp,
-        cache,
-    };
+    let mut codex = CodexClientBuilder::new(args.token, lang_client);
+    codex.endpoint(args.endpoint).temperature(args.temp);
+
+    if let Some(cache) = cache {
+        codex.cache(cache);
+    }
+
+    let codex = codex.build();
 
     let ctx = MainCtx {
         file_contents,
@@ -153,18 +151,13 @@ async fn main() {
             std::process::exit(1);
         }
     };
-    std::io::stdout().flush().unwrap();
 
     if good_ones.is_empty() {
         eprintln!("No completions type checked");
-        std::io::stderr().flush().unwrap();
         std::process::exit(1);
     }
 
-    println!("completed:\n");
-    for comp in &good_ones {
-        println!("{}", comp.code);
-    }
+    println!("Number of type-checking completions: {}", good_ones.len());
 
     // if the completed dir does not exist, create it
     let output_dir = std::path::Path::new(&args.output);
@@ -174,7 +167,10 @@ async fn main() {
 
     // write to the output dir
     for (i, comp) in good_ones.into_iter().enumerate() {
-        let output_path = format!("{}/{}.{}", args.output, i, args.lang);
+        let output_path = format!(
+            "{}/{}_score_{}_fallback_{}.{}",
+            args.output, i, args.lang, comp.score, comp.fallbacked
+        );
         tokio::fs::write(&output_path, comp.code).await.unwrap();
     }
 }
@@ -207,13 +203,15 @@ impl MainCtx {
 
         let resp = match self.codex.complete(query.clone()).await {
             Ok(r) => r,
-            Err(CodexError::RateLimit(r)) => {
-                eprintln!("Rate limited, but got {} completions before.", r.len());
+            Err(CodexError::RateLimit(r)) if !r.is_empty() => {
+                eprintln!(
+                    "Rate limited, but got {} canditate completions before.",
+                    r.len()
+                );
                 r
             }
             Err(e) => {
                 eprintln!("Fatal error: {}", e);
-                std::io::stderr().flush().unwrap();
                 std::process::exit(1);
             }
         };

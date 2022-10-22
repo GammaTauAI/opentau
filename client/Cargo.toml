@@ -21,6 +21,7 @@ bench = false
 async-trait = "0.1.57"
 base64 = "0.13.0"
 clap = { version = "3.2.22", features = ["derive"] }
+governor = "0.5.0"
 redis = "0.21.6"
 reqwest = "0.11.11"
 serde = { version = "1.0.144", features = ["derive"] }

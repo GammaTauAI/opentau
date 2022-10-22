@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::codex::{CodexClient, CompletionQuery};
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct CodeBlockTree {
     pub name: String,
@@ -97,3 +99,30 @@ impl From<CodeBlockTree> for NaiveCompletionLevels {
         NaiveCompletionLevels { levels }
     }
 }
+
+// impl NaiveCompletionLevels {
+// pub async fn tree_complete(mut self, codex: &CodexClient) -> Self {
+// // we start at the deepest level of the array, and we complete the code blocks
+// // at the level.
+
+// let num_levels = self.levels.len();
+// for level in (0..num_levels).rev() {
+// let mut nodes = self.levels[level].nodes;
+// for node in &mut nodes {
+// let printed = codex
+// .lang_server
+// .lock()
+// .await
+// .pretty_print(&node.code, "_hole_")
+// .await
+// .unwrap();
+// node.code = codex
+// .complete(CompletionQuery::new(printed, 1, 1, false))
+// .await;
+// }
+// self.levels[level].nodes = nodes;
+// }
+
+// self
+// }
+// }

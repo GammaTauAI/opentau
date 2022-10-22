@@ -25,7 +25,7 @@ const typeMapPrint = (
 //  - we traverse the unwoven AST, and for each identifier, we look up its type in the map and we replace it with the type
 //  - we then print the unwoven AST, after being transformed
 //
-export const weaveProgram = (
+export const weavePrograms = (
   original: ts.Program,
   originalPath: string, // the path of the original file
   nettle: ts.Program,

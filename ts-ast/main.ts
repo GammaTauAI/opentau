@@ -1,13 +1,10 @@
 import ts from "typescript";
-import os from "os";
-import path from "path";
 import * as net from "net";
 import { printSource } from "./printer";
 import { makeTree } from "./tree";
 import { stubSource } from "./stubPrinter";
 import { checkCompleted } from "./check";
-import { weaveProgram } from "./weave";
-import fs from "fs";
+import { weavePrograms } from "./weave";
 
 // the global printer object!
 export const codePrinter = ts.createPrinter({
@@ -57,8 +54,6 @@ const makeCompilerHost = (
   sourceFile: ts.SourceFile
 ): ts.CompilerHost => ({
   getSourceFile: (name, languageVersion) => {
-    console.log(`getSourceFile ${name}`);
-
     if (name === filename) {
       return sourceFile;
     } else {
@@ -71,7 +66,7 @@ const makeCompilerHost = (
   useCaseSensitiveFileNames: () => false,
   getCanonicalFileName: (filename) => filename,
   getCurrentDirectory: () => "",
-  getNewLine: () => "\n",
+  getNewLine: () => "\n", // NOTE: would this be \r\n on windows?
   getDirectories: () => [],
   fileExists: () => true,
   readFile: () => "",
@@ -187,7 +182,7 @@ const handleWeave = (decodedText: string, req: any): string => {
     ),
   });
 
-  const res = weaveProgram(
+  const res = weavePrograms(
     originalProgram,
     originalName,
     nettleProgram,

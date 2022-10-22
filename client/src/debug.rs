@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use codex_types::{
+    codex::CodexClientBuilder,
     langserver::{ts::TsServer, LangServer},
     tree::NaiveCompletionLevels,
 };
@@ -16,7 +17,6 @@ async fn main() {
     let input = std::fs::read_to_string(filename).expect("could not read file");
 
     // resolve path ../ts-ast, this is temporary of course!
-    // TODO: remove this crap
     let client_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap()
@@ -26,14 +26,7 @@ async fn main() {
         .to_string();
 
     let lang_server = Arc::new(Mutex::new(TsServer::make(&client_path).await.unwrap()));
-    let codex = codex_types::codex::CodexClient {
-        client: reqwest::Client::new(),
-        token,
-        lang_server,
-        temperature: 1.0,
-        endpoint: "https://api.openai.com/v1/edits".to_string(),
-        cache: None,
-    };
+    let codex = CodexClientBuilder::new(token, lang_server).build();
 
     // {
     // let printed = codex
