@@ -45,11 +45,11 @@ impl LangServer for PyServer {
         // }
         // println!("client ready to connect to socket!");
         // let socket_path = tmp_socket_file.to_str().unwrap().to_string();
-        // let socket = SocketAbstraction {
-        // socket_path,
-        // process,
-        // };
-        // Ok(Self { socket })
+        let socket = SocketAbstraction {
+        socket_path,
+        process,
+        };
+        Ok(Self { socket })
         todo!()
     }
 
