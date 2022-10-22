@@ -25,7 +25,13 @@ if sys.argv[2] == "weave":
         "cmd": sys.argv[2],
         "text": base64.b64encode(data).decode("utf-8"),
         "nettle": base64.b64encode(open(sys.argv[4], "rb").read()).decode("utf-8"),
-        "level": sys.argv[5] if len(sys.argv) > 5 else 0 # super hacky
+        "level": sys.argv[5] if len(sys.argv) > 5 else 0  # super hacky
+    }
+elif sys.argv[2] == "check":
+    msg = {
+        "cmd": sys.argv[2],
+        "text": base64.b64encode(data).decode("utf-8"),
+        "original": base64.b64encode(open(sys.argv[4], "rb").read()).decode("utf-8"),
     }
 else:
     msg = {
