@@ -80,7 +80,7 @@ mod rl {
 #[derive(Clone)]
 pub struct CodexClient {
     pub client: reqwest::Client,
-    // NOTE: mutex so that we make sure the socket is only used by one thread at a time
+    // the language server
     lang_server: ArcLangServer,
     // the codex URL endpoint
     pub endpoint: String,
@@ -253,12 +253,7 @@ impl CodexClient {
 
         if query.fallback {
             final_completions.push(Completion {
-                code: self
-                    .lang_server
-                    .lock()
-                    .await
-                    .pretty_print(&query.input, "any")
-                    .await?,
+                code: self.lang_server.pretty_print(&query.input, "any").await?,
                 score: 999999999,
                 fallbacked: true,
             });
@@ -324,8 +319,6 @@ impl CodexClient {
 
             println!("Got {} responses from codex", choices.len());
 
-            let mut filtered_completions = filtered_completions.lock().await;
-            let lang_client = lang_client.lock().await;
             for comp in choices.into_iter() {
                 let text = match comp {
                     EditRespChoice::Text { text } => text,
@@ -336,7 +329,12 @@ impl CodexClient {
                 };
 
                 // check first if it's duplicate in our filtered completions
-                if filtered_completions.iter().any(|(c, _)| c == &text) {
+                if filtered_completions
+                    .lock()
+                    .await
+                    .iter()
+                    .any(|(c, _)| c == &text)
+                {
                     continue;
                 }
 
@@ -348,7 +346,7 @@ impl CodexClient {
                         (false, 0) // if there is an error, we assume it is not complete
                     });
                 if is_complete {
-                    filtered_completions.push((text, score));
+                    filtered_completions.lock().await.push((text, score));
                 }
             }
 
@@ -356,9 +354,9 @@ impl CodexClient {
         })
     }
 
-    /// Gets a mutex guard to the language server from the codex client
-    pub async fn get_ls(&self) -> tokio::sync::MutexGuard<dyn LangServer + Send + Sync> {
-        self.lang_server.lock().await
+    /// Gets the language server object from the codex client
+    pub fn get_ls(&self) -> Arc<dyn LangServer + Send + Sync> {
+        self.lang_server.clone()
     }
 
     /// Gets a mutex guard to the cache from the codex client, if a cache is being used

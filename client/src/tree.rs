@@ -150,28 +150,18 @@ impl TreeCompletion for NaiveCompletionLevels {
                                     level_below.len()
                                 )
                             });
-                            code = {
-                                codex
-                                    .get_ls()
-                                    .await
-                                    // we take the min because at level 0 we have the root node
-                                    // and we want to weave at nettle_level 0
-                                    .weave(&code, &child.code, std::cmp::min(1, level))
-                                    .await
-                                    .unwrap()
-                            };
+                            code = codex
+                                .get_ls()
+                                // we take the min because at level 0 we have the root node
+                                // and we want to weave at nettle_level 0
+                                .weave(&code, &child.code, std::cmp::min(1, level))
+                                .await
+                                .unwrap();
                         }
                     }
                     // if we are at root, we just want to disassemble the tree, no comps
                     if level != 0 {
-                        let printed = {
-                            codex
-                                .get_ls()
-                                .await
-                                .pretty_print(&code, "_hole_")
-                                .await
-                                .unwrap()
-                        };
+                        let printed = codex.get_ls().pretty_print(&code, "_hole_").await.unwrap();
                         let q = CompletionQuery::new(printed, 1, 1, false);
                         let comp = retry_query_until_ok(&codex, q).await;
                         println!("level comp: \n{}", comp.code);

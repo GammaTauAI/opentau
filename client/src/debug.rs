@@ -5,7 +5,6 @@ use codex_types::{
     langserver::{ts::TsServer, LangServer},
     tree::{NaiveCompletionLevels, TreeCompletion},
 };
-use tokio::sync::Mutex;
 
 #[tokio::main]
 async fn main() {
@@ -25,7 +24,7 @@ async fn main() {
         .unwrap()
         .to_string();
 
-    let lang_server = Arc::new(Mutex::new(TsServer::make(&client_path).await.unwrap()));
+    let lang_server = Arc::new(TsServer::make(&client_path).await.unwrap());
     let codex = CodexClientBuilder::new(vec![token], lang_server).build();
 
     // {
@@ -47,7 +46,7 @@ async fn main() {
 
     // testing out "tree"
     {
-        let tree = codex.get_ls().await.to_tree(&input).await.unwrap();
+        let tree = codex.get_ls().to_tree(&input).await.unwrap();
         let mut naive: NaiveCompletionLevels = tree.into();
         println!("tree: {:#?}", naive);
         naive.tree_complete(codex).await;
