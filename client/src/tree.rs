@@ -3,7 +3,10 @@ use std::{cmp::Ordering, collections::HashMap, sync::Arc};
 use serde::{Deserialize, Serialize};
 use tokio::task::JoinHandle;
 
-use crate::codex::{CodexClient, Completion, CompletionQuery};
+use crate::{
+    codex::{CodexClient, Completion, CompletionQuery},
+    langserver::{ArcLangServer, LangServerError},
+};
 
 /// A codeblock tree, taken from the `tree` command of the language server
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -15,6 +18,14 @@ pub struct CodeBlockTree {
 
 #[async_trait::async_trait]
 pub trait TreeCompletion {
+    /// Returns a tree completion for the given codeblock tree
+    async fn prepare(
+        tree: CodeBlockTree,
+        langsever: ArcLangServer,
+    ) -> Result<Self, LangServerError>
+    where
+        Self: Sized;
+
     /// Completes the code block tree, mutating the tree in place.
     async fn tree_complete(&mut self, codex: CodexClient);
 }
@@ -23,7 +34,7 @@ pub trait TreeCompletion {
 // - Step 1: make the code block tree out of the original input code.
 // - Step 2: make a nested array of code blocks, where the outer array index is the
 //   level of the blocks at the array of that index. every element of the inner arrays is a tuple
-//   of (children_idxs: Vec<usize>, name: String, code: String).
+//   of (children_idxs: Vec<usize>, name: String, code: String, usages: String).
 // - Step 3: we start at the deepest level of the array, and we complete the code blocks
 //   at the level.
 // - Step 4: we then go to a level above, and for each node, substitute the stub of the code block
@@ -39,6 +50,7 @@ pub struct NaiveNode {
     pub children_idxs: Vec<usize>,
     pub name: String,
     pub code: String,
+    pub usages: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -51,8 +63,13 @@ pub struct NaiveCompletionLevels {
     pub levels: Vec<NaiveLevel>,
 }
 
-impl From<CodeBlockTree> for NaiveCompletionLevels {
-    fn from(tree: CodeBlockTree) -> Self {
+#[async_trait::async_trait]
+impl TreeCompletion for NaiveCompletionLevels {
+    /// Returns a tree completion for the given codeblock tree
+    async fn prepare(
+        tree: CodeBlockTree,
+        langsever: ArcLangServer,
+    ) -> Result<Self, LangServerError> {
         // dyanmic programming solution. took me a while to figure out how to do this.
 
         // here we have the levels of the tree
@@ -63,6 +80,7 @@ impl From<CodeBlockTree> for NaiveCompletionLevels {
             children_idxs: vec![],
             name: tree.name,
             code: tree.code,
+            usages: String::new(), // no usages for root..
         }];
         // here we store the children of the nodes, and the idx of the node that they belong to
         let mut p_children = vec![(0, tree.children)];
@@ -84,20 +102,18 @@ impl From<CodeBlockTree> for NaiveCompletionLevels {
 
                     // we patch the children idxs of the parent of the children
                     let level = levels.len() - 1;
-                    let children_idxs = &mut levels
-                        .get_mut(level)
-                        .unwrap()
-                        .nodes
-                        .get_mut(p_idx)
-                        .unwrap()
-                        .children_idxs;
-                    children_idxs.push(idx);
+                    let parent = levels.get_mut(level).unwrap().nodes.get_mut(p_idx).unwrap();
+                    parent.children_idxs.push(idx);
+
+                    // we get the usages of this node, from the parent
+                    let usages = langsever.usages(&parent.code, &child.code).await?;
 
                     // push unpatched node
                     nodes.push(NaiveNode {
                         children_idxs: vec![],
                         name: child.name,
                         code: child.code,
+                        usages,
                     });
                     // push children
                     new_children.push((idx, child.children));
@@ -106,12 +122,9 @@ impl From<CodeBlockTree> for NaiveCompletionLevels {
             // reassign children
             p_children = new_children;
         }
-        NaiveCompletionLevels { levels }
+        Ok(NaiveCompletionLevels { levels })
     }
-}
 
-#[async_trait::async_trait]
-impl TreeCompletion for NaiveCompletionLevels {
     /// Completes the code block tree, mutating the tree in place.
     async fn tree_complete(&mut self, codex: CodexClient) {
         async fn retry_query_until_ok(codex: &CodexClient, q: CompletionQuery) -> Completion {
@@ -164,8 +177,13 @@ impl TreeCompletion for NaiveCompletionLevels {
                         Ordering::Greater => {
                             let ls = codex.get_ls();
                             let stubbed = ls.stub(&code).await.unwrap();
-                            let printed = ls.pretty_print(&stubbed, "_hole_").await.unwrap();
-                            println!("printed: {}", printed);
+                            let mut printed = ls.pretty_print(&stubbed, "_hole_").await.unwrap();
+
+                            // we add usages to the prompt
+                            if !node.usages.is_empty() {
+                                printed = format!("{}\n{}", printed, node.usages);
+                            }
+
                             let q = CompletionQuery::new(printed, 1, 1, false);
                             let comp = retry_query_until_ok(&codex, q).await;
                             println!("level comp: \n{}", comp.code);

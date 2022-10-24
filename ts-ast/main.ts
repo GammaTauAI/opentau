@@ -5,6 +5,7 @@ import { makeTree } from "./tree";
 import { stubSource } from "./stubPrinter";
 import { checkCompleted } from "./check";
 import { weavePrograms } from "./weave";
+import { findUsages } from "./findUsages";
 
 // the global printer object!
 export const codePrinter = ts.createPrinter({
@@ -211,6 +212,36 @@ const handleWeave = (decodedText: string, req: any): string => {
   });
 };
 
+const handleUsages = (decodedText: string, req: any): string => {
+  const decodedInner = Buffer.from(req.innerBlock, "base64").toString("utf8");
+
+  // create the source files
+  const outerFile = ts.createSourceFile(
+    "outer.ts", // name does not matter until we save, which we don't from here
+    decodedText,
+    ts.ScriptTarget.Latest,
+    true, // for setParentNodes
+    ts.ScriptKind.TS
+  );
+
+  const innerFile = ts.createSourceFile(
+    "inner.ts", // name does not matter until we save, which we don't from here
+    decodedInner,
+    ts.ScriptTarget.Latest,
+    true, // for setParentNodes
+    ts.ScriptKind.TS
+  );
+
+  const res = findUsages(outerFile, innerFile);
+
+  const base64 = Buffer.from(res).toString("base64");
+
+  return JSON.stringify({
+    type: "usagesResponse",
+    text: base64,
+  });
+};
+
 var unixServer = net.createServer(function (client) {
   client.on("data", function (data) {
     // try to parse the data as a json object
@@ -254,6 +285,12 @@ var unixServer = net.createServer(function (client) {
         // req: {cmd: "weage", text: "original text", nettle: "the text to weave in", level: 0}
         case "weave": {
           client.write(handleWeave(decodedText, req));
+          break;
+        }
+        // finds usages of the given inner block in the outer block
+        // req: {cmd: "usages", text: "outer block", innerBlock: "inner block"}
+        case "usages": {
+          client.write(handleUsages(decodedText, req));
           break;
         }
         default: {

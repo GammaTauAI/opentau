@@ -33,6 +33,12 @@ elif sys.argv[2] == "check":
         "text": base64.b64encode(data).decode("utf-8"),
         "original": base64.b64encode(open(sys.argv[4], "rb").read()).decode("utf-8"),
     }
+elif sys.argv[2] == "usages":
+    msg = {
+        "cmd": sys.argv[2],
+        "text": base64.b64encode(data).decode("utf-8"),
+        "innerBlock": base64.b64encode(open(sys.argv[4], "rb").read()).decode("utf-8"),
+    }
 else:
     msg = {
         "cmd": sys.argv[2],

@@ -40,6 +40,32 @@ pub trait LangServer {
         level: usize,
     ) -> Result<String, LangServerError>;
 
+    /// Produces a code block of usages of the given code block.
+    ///
+    /// # Example
+    /// if you have the following `outer_block`:
+    /// ```ts
+    /// function hello(name) {
+    ///     return "hello " + name + "!";
+    /// }
+    /// console.log(hello("world"));
+    /// console.log(hello("Federico"));
+    /// ```
+    /// You should give as `inner_block` the following code:
+    /// ```ts
+    /// function hello(name) {
+    ///    return "hello " + name + "!";
+    /// }
+    /// ```
+    /// And you will be returned the following code:
+    /// ```ts
+    /// // Usages of hello are shown below:
+    /// console.log(hello("world"));
+    /// console.log(hello("Federico"));
+    /// ```
+    async fn usages(&self, outer_block: &str, inner_block: &str)
+        -> Result<String, LangServerError>;
+
     /// type checks the given code. returns true if it type checks, false otherwise.
     /// may return an error.
     async fn type_check(&self, code: &str) -> Result<bool, LangServerError>;
@@ -83,6 +109,17 @@ pub struct LSWeaveReq {
     pub text: String,
     pub nettle: String,
     pub level: usize,
+}
+
+/// Request to the language server, for the usages command.
+/// in the format of {cmd: "the-cmd", text: "the-outer-block",
+///                   innerBlcok: "the-inner-block"}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LSUsagesReq {
+    pub cmd: String,
+    pub text: String, // NOTE: this is outer_block
+    #[serde(rename = "innerBlock")]
+    pub inner_block: String,
 }
 
 #[derive(Debug, Clone)]
