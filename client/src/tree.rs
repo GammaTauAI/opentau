@@ -1,4 +1,7 @@
+use std::{collections::HashMap, sync::Arc};
+
 use serde::{Deserialize, Serialize};
+use tokio::task::JoinHandle;
 
 use crate::codex::{CodexClient, Completion, CompletionQuery};
 
@@ -12,7 +15,7 @@ pub struct CodeBlockTree {
 #[async_trait::async_trait]
 pub trait TreeCompletion {
     /// Completes the code block tree, mutating the tree in place.
-    async fn tree_complete(&mut self, codex: &CodexClient);
+    async fn tree_complete(&mut self, codex: CodexClient);
 }
 
 // NOTE: tree compeltion algo (naive and inefficient way, with only one single completion per code-block):
@@ -109,7 +112,7 @@ impl From<CodeBlockTree> for NaiveCompletionLevels {
 #[async_trait::async_trait]
 impl TreeCompletion for NaiveCompletionLevels {
     /// Completes the code block tree, mutating the tree in place.
-    async fn tree_complete(&mut self, codex: &CodexClient) {
+    async fn tree_complete(&mut self, codex: CodexClient) {
         async fn retry_query_until_ok(codex: &CodexClient, q: CompletionQuery) -> Completion {
             let mut res = codex.complete(q.clone()).await;
             while res.is_err() {
@@ -122,51 +125,69 @@ impl TreeCompletion for NaiveCompletionLevels {
         // at the level.
 
         let num_levels = self.levels.len();
-        let mut prev_level = None;
+        let mut prev_level: Arc<Option<Vec<NaiveNode>>> = Arc::new(None);
         for level in (0..num_levels).rev() {
             println!("level: {}", level);
             let nodes = &mut self.levels.get_mut(level).unwrap().nodes;
-            for node in nodes.iter_mut() {
-                // if we are not at a leaf, we need to patch the node with the children
-                let mut code: String = node.code.to_string();
-                if !node.children_idxs.is_empty() {
-                    let level_below: &Vec<NaiveNode> = prev_level.as_ref().unwrap();
-                    for child_idx in node.children_idxs.iter() {
-                        let child = level_below.get(*child_idx).unwrap_or_else(|| {
-                            panic!(
-                                "child_idx {} should be in level_below, which has len {}",
-                                child_idx,
-                                level_below.len()
-                            )
-                        });
-                        code = codex
-                            .get_ls()
-                            .await
-                            // we take the min because at level 0 we have the root node
-                            // and we want to weave at nettle_level 0
-                            .weave(&code, &child.code, std::cmp::min(1, level))
-                            .await
-                            .unwrap();
+            let mut handles: Vec<JoinHandle<(String, String)>> = vec![]; // node's (name, code)
+            let mut lookup: HashMap<String, usize> = HashMap::new(); // node's name -> idx
+            for (i, node) in nodes.iter().enumerate() {
+                let node = node.clone();
+                let prev_level = prev_level.clone();
+                let codex = codex.clone();
+                lookup.insert(node.name.clone(), i);
+                // we concurrently complete the code blocks at the level.
+                handles.push(tokio::task::spawn(async move {
+                    let mut code: String = node.code.to_string();
+                    // if we are not at a leaf, we need to patch the node with the children
+                    if !node.children_idxs.is_empty() {
+                        let level_below: &Vec<NaiveNode> = prev_level.as_ref().as_ref().unwrap();
+                        for child_idx in node.children_idxs.iter() {
+                            let child = level_below.get(*child_idx).unwrap_or_else(|| {
+                                panic!(
+                                    "child_idx {} should be in level_below, which has len {}",
+                                    child_idx,
+                                    level_below.len()
+                                )
+                            });
+                            code = {
+                                codex
+                                    .get_ls()
+                                    .await
+                                    // we take the min because at level 0 we have the root node
+                                    // and we want to weave at nettle_level 0
+                                    .weave(&code, &child.code, std::cmp::min(1, level))
+                                    .await
+                                    .unwrap()
+                            };
+                        }
                     }
-                }
-                if level != 0 {
-                    let printed = codex
-                        .get_ls()
-                        .await
-                        .pretty_print(&code, "_hole_")
-                        .await
-                        .unwrap();
-                    let q = CompletionQuery::new(printed, 1, 1, false);
-                    let comp = retry_query_until_ok(codex, q).await;
-                    println!("level comp: \n{}", comp.code);
-                    node.code = comp.code;
-                } else {
                     // if we are at root, we just want to disassemble the tree, no comps
-                    node.code = code;
-                }
+                    if level != 0 {
+                        let printed = {
+                            codex
+                                .get_ls()
+                                .await
+                                .pretty_print(&code, "_hole_")
+                                .await
+                                .unwrap()
+                        };
+                        let q = CompletionQuery::new(printed, 1, 1, false);
+                        let comp = retry_query_until_ok(&codex, q).await;
+                        println!("level comp: \n{}", comp.code);
+                        (node.name, comp.code)
+                    } else {
+                        (node.name, code)
+                    }
+                }));
+            }
+            for handle in handles {
+                let (name, code) = handle.await.unwrap();
+                let idx = lookup.get(&name).unwrap();
+                nodes.get_mut(*idx).unwrap().code = code;
             }
             println!("setting prev_level");
-            prev_level = Some(nodes.clone());
+            prev_level = Arc::new(Some(nodes.clone()));
         }
     }
 }

@@ -50,7 +50,7 @@ async fn main() {
         let tree = codex.get_ls().await.to_tree(&input).await.unwrap();
         let mut naive: NaiveCompletionLevels = tree.into();
         println!("tree: {:#?}", naive);
-        naive.tree_complete(&codex).await;
+        naive.tree_complete(codex).await;
         println!("root comp: {}", naive.levels[0].nodes[0].code);
     }
 

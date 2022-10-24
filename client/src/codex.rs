@@ -75,6 +75,9 @@ mod rl {
     }
 }
 
+/// Represents a client to the codex API. Safe to clone as most of the fields are
+/// wrapped in an Arc.
+#[derive(Clone)]
 pub struct CodexClient {
     pub client: reqwest::Client,
     // NOTE: mutex so that we make sure the socket is only used by one thread at a time

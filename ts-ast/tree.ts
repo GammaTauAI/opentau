@@ -2,12 +2,22 @@ import ts from "typescript";
 import { codePrinter } from "./main";
 
 type CodeBlockTree = {
-  name: string;
+  name: string; // NOTE: this is symgen'd
   code: string;
   children: CodeBlockTree[];
 };
 
 export const makeTree = (sourceFile: ts.SourceFile): CodeBlockTree => {
+  const usedRandomNumbers = new Set();
+  const symgen = (prefix: string) => {
+    let n = 0;
+    while (usedRandomNumbers.has(n)) {
+      n = Math.floor(Math.random() * 1000000);
+    }
+    usedRandomNumbers.add(n);
+    return prefix + "$" + n;
+  };
+
   // TODO: add these
   // - classes
   // - methods
@@ -23,7 +33,7 @@ export const makeTree = (sourceFile: ts.SourceFile): CodeBlockTree => {
       const func = child as ts.FunctionDeclaration;
       // idk why, but sometimes a func doesn't have a name, but it's not necessarily an anonymous function
       if (func.name) {
-        const name = func.name.escapedText.toString();
+        const name = symgen(func.name.escapedText.toString());
         let thisNode = { name, code, children: [] };
 
         func.body?.statements.forEach((child) => traverse(child, thisNode));
@@ -53,7 +63,7 @@ export const makeTree = (sourceFile: ts.SourceFile): CodeBlockTree => {
           sourceFile
         );
         const nameId = varDec.name as ts.Identifier;
-        const name = nameId.escapedText.toString();
+        const name = symgen(nameId.escapedText.toString());
         let thisNode = { name, code, children: [] };
 
         if (func.body.statements) {
