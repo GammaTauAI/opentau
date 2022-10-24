@@ -43,7 +43,6 @@ export const checkCompleted = (
       const tsType = completedChecker.getTypeFromTypeNode(ty);
       // we have to rule out literals, because they are not "real" types and are prone to errors
       if (tsType.isLiteral()) {
-        console.log("literal");
         isCompleted = false;
         return ty;
       }

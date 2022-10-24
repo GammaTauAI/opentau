@@ -178,7 +178,7 @@ pub struct Completion {
     pub fallbacked: bool, // is this completion from fallback?
 }
 
-const INSTRUCTIONS: &str = "Substitute the token _hole_ with the correct type.";
+const INSTRUCTIONS: &str = "Substitute the identifier _hole_ with the correct type.";
 
 impl CodexClient {
     /// Completes the given input code using the codex API. The given input code has to be pretty

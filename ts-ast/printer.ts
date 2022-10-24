@@ -17,8 +17,6 @@ export const typeTraversal = (
     });
   }
 
-  // console.log(ts.SyntaxKind[child.kind]);
-
   if (child.kind === ts.SyntaxKind.MethodDeclaration) {
     const methodDeclaration = child as ts.MethodDeclaration;
     methodDeclaration.type = func(methodDeclaration.type);

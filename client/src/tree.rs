@@ -128,7 +128,7 @@ impl TreeCompletion for NaiveCompletionLevels {
             let nodes = &mut self.levels.get_mut(level).unwrap().nodes;
             for node in nodes.iter_mut() {
                 // if we are not at a leaf, we need to patch the node with the children
-                let mut code = node.code.clone();
+                let mut code: String = node.code.to_string();
                 if !node.children_idxs.is_empty() {
                     let level_below: &Vec<NaiveNode> = prev_level.as_ref().unwrap();
                     for child_idx in node.children_idxs.iter() {
@@ -142,22 +142,28 @@ impl TreeCompletion for NaiveCompletionLevels {
                         code = codex
                             .get_ls()
                             .await
-                            .weave(&code, &child.code, 1)
+                            // we take the min because at level 0 we have the root node
+                            // and we want to weave at nettle_level 0
+                            .weave(&code, &child.code, std::cmp::min(1, level))
                             .await
                             .unwrap();
                     }
                 }
-                let printed = codex
-                    .get_ls()
-                    .await
-                    .pretty_print(&code, "_hole_")
-                    .await
-                    .unwrap();
-                println!("printed: \n{}", printed);
-                let q = CompletionQuery::new(printed, 1, 1, false);
-                let comp = retry_query_until_ok(codex, q).await;
-                println!("level comp: \n{}", comp.code);
-                node.code = comp.code;
+                if level != 0 {
+                    let printed = codex
+                        .get_ls()
+                        .await
+                        .pretty_print(&code, "_hole_")
+                        .await
+                        .unwrap();
+                    let q = CompletionQuery::new(printed, 1, 1, false);
+                    let comp = retry_query_until_ok(codex, q).await;
+                    println!("level comp: \n{}", comp.code);
+                    node.code = comp.code;
+                } else {
+                    // if we are at root, we just want to disassemble the tree, no comps
+                    node.code = code;
+                }
             }
             println!("setting prev_level");
             prev_level = Some(nodes.clone());

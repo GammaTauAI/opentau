@@ -38,12 +38,12 @@ struct Args {
     #[clap(short, long, value_parser, default_value = "3")]
     n: usize,
 
-    /// The number of retries to make to codex
+    /// The number of request to send to Codex
     #[clap(short, long, value_parser, default_value = "1")]
     retries: usize,
 
-    /// Whether to fallback to any or not
-    #[clap(short, long, value_parser, default_value_t = false)]
+    /// Whether to fallback to "any" or not
+    #[clap(long, value_parser, default_value_t = false)]
     fallback: bool,
 
     /// The url of the codex endpoint
@@ -170,9 +170,10 @@ async fn main() {
 
     // write to the output dir
     for (i, comp) in good_ones.into_iter().enumerate() {
+        let fallback = if comp.fallbacked { "_fallback" } else { "" };
         let output_path = format!(
-            "{}/{}_score_{}_fallback_{}.{}",
-            args.output, i, args.lang, comp.score, comp.fallbacked
+            "{}/{}_score_{}{}.{}",
+            args.output, i, comp.score, fallback, args.lang
         );
         tokio::fs::write(&output_path, comp.code).await.unwrap();
     }
