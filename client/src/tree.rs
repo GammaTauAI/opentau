@@ -1,13 +1,14 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{cmp::Ordering, collections::HashMap, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 use tokio::task::JoinHandle;
 
 use crate::codex::{CodexClient, Completion, CompletionQuery};
 
+/// A codeblock tree, taken from the `tree` command of the language server
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct CodeBlockTree {
-    pub name: String,
+    pub name: String, // NOTE: this is an generated name, not the original name
     pub code: String,
     pub children: Vec<CodeBlockTree>,
 }
@@ -159,15 +160,21 @@ impl TreeCompletion for NaiveCompletionLevels {
                                 .unwrap();
                         }
                     }
-                    // if we are at root, we just want to disassemble the tree, no comps
-                    if level != 0 {
-                        let printed = codex.get_ls().pretty_print(&code, "_hole_").await.unwrap();
-                        let q = CompletionQuery::new(printed, 1, 1, false);
-                        let comp = retry_query_until_ok(&codex, q).await;
-                        println!("level comp: \n{}", comp.code);
-                        (node.name, comp.code)
-                    } else {
-                        (node.name, code)
+                    match level.cmp(&0) {
+                        Ordering::Greater => {
+                            let ls = codex.get_ls();
+                            let stubbed = ls.stub(&code).await.unwrap();
+                            let printed = ls.pretty_print(&stubbed, "_hole_").await.unwrap();
+                            println!("printed: {}", printed);
+                            let q = CompletionQuery::new(printed, 1, 1, false);
+                            let comp = retry_query_until_ok(&codex, q).await;
+                            println!("level comp: \n{}", comp.code);
+                            let rewoven = ls.weave(&code, &comp.code, 0).await.unwrap();
+                            (node.name, rewoven)
+                        }
+                        // if we are at root, we just want to disassemble the tree, no comps
+                        Ordering::Equal => (node.name, code),
+                        Ordering::Less => unreachable!(),
                     }
                 }));
             }
@@ -181,3 +188,18 @@ impl TreeCompletion for NaiveCompletionLevels {
         }
     }
 }
+
+// NOTE: tree compeltion algo v2 (more expensive but more accurate):
+// - Step 1: make the code block tree out of the original input code.
+// - Step 2: make a nested array of code blocks, where the outer array index is the
+//   level of the blocks at the array of that index. every element of the inner arrays is a tuple
+//   of (children_idxs: Vec<usize>, name: String, code: Vec<String>).
+// - Step 3: we start at the deepest level of the array, and we complete the code blocks
+//   at the level.
+// - Step 4: we then go to a level above, and for each node, substitute the stub of the code block
+//   blocks bellow of the children for each code in the vec. we then complete the code blocks at the level.
+// - Step 5: we repeat step 4 until we reach the root level. we have a completed code block tree.
+// - Step 6: we disassemble the code block tree and substitute the completed types into the original
+//   code. we type check the code, and if it passes, we return the code. if it fails, we go to step 3.
+//
+// Why the nested array instead of just using DFS? This representation allows to complete concurrently
