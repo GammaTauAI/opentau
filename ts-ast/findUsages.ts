@@ -36,6 +36,11 @@ export const findUsages = (
             stmt.parent &&
             (ts.isCallLikeExpression(stmt.parent) ||
               ts.isBinaryExpression(stmt.parent) ||
+              ts.isPropertyAccessExpression(stmt.parent) ||
+              ts.isElementAccessExpression(stmt.parent) ||
+              ts.isPrefixUnaryExpression(stmt.parent) ||
+              ts.isPostfixUnaryExpression(stmt.parent) ||
+              ts.isNewExpression(stmt.parent) ||
               ts.isVariableDeclaration(stmt.parent))
           ) {
             stmt = stmt.parent;

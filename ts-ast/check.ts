@@ -96,6 +96,16 @@ export const checkCompleted = (
                 checkType(arg);
               });
             }
+          } else if (objType.objectFlags & ts.ObjectFlags.Interface) {
+            // get symbol, if it's Function, we need to give a bad score, as it is a catch all
+            // interface for functions
+            const symbol = objType.getSymbol();
+            if (symbol) {
+              const name = symbol.getName();
+              if (name === "Function") {
+                score += 5;
+              }
+            }
           } else if (objType.objectFlags & ts.ObjectFlags.Anonymous) {
             // console.log("got anonymous");
             // anonymous objects are usually functions, so we need to check return and argument types
