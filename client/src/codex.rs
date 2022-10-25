@@ -33,7 +33,7 @@ mod rl {
     pub(super) struct RateLimitedTokenPool {
         tokens: Arc<Vec<String>>,
         token_idx: Arc<Mutex<usize>>,
-        rl: RL,
+        rl: Option<RL>, // we may not have a rate limiting policy
     }
 
     impl RateLimitedTokenPool {
@@ -47,15 +47,21 @@ mod rl {
         /// Waits for a token to become available, then returns it.
         pub async fn wait_token(&self) -> String {
             let token = self.next_token().await;
-            self.rl.until_key_ready(&token).await;
+            match &self.rl {
+                Some(rl) => {
+                    rl.until_key_ready(&token).await;
+                }
+                None => (),
+            }
             token
         }
 
         /// Creates a new limiter pool given the list of tokens.
+        /// If rl is false, then no rate limiting is applied.
         ///
         /// # Panics
         /// Panics if the list of tokens is empty.
-        pub fn new(tokens: Vec<String>) -> Self {
+        pub fn new(tokens: Vec<String>, rl: bool) -> Self {
             assert!(!tokens.is_empty());
             let reset = 120 / 10; // 2 minutes / 10 cells = 12 seconds
             let rate_limiter = Arc::new(RateLimiter::keyed(
@@ -67,7 +73,7 @@ mod rl {
             rate_limiter.check_key(&tokens[0]).unwrap();
 
             Self {
-                rl: rate_limiter,
+                rl: if rl { Some(rate_limiter) } else { None },
                 tokens: Arc::new(tokens),
                 token_idx: Arc::new(Mutex::new(0)),
             }
@@ -100,6 +106,7 @@ pub struct CodexClientBuilder {
     pub endpoint: Option<String>,
     pub temperature: Option<f64>,
     pub cache: Option<Arc<Mutex<Cache>>>,
+    pub rate_limit: bool,
 }
 
 impl CodexClientBuilder {
@@ -111,6 +118,7 @@ impl CodexClientBuilder {
             endpoint: None,
             temperature: None,
             cache: None,
+            rate_limit: true,
         }
     }
 
@@ -134,6 +142,11 @@ impl CodexClientBuilder {
         self
     }
 
+    pub fn rate_limit(&mut self, rate_limit: bool) -> &mut Self {
+        self.rate_limit = rate_limit;
+        self
+    }
+
     /// Builds the client and consumes the builder
     pub fn build(&mut self) -> CodexClient {
         let client = self.client.take().unwrap_or_else(reqwest::Client::new);
@@ -143,7 +156,8 @@ impl CodexClientBuilder {
             .unwrap_or_else(|| "https://api.openai.com/v1/edits".to_string());
         let temperature = self.temperature.take().unwrap_or(1.0);
         let cache = self.cache.take();
-        let rate_limiter = rl::RateLimitedTokenPool::new(self.tokens.drain(..).collect());
+        let rate_limiter =
+            rl::RateLimitedTokenPool::new(self.tokens.drain(..).collect(), self.rate_limit);
         CodexClient {
             client,
             lang_server: self.lang_server.clone(),

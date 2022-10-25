@@ -66,6 +66,12 @@ struct Args {
     /// The Redis URL for the cache
     #[clap(short, long, value_parser)]
     cache: Option<String>,
+
+    /// Whether or not to prevent rate limits. You may want to set this to false if You
+    /// are using your own model. By default, we try to prevent rate limits, by using
+    /// this flag you can disable this behavior.
+    #[clap(long, value_parser, default_value_t = false)]
+    disable_rate_limit: bool,
 }
 
 impl Args {
@@ -128,7 +134,10 @@ async fn main() {
         .collect::<Vec<_>>();
 
     let mut codex = CodexClientBuilder::new(tokens, lang_client);
-    codex.endpoint(args.endpoint).temperature(args.temp);
+    codex
+        .endpoint(args.endpoint)
+        .temperature(args.temp)
+        .rate_limit(!args.disable_rate_limit);
 
     if let Some(cache) = cache {
         codex.cache(cache);
