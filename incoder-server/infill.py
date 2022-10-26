@@ -72,7 +72,7 @@ def generate(input: str, max_to_generate: int=128, temperature: float=0.2):
         detok_hypo_str = detok_hypo_str[len(BOS):]
     return detok_hypo_str
 
-def _infill(parts: List[str], max_to_generate: int, temperature: float, max_retries: int, extra_sentinel: bool=True):
+def _infill(parts: List[str], max_to_generate: int, temperature: float, max_retries: int=1, extra_sentinel: bool=True):
     """
     Generate infills to complete a partial document, e.g.
     [A C E] -> [A B C D E], where B and D are infills that have been generated.
@@ -145,11 +145,10 @@ def _infill(parts: List[str], max_to_generate: int, temperature: float, max_retr
         'retries_attempted': retries_attempted, # number of retries used (if max_retries > 1)
     } 
 
-def infill(input: str, max_to_generate: int = MAX_TO_GENERATE, temperature: float = 1.0, max_retries: int=1) -> str:
-    res = _infill(
+def infill(input: str, n: int = 1, temperature: float = 1.0) -> List[str]:
+    res = [_infill(
         parts=input_to_infill_format(input),
-        max_to_generate=max_to_generate,
+        max_to_generate=MAX_TO_GENERATE,
         temperature=temperature,
-        max_retries=max_retries
-    )
-    return compose_response(res)
+    ) for _ in range(n)]
+    return [compose_response(s) for s in res]
