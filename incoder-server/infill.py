@@ -146,9 +146,9 @@ def _infill(parts: List[str], max_to_generate: int, temperature: float, max_retr
     } 
 
 def infill(input: str, n: int = 1, temperature: float = 1.0) -> List[str]:
-    res = [_infill(
+    res = list(set([_infill(
         parts=input_to_infill_format(input),
         max_to_generate=MAX_TO_GENERATE,
         temperature=temperature,
-    ) for _ in range(n)]
+    ) for _ in range(n)]))
     return [compose_response(s) for s in res]
