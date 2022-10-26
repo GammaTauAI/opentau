@@ -6,6 +6,11 @@
 ## Requirements
 
 - `rust`
+- Incoder model requirements:
+  - `torch`
+  - `tokenizers>=0.12`
+  - `transformers`
+
 - TypeScript inference requirements:
   - `ts-node`
   - `tsc`
