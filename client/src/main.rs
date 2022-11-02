@@ -5,7 +5,7 @@ use codex_types::{
     codex::{CodexClient, CodexClientBuilder, CodexError, Completion, CompletionQuery},
     langserver::{py::PyServer, ts::TsServer, LangServer},
 };
-use tokio::sync::Mutex;
+use tokio::{sync::Mutex, task::JoinHandle};
 
 use clap::Parser;
 
@@ -229,10 +229,22 @@ impl MainCtx {
 
         let lang_client = self.codex.get_ls();
         let mut comps: Vec<Completion> = vec![];
+        let mut handles: Vec<JoinHandle<Option<Completion>>> = vec![];
         for (i, comp) in resp.into_iter().enumerate() {
             println!("comp {}:\n {}", i, comp.code);
-            let type_checks = lang_client.type_check(&comp.code).await.unwrap();
-            if type_checks {
+            let lang_client = lang_client.clone();
+            handles.push(tokio::task::spawn(async move {
+                let type_checks = lang_client.type_check(&comp.code).await.unwrap();
+                if type_checks {
+                    Some(comp)
+                } else {
+                    None
+                }
+            }));
+        }
+
+        for handle in handles {
+            if let Some(comp) = handle.await.unwrap() {
                 comps.push(comp);
             }
             if comps.len() >= self.stop_at {

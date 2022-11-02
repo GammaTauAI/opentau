@@ -40,8 +40,7 @@ export const findUsages = (
               ts.isElementAccessExpression(stmt.parent) ||
               ts.isPrefixUnaryExpression(stmt.parent) ||
               ts.isPostfixUnaryExpression(stmt.parent) ||
-              ts.isNewExpression(stmt.parent) ||
-              ts.isVariableDeclaration(stmt.parent))
+              ts.isNewExpression(stmt.parent))
           ) {
             stmt = stmt.parent;
           }
