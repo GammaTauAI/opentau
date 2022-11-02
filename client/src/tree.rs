@@ -5,6 +5,7 @@ use tokio::task::JoinHandle;
 
 use crate::{
     codex::{CodexClient, Completion, CompletionQuery},
+    debug,
     langserver::{ArcLangServer, LangServerError},
 };
 
@@ -129,8 +130,12 @@ impl TreeCompletion for NaiveCompletionLevels {
     async fn tree_complete(&mut self, codex: CodexClient) {
         async fn retry_query_until_ok(codex: &CodexClient, q: CompletionQuery) -> Completion {
             let mut res = codex.complete(q.clone()).await;
+            let mut retries = 0;
             while res.is_err() {
-                res = codex.complete(q.clone()).await;
+                retries += 1;
+                let mut q = q.clone();
+                q.num_comps = 1 + retries;
+                res = codex.complete(q).await;
             }
             res.unwrap().remove(0)
         }
@@ -141,7 +146,7 @@ impl TreeCompletion for NaiveCompletionLevels {
         let num_levels = self.levels.len();
         let mut prev_level: Arc<Option<Vec<NaiveNode>>> = Arc::new(None);
         for level in (0..num_levels).rev() {
-            println!("level: {}", level);
+            debug!("level: {}", level);
             let nodes = &mut self.levels.get_mut(level).unwrap().nodes;
             let mut handles: Vec<JoinHandle<(String, String)>> = vec![]; // node's (name, code)
             let mut lookup: HashMap<String, usize> = HashMap::new(); // node's name -> idx
@@ -185,8 +190,9 @@ impl TreeCompletion for NaiveCompletionLevels {
                             }
 
                             let q = CompletionQuery::new(printed, 1, 1, false);
+                            debug!("query: {}", q.input);
                             let comp = retry_query_until_ok(&codex, q).await;
-                            println!("level comp: \n{}", comp.code);
+                            debug!("level comp: \n{}", comp.code);
                             let rewoven = ls.weave(&code, &comp.code, 0).await.unwrap();
                             (node.name, rewoven)
                         }
@@ -201,7 +207,7 @@ impl TreeCompletion for NaiveCompletionLevels {
                 let idx = lookup.get(&name).unwrap();
                 nodes.get_mut(*idx).unwrap().code = code;
             }
-            println!("setting prev_level");
+            debug!("setting prev_level");
             prev_level = Arc::new(Some(nodes.clone()));
         }
     }
