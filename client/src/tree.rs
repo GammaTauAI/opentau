@@ -12,7 +12,7 @@ use crate::{
 /// A codeblock tree, taken from the `tree` command of the language server
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct CodeBlockTree {
-    pub name: String, // NOTE: this is an generated name, not the original name
+    pub name: String, // NOTE: this is a generated name, not the original name
     pub code: String,
     pub children: Vec<CodeBlockTree>,
 }
@@ -225,5 +225,3 @@ impl TreeCompletion for NaiveCompletionLevels {
 // - Step 5: we repeat step 4 until we reach the root level. we have a completed code block tree.
 // - Step 6: we disassemble the code block tree and substitute the completed types into the original
 //   code. we type check the code, and if it passes, we return the code. if it fails, we go to step 3.
-//
-// Why the nested array instead of just using DFS? This representation allows to complete concurrently
