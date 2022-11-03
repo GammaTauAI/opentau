@@ -6,10 +6,6 @@ geometry: "left=3cm,right=3cm,top=3cm,bottom=3cm"
 output: pdf_document
 ---
 
-#### Initial Progress Goals
-
-_"By now, we will have implemented type-inference for TypeScript using a simple approach that does not involve prompt engineering. This approach will allow us to correctly type-check small files such as LeetCode JavaScript solutions."_
-
 ## Report
 
 Our high-level approach to type-inference via Codex is the following:
@@ -18,11 +14,13 @@ Our high-level approach to type-inference via Codex is the following:
 - 2. We define an instruction $\mathcal{I}$, which as of now is constant,  
      $\mathcal{I} = \text{"Substitute the identifier \_hole\_ with the correct type."}$
 - 3. We query the `davinci-edit` model using the compiled prompt $\mathcal{P}$ and instruction $\mathcal{I}$, and we receive back a set of completions $\mathcal{C}$, $0 \leq |\mathcal{C}| \leq n$, where $n$ is a pre-defined maximum number of completions.
-- 4. We use a cheap and admissible heuristic $h : (c \in \mathcal{C}) \rightarrow (\text{Boolean},\ \mathcal{N})$ that determines if a given $\mathcal{c}$ is _correct_ (a _correct_ completion however may still not type-check) and the quality of the type annotations $q$, where a lower $q$ is better, and $q = 0$ is perfect.
+- 4. We use a cheap and admissible heuristic $h : c \rightarrow (\text{Boolean},\ \mathcal{N})$ that determines if a given completion $c$ is _correct_ (a _correct_ completion however may still not type-check) and the quality of the type annotations $q$, where lower the $q$ the better.
 - 5. We apply $h$ to all elements in $\mathcal{C}$ and we add the completions that produced $\text{True}$ to an ordered set $\mathcal{Q}$, where $\mathcal{Q}$ is sorted by $q$.
 - 6. Using the command: `tsc --allowJs --checkJs --noEmit --target es2022 <file.ts>` we run a full type-check on every completion in $\mathcal{Q}$, terminating as soon as the command returns code `0`, meaning that the completion is type-correct.
 
-#### Implementation
+### Implementation of the Pipeline
+
+#### Compiler
 
 Firstly, in the development of this pipeline, we have implemented $\mathcal{K}$ by interfacing with the TypeScript compiler API for inserting type-holes into identifiers that lack type annotations.
 
@@ -44,17 +42,21 @@ function hello(name: string): _hole_ {
 }
 ```
 
-Secondly, we have implemented our heuristic $h$, which is part of the compiler $K$. The heuristic traverses the program's abstract syntax tree, identifies different types, which will be scored. Some types terminate the heuristic early, and denote that the program cannot possibly be correct. The scores are summed to compose $q$ using the following table:
+\newpage
 
-| Type | Score | Correct |
-| ------------- |------------- | ------- |
-| _missing_ (example: `let x = 1`) | +0 | False, terminate |
-| _literal type_ (example: `let x: 3 = 1`) | +0 | False, terminate |
-| `_hole_` | +0 | False, terminate |
-| `unknown` | +10 | True, continue |
-| `any` | +5 | True, continue |
-| `undefined` | +2 | True, continue |
-| `Function` (interface type) | +5 | True, continue |
+#### Heuristic
+
+Secondly, we have implemented our heuristic $h$, which is part of the compiler $\mathcal{K}$. The heuristic traverses the program's abstract syntax tree, identifies different types, which will be scored. Some types terminate the heuristic early, and denote that the program cannot possibly be correct. The scores are summed to compose $q$ using the following table:
+
+| Type                                     | Score | Correct          |
+| ---------------------------------------- | ----- | ---------------- |
+| _missing_ (example: `let x = 1`)         | +0    | False, terminate |
+| _literal type_ (example: `let x: 3 = 1`) | +0    | False, terminate |
+| `_hole_`                                 | +0    | False, terminate |
+| `unknown`                                | +10   | True, continue   |
+| `any`                                    | +5    | True, continue   |
+| `undefined`                              | +2    | True, continue   |
+| `Function` (interface type)              | +5    | True, continue   |
 
 For example, with the completion:
 
@@ -80,6 +82,9 @@ $h$ will terminate early and output $(\text{False}, 0)$, as the presence of one 
 
 Additionally, $h$ checks if Codex didn't add anything other than just types (such as additonal code blocks and comments) to the original prompt. If that condition isn't met, $(\text{False}, 0)$ will be produced.
 \newpage
+
+#### Client
+
 Finally, we have implemented a client in Rust that manages the pipeline and queries the Codex API. The client will communicate with the compiler $K$, which is written in TypeScript, and will send the outputs to Codex. The client can be downloaded from [https://github.com/GammaTauAI/opentau](https://github.com/GammaTauAI/opentau), and can be utilized by using the following terminal interface:
 
 ```
@@ -114,11 +119,21 @@ Type-correct solutions will be written to the specified directory.
 
 _The appendix at the end of the paper provides a set of prompts and completions that our client produced._
 
+\newpage
+
 ## Reflect
+
+#### Initial Progress Goals
+
+_"By now, we will have implemented type-inference for TypeScript using a simple approach that does not involve prompt engineering. This approach will allow us to correctly type-check small files such as LeetCode JavaScript solutions."_
+
+#### Current Achievements
+
 We achieved every goal that was listed in our initial project proposal for the first milestone. In addition, we added a heuristic $h$ to catch several erroneous cases and to save compute time.
-1. $h$ is evaluated *before* we opt to type-check the solution, which saves compute time due to `tsc` being significantly more expensive to compute.
-2. $h$ verifies that the given completion does not contain any additional content that is not a type-annotation.
-3. $h$ protects against completions that type-check but contain permissive types such as `Any`, `undefined`, and `unknown` (in some cases).
+
+- $h$ is evaluated _before_ we opt to type-check the solution, which saves compute time due to `tsc` being significantly more expensive to compute.
+- $h$ verifies that the given completion does not contain any additional content that is not a type-annotation.
+- $h$ protects against completions that type-check but contain permissive types such as `any`, `undefined`, and `unknown` (in some cases).
 
 Additionally, we were surprised that this simple solution allowed us to type-infer medium-sized files (check appendix), as we expected to be able to only type-infer small files.
 
@@ -133,7 +148,8 @@ While our current type-inference pipeline using Codex's "davinci-edit" model has
 We have considered several alterations/new methods for solving this problem.
 
 - API key rotation: Apply for several Codex API keys to use to "rotate" to have access to a maximum of $N$ \* 20 completions per run, where $N$ is the number of API keys.
-- Facebook's "InCoder" model: Use Facebook's open-source code-infill model which is easily available on Huggingface.
+- Facebook's "InCoder" model: Use Facebook's open-source code-infill model which is open-source and available on Huggingface.
+  - We would also be able to fine-tune the model to our specific type-inference purpose.
 
 #### Plan Moving Forward
 
@@ -142,6 +158,7 @@ While the API key rotation strategy may give us access to significantly more com
 Additionally, we plan to apply our type-inference strategy (or a variation for our strategy) to other gradually-typed languages, such as Python.
 
 \newpage
+
 # Appendix
 
 Our system was able to type-infer this program:
