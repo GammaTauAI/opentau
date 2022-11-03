@@ -11,7 +11,7 @@ output: pdf_document
 Our high-level approach to type-inference via Codex is the following:
 
 - 1. We insert the identifier `_hole_` in the place of missing types in our input JavaScript program. To do this, we use a compiler $\mathcal{K} : \text{File} \rightarrow \mathcal{P}$.
-- 2. We define an instruction $\mathcal{I}$, which as of now is constant,  
+- 2. We define an instruction $\mathcal{I}$, which is the constant string,  
      $\mathcal{I} = \text{"Substitute the identifier \_hole\_ with the correct type."}$
 - 3. We query the `davinci-edit` model using the compiled prompt $\mathcal{P}$ and instruction $\mathcal{I}$, and we receive back a set of completions $\mathcal{C}$, $0 \leq |\mathcal{C}| \leq n$, where $n$ is a pre-defined maximum number of completions.
 - 4. We use a cheap and admissible heuristic $h : c \rightarrow (\text{Boolean},\ \mathcal{N})$ that determines if a given completion $c$ is _correct_ (a _correct_ completion however may still not type-check) and the quality of the type annotations $q$, where lower the $q$ the better.
@@ -141,7 +141,7 @@ Additionally, we were surprised that this simple solution allowed us to type-inf
 
 #### Problem
 
-While our current type-inference pipeline using Codex's "davinci-edit" model has shown good results, the strategy comes with a few limitations. First, the number of API calls to Codex has a limit of 20 per API key. For a single query, Codex allows for any number of completions to be requested. However, the completions are sorted in decreasing order of confidence; from testing, we have observed that the completions given beyond the 10th index are generally ususable.
+While our current type-inference pipeline using Codex's `davinci-edit` model has shown good results, the strategy comes with a few limitations. First, the number of API calls to Codex has a limit of 20 per API key. For a single query, Codex allows for any number of completions to be requested. However, the completions are sorted in decreasing order of confidence; from testing, we have observed that the completions given beyond the 10th index are generally ususable.
 
 #### Possible Solutions
 

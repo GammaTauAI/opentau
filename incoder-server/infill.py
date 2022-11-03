@@ -1,10 +1,15 @@
 """adapted from dpfried/incoder/example_usage.py"""
 
-from typing import List
-from utils import input_to_infill_format, compose_response
-
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
+from utils import (
+    input_to_infill_format,
+    compose_response,
+    remove_dupl
+)
+
+from typing import List, Set, Tuple
 
 # set BIG_MODEL to use the 6.7B parameter model
 BIG_MODEL = False
@@ -13,7 +18,7 @@ BIG_MODEL = False
 CUDA = torch.cuda.is_available()
 
 # infill max length allowed
-MAX_TO_GENERATE = 1
+MAX_TO_GENERATE = 5
 
 if BIG_MODEL:
     model_name = "facebook/incoder-6B"
@@ -145,10 +150,10 @@ def _infill(parts: List[str], max_to_generate: int, temperature: float, max_retr
         'retries_attempted': retries_attempted, # number of retries used (if max_retries > 1)
     } 
 
-def infill(input: str, n: int = 1, temperature: float = 1.0) -> List[str]:
-    res = list(set([_infill(
+def infill(input: str, n: int = 1, temperature: float = 1.0) -> Set[str]:
+    res = [compose_response(_infill(
         parts=input_to_infill_format(input),
         max_to_generate=MAX_TO_GENERATE,
         temperature=temperature,
-    ) for _ in range(n)]))
-    return [compose_response(s) for s in res]
+    )) for _ in range(n)]
+    return remove_dupl(res)
