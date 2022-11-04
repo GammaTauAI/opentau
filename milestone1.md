@@ -157,6 +157,15 @@ While the API key rotation strategy may give us access to significantly more com
 
 Additionally, we plan to apply our type-inference strategy (or a variation for our strategy) to other gradually-typed languages, such as Python.
 
+#### Timeline
+
+  - **11/22:**
+    - InCoder query implementation
+    - Tree-completion strategy implementation
+  - **12/13:**
+    - Python type-inference
+    - Benchmarking for accuracy across a 100-file dataset
+
 \newpage
 
 # Appendix
