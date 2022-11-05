@@ -10,19 +10,22 @@ output: pdf_document
 
 Our high-level approach to type-inference via Codex is the following:
 
-- 1. We insert the identifier `_hole_` in the place of missing types in our input JavaScript program. To do this, we use a compiler $\mathcal{K} : \text{File} \rightarrow \mathcal{P}$.
-- 2. We define an instruction $\mathcal{I}$, which is the constant string,  
+- 1. We insert the identifier `_hole_` in place of missing types in our input JavaScript program. To do this, we use a compiler $\mathcal{K} : \text{File} \rightarrow \mathcal{P}$.
+- 2. We define an instruction $\mathcal{I}$, which is the constant string:  
      $\mathcal{I} = \text{"Substitute the identifier \_hole\_ with the correct type."}$
-- 3. We query the `davinci-edit` model using the compiled prompt $\mathcal{P}$ and instruction $\mathcal{I}$, and we receive back a set of completions $\mathcal{C}$, $0 \leq |\mathcal{C}| \leq n$, where $n$ is a pre-defined maximum number of completions.
-- 4. We use a cheap and admissible heuristic $h : c \rightarrow (\text{Boolean},\ \mathcal{N})$ that determines if a given completion $c$ is _correct_ (a _correct_ completion however may still not type-check) and the quality of the type annotations $q$, where lower the $q$ the better.
-- 5. We apply $h$ to all elements in $\mathcal{C}$ and we add the completions that produced $\text{True}$ to an ordered set $\mathcal{Q}$, where $\mathcal{Q}$ is sorted by $q$.
-- 6. Using the command: `tsc --allowJs --checkJs --noEmit --target es2022 <file.ts>` we run a full type-check on every completion in $\mathcal{Q}$, terminating as soon as the command returns code `0`, meaning that the completion is type-correct.
+- 3. We query the `davinci-edit` model using the compiled prompt $\mathcal{P}$ and instruction $\mathcal{I}$. We receive back a set of completions $\mathcal{C}$, $0 \leq |\mathcal{C}| \leq n$, where $n$ is a pre-defined maximum number of completions.
+- 4. We use a cheap and admissible heuristic $h : c \rightarrow (\text{Boolean},\ \mathcal{N})$ that determines if a given completion $c$ is _correct_ (a _correct_ completion however, may still not type-check) and the quality of the type annotations $q$, where the lower the $q$ the better.
+- 5. We apply $h$ to all elements in $\mathcal{C}$ and we add the completions that produced $\text{True}$ to an ordered set $\mathcal{Q}$ sorted by $q$.
+- 6. Using the command: `tsc --allowJs --checkJs --noEmit --target es2022 <file.ts>` we run a full type-check on every completion in $\mathcal{Q}$, terminating as soon as the command returns code `0`, meaning that the completion is type-correct. By terminating early on the sorted set, we guarantee that our solution is optimal with respect to $\mathcal{Q}$. We let $c^*$ be the optimal type-correct solution.
+- 7. We produce $c^*$ if it exists, otherwise we produce an error.
+
+\newpage
 
 ### Implementation of the Pipeline
 
 #### Compiler
 
-Firstly, in the development of this pipeline, we have implemented $\mathcal{K}$ by interfacing with the TypeScript compiler API for inserting type-holes into identifiers that lack type annotations.
+Firstly, in the development of this pipeline we have implemented $\mathcal{K}$ by interfacing with the TypeScript compiler API for inserting type-holes into identifiers that lack type annotations.
 
 For instance, given this input:
 
@@ -42,11 +45,9 @@ function hello(name: string): _hole_ {
 }
 ```
 
-\newpage
-
 #### Heuristic
 
-Secondly, we have implemented our heuristic $h$, which is part of the compiler $\mathcal{K}$. The heuristic traverses the program's abstract syntax tree, identifies different types, which will be scored. Some types terminate the heuristic early, and denote that the program cannot possibly be correct. The scores are summed to compose $q$ using the following table:
+Secondly, we have implemented our heuristic $h$, which is part of the compiler $\mathcal{K}$. The heuristic traverses the program's abstract syntax tree identifying different types, which will be scored. Some types terminate the heuristic early and denote that the program cannot possibly be correct. The scores are summed to compose $q$ using the following table:
 
 | Type                                     | Score | Correct          |
 | ---------------------------------------- | ----- | ---------------- |
@@ -85,7 +86,7 @@ Additionally, $h$ checks if Codex didn't add anything other than just types (suc
 
 #### Client
 
-Finally, we have implemented a client in Rust that manages the pipeline and queries the Codex API. The client will communicate with the compiler $K$, which is written in TypeScript, and will send the outputs to Codex. The client can be downloaded from [https://github.com/GammaTauAI/opentau](https://github.com/GammaTauAI/opentau), and can be utilized by using the following terminal interface:
+Finally, we have implemented a client in Rust that manages the pipeline and queries the Codex API. The client will communicate with the compiler $K$, which is written in TypeScript and will send the outputs to Codex. The client can be downloaded from [https://github.com/GammaTauAI/opentau](https://github.com/GammaTauAI/opentau) and can be utilized by using the following terminal interface:
 
 ```
 USAGE:
@@ -93,10 +94,11 @@ USAGE:
 
 OPTIONS:
     -c, --cache <CACHE>          The Redis URL for the cache
-        --disable-rate-limit     Whether or not to prevent rate limits. You may want to set this to
-                                 false if You are using your own model. By default, we try to
-                                 prevent rate limits, by using this flag you can disable this
-                                 behavior
+        --disable-rate-limit     Whether or not to prevent rate limits.
+                                 You may want to set this to false if you are using
+                                 your own model. By default, we try to
+                                 prevent rate limits, by using this
+                                 flag you can disable this behavior
     -e, --endpoint <ENDPOINT>    The url of the codex endpoint [default:
                                  https://api.openai.com/v1/edits]
     -f, --file <FILE>            The target file path
@@ -106,8 +108,8 @@ OPTIONS:
     -n, --n <N>                  The number of completions to return [default: 3]
     -o, --output <OUTPUT>        Output file directory path
     -r, --retries <RETRIES>      The number of request to send to Codex [default: 1]
-    -s, --strategy <STRATEGY>    Completion strategy. Either: {"simple": simple completion, "tree":
-                                 tree completion} [default: simple]
+    -s, --strategy <STRATEGY>    Completion strategy. Either: {"simple": simple completion,
+                                "tree": tree completion} [default: simple]
         --stop-at <STOP_AT>      The maximum number of type-checkable completions to return
                                  [default: 1]
     -t, --tokens <TOKENS>        Codex tokens to use, separated by commas
@@ -135,36 +137,35 @@ We achieved every goal that was listed in our initial project proposal for the f
 - $h$ verifies that the given completion does not contain any additional content that is not a type-annotation.
 - $h$ protects against completions that type-check but contain permissive types such as `any`, `undefined`, and `unknown` (in some cases).
 
-Additionally, we were surprised that this simple solution allowed us to type-infer medium-sized files (check appendix), as we expected to be able to only type-infer small files.
+Additionally, we were surprised that this simple solution allowed us to type-infer medium-sized files (see appendix) as we expected to be able to only type-infer small files.
 
 ## Replan
 
 #### Problem
 
-While our current type-inference pipeline using Codex's `davinci-edit` model has shown good results, the strategy comes with a few limitations. First, the number of API calls to Codex has a limit of 20 per API key. For a single query, Codex allows for any number of completions to be requested. However, the completions are sorted in decreasing order of confidence; from testing, we have observed that the completions given beyond the 10th index are generally ususable.
+While our current type-inference pipeline using Codex's `davinci-edit` model has shown good results, the strategy comes with a few limitations. First, the number of API calls to Codex has a limit of 20 per API key per minute. For a single query, Codex allows for any number of completions to be requested. However, the completions are sorted in decreasing order of confidence; from testing we have observed that the completions given beyond the 10th index are generally incorrect.
 
 #### Possible Solutions
 
 We have considered several alterations/new methods for solving this problem.
 
-- API key rotation: Apply for several Codex API keys to use to "rotate" to have access to a maximum of $N$ \* 20 completions per run, where $N$ is the number of API keys.
-- Facebook's "InCoder" model: Use Facebook's open-source code-infill model which is open-source and available on Huggingface.
-  - We would also be able to fine-tune the model to our specific type-inference purpose.
+- API key rotation: Apply to the Codex Beta with multiple accounts in order to "rotate" API keys. We would have access to a maximum of $N$ \* 20 completions per minute, where $N$ is the number of API keys. We have applied with different accounts but none of them have been accepted yet.
+- Facebook's "InCoder" model: Use Facebook's open-source code-infill model which is open-source and available on Huggingface. We would also be able to fine-tune this model to our specific type-inference purpose.
 
 #### Plan Moving Forward
 
-While the API key rotation strategy may give us access to significantly more completions, it is hard to secure new API keys from Codex in a timely manner. Therefore, we are writing an interface for querying the InCoder model. The InCoder strategy would theoretically allow us to make an infinite number of queries for an infinite number of completions returned per query. The only limitation for the InCoder strategy is the cumulative time to evaluate the model.
+While the API key rotation strategy may give us access to significantly more completions, it is hard to secure new API keys from Codex in a timely manner. Therefore, we are writing an interface for querying the InCoder model. The InCoder strategy would theoretically allow us to make an unbounded number of queries for an unbounded number of completions returned per query. The only limitation for the InCoder strategy is the cumulative time to evaluate the model.
 
-Additionally, we plan to apply our type-inference strategy (or a variation for our strategy) to other gradually-typed languages, such as Python.
+Additionally, we plan to apply our type-inference strategy (or a variation for our strategy) to other gradually-typed languages, such as Python with Pyright.
 
 #### Timeline
 
-  - **11/22:**
-    - InCoder query implementation
-    - Tree-completion strategy implementation
-  - **12/13:**
-    - Python type-inference
-    - Benchmarking for accuracy across a 100-file dataset
+- **11/22:**
+  - InCoder query implementation
+  - Prompt-engineering strategy implementation
+- **12/13:**
+  - Python type-inference
+  - Benchmarking for accuracy across a 100-file dataset
 
 \newpage
 
@@ -328,7 +329,7 @@ class UnionFind {
 }
 ```
 
-Note that TypeScript's inference type annotated non let-bound arrow functions, while our system didn't. We believe that these functions should be left untyped, as the signature of the function that calls them should be typed, and TypeScript's type-inference should enforce those rules. Our system will not battle with TypeScript's type-inference, it will try to work alongside it. Additionally, our system will not perform any type-migrations, i.e. it will not change already defined types. This is to further enforce the coalition between our system and TypeScript's.
+Note that TypeScript's built-in inference type-annotated unbound arrow functions, while our system didn't. We believe that these functions should be left untyped, as the signature of the function that calls them should be typed and TypeScript's type-inference should enforce those rules. Our system will not battle with TypeScript's type-inference, it will try to work alongside it. Additionally, our system will not perform any type-migrations; it will not change already defined types. This is to further enforce the coalition between our system and TypeScript's.
 
 Additionally, our system was able to fill out generic types.
 
@@ -385,7 +386,7 @@ var sumFourDivisors: (nums: number[]) => number = function (nums) {
 };
 ```
 
-while TypeScript's inference couldn't give us a type-checkable answer:
+while TypeScript's inference couldn't give us a type-correct answer:
 
 ```
 7:28 - error TS2365: Operator '+=' cannot be applied to types 'number' and 'unknown'.
