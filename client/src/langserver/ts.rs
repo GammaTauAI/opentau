@@ -163,7 +163,9 @@ impl LangServer for TsServer {
     async fn type_check(&self, code: &str) -> Result<bool, LangServerError> {
         // get a temp file (overwrite if exists)
         let tmp_dir = std::env::temp_dir();
-        let tmp_file = tmp_dir.join(format!("codex-{}.ts", std::process::id()));
+        // get a random number
+        let rand = rand::random::<u64>();
+        let tmp_file = tmp_dir.join(format!("codex-{}-{}.ts", std::process::id(), rand));
         tokio::fs::write(&tmp_file, code).await?;
 
         // run: tsc --allowJs --checkJs --noEmit filename.ts
