@@ -1,15 +1,7 @@
-"""
-NOT FINISHED
-
-"""
-
 import ast
-import sys
 from astor import to_source
 
 
-assert len(sys.argv) == 2
-_FILE = sys.argv[1]
 _FAKE_ARG_ANNOTATION = '_hole_'
 _FAKE_RETURN_ANNOTATION = ' _hole_'
 
@@ -35,12 +27,9 @@ class Visitor(ast.NodeTransformer):
         ast.NodeVisitor.generic_visit(self, new_func)
         return new_func
 
-
-# FIXME: return print
-def print_source(source_file: ast.AST) -> None:
+def print_source(source_file: ast.AST) -> str:
     node_visitor = Visitor()
     for c in ast.walk(source_file):
         if isinstance(c, ast.FunctionDef):
-            transformed = node_visitor.visit(c)
-            print(to_source(transformed))
-
+            c = node_visitor.visit(c)
+    return to_source(source_file)

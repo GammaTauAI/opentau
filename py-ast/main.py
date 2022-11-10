@@ -11,6 +11,8 @@ from threading import Thread
 from functools import partial
 
 from printer import print_source
+from check import check_completed
+from stub_printer import stub_source
 
 from typing import Any
 
@@ -39,6 +41,7 @@ s = sched.scheduler(time.time, time.sleep)
 def run_func(sc):
     is_pid_running(rust_pid)
     sc.enter(3, 1, run_func, (sc,))
+
 s.enter(3, 1, run_func, (s,))
 s.run()
 
@@ -74,18 +77,40 @@ def recvall(s: socket.socket) -> bytes:
             break
     return data
 
-def handle_print(decoded: str, req: Any, source_file: ast.AST) -> str:
-    req.type_name = _FAKETYPE_
-    res = print_source(source_file)
+def gen_source_file(decoded_text) -> ast.AST:
+    return ast.parse(decoded_text)
 
-def handle_tree() -> str:
-    NotImplemented()
-def handle_stub() -> str:
-    NotImplemented()
-def handle_check() -> str:
-    NotImplemented()
+def handle_print(decoded_text: str) -> str:
+    source_file = gen_source_file(decoded_text)
+    res = print_source(source_file)
+    # FIXME: figure out output format
+    return json.dumps({"type": "printResponse", "text": res})
+
+# TODO: implement
+def handle_tree(decoded_text: str) -> str:
+    source_file = gen_source_file(decoded_text)
+    res = ...
+    # FIXME: figure out output format
+    return json.dumps({"type": "treeResponse", "text": res})
+
+def handle_stub(decoded_text: str) -> str:
+    source_file = gen_source_file(decoded_text)
+    res = stub_source(source_file)
+    # FIXME: figure out output format
+    return json.dumps({"type": "stubResponse", "text": res})
+
+def handle_check(decoded_text: str, req: Any) -> str:
+    decoded_original = str(base64.b64decode(req.original))
+    original_file = gen_source_file(decoded_original)
+    completed_file = gen_source_file(decoded_text)
+    # FIXME: fix type return
+    text, score = check_completed(original=original_file, completed=completed_file) # type: ignore
+    return json.dumps({"type": "checkResponse", "text": text, "score": score})
+
+# TODO: implement
 def handle_weave() -> str:
     NotImplemented()
+    return ''
 
 # handles a single client
 def on_client(c: socket.socket) -> None:
@@ -94,19 +119,21 @@ def on_client(c: socket.socket) -> None:
             data = recvall(c)
             req = json.loads(data)
             decoded_text = str(base64.b64decode(req.text))
-            source_file = ast.parse(decoded_text)
             if req.cmd == 'print':
-                res = print_source(source_file)
-                c.send(handle_print(decoded_text, req, source_file))
-
+                res = handle_print(decoded_text)
+                c.send(bytes(res, 'utf-8'))
             elif req.cmd == 'tree':
-                NotImplemented()
+                res = handle_tree(decoded_text)
+                c.send(bytes(res, 'utf-8'))
             elif req.cmd == 'stub':
-                NotImplemented()
+                res = handle_stub(decoded_text)
+                c.send(bytes(res, 'utf-8'))
             elif req.cmd == 'check':
-                NotImplemented()
+                res = handle_check(decoded_text, req)
+                c.send(bytes(res, 'utf-8'))
             elif req.cmd == 'weave':
-                NotImplemented()
+                res = handle_weave()
+                c.send(bytes(res, 'utf-8'))
             else:
                 c.send(json.dumps({
                     'type': 'error',

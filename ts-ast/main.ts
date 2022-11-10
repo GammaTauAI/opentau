@@ -72,15 +72,18 @@ const makeCompilerHost = (
   readFile: () => "",
 });
 
-const handlePrint = (decodedText: string, req: any): string => {
-  // create the source file
-  const sourceFile = ts.createSourceFile(
+const genSourceFile = (decodedText: string): ts.SourceFile => {
+  return ts.createSourceFile(
     "bleh.ts", // name does not matter until we save, which we don't from here
     decodedText,
     ts.ScriptTarget.Latest,
     false, // for setParentNodes
     ts.ScriptKind.TS
   );
+};
+
+const handlePrint = (decodedText: string, req: any): string => {
+  const sourceFile = genSourceFile(decodedText);
   req.typeName = req.typeName || "_hole_"; // default to _hole_
   const res = printSource(sourceFile, req.typeName);
   const base64 = Buffer.from(res).toString("base64");
@@ -91,14 +94,7 @@ const handlePrint = (decodedText: string, req: any): string => {
 };
 
 const handleTree = (decodedText: string): string => {
-  // create the source file
-  const sourceFile = ts.createSourceFile(
-    "bleh.ts", // name does not matter until we save, which we don't from here
-    decodedText,
-    ts.ScriptTarget.Latest,
-    true, // for setParentNodes
-    ts.ScriptKind.TS
-  );
+  const sourceFile = genSourceFile(decodedText);
   const res = makeTree(sourceFile);
   const base64 = Buffer.from(JSON.stringify(res)).toString("base64");
   return JSON.stringify({
@@ -108,14 +104,7 @@ const handleTree = (decodedText: string): string => {
 };
 
 const handleStub = (decodedText: string): string => {
-  // create the source file
-  const sourceFile = ts.createSourceFile(
-    "bleh.ts", // name does not matter until we save, which we don't from here
-    decodedText,
-    ts.ScriptTarget.Latest,
-    true, // for setParentNodes
-    ts.ScriptKind.TS
-  );
+  const sourceFile = genSourceFile(decodedText);
   const res = stubSource(sourceFile);
   const base64 = Buffer.from(res).toString("base64");
   return JSON.stringify({
@@ -126,22 +115,8 @@ const handleStub = (decodedText: string): string => {
 
 const handleCheck = (decodedText: string, req: any): string => {
   const decodedOriginal = Buffer.from(req.original, "base64").toString("utf8");
-  // create the source file
-  const originalFile = ts.createSourceFile(
-    "bleh.ts", // name does not matter until we save, which we don't from here
-    decodedOriginal,
-    ts.ScriptTarget.Latest,
-    false, // for setParentNodes
-    ts.ScriptKind.TS
-  );
-
-  const completedFile = ts.createSourceFile(
-    "bleh.ts", // name does not matter until we save, which we don't from here
-    decodedText,
-    ts.ScriptTarget.Latest,
-    false, // for setParentNodes
-    ts.ScriptKind.TS
-  );
+  const originalFile = genSourceFile(decodedOriginal);
+  const completedFile = genSourceFile(decodedText);
 
   const res = checkCompleted(originalFile, completedFile);
 

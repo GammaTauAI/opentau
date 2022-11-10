@@ -1,10 +1,14 @@
 use std::process::Stdio;
 
 use async_trait::async_trait;
+use tokio::io::AsyncBufReadExt;
 
 use crate::tree::CodeBlockTree;
 
-use super::{abstraction::SocketAbstraction, LangServer, LangServerError};
+use super::{
+    abstraction::SocketAbstraction, LSCheckReq, LSPrintReq, LSReq, LSWeaveReq, LangServer,
+    LangServerError,
+};
 
 #[derive(Debug)]
 pub struct PyServer {
@@ -21,9 +25,9 @@ impl LangServer for PyServer {
 
         let mut process = match tokio::process::Command::new("python")
             .args([
-                  server_path,
-                  tmp_socket_file,
-                  pid.to_string().as_str(),
+                server_path,
+                tmp_socket_file.to_str().unwrap(),
+                pid.to_string().as_str(),
             ])
             .stdout(Stdio::piped())
             // stderr is open by default, we want to see the output
@@ -82,7 +86,7 @@ impl LangServer for PyServer {
         Ok(serde_json::from_slice(&tree).unwrap())
     }
 
-    async fn stub(&self, _code: &str) -> Result<String, LangServerError> {
+    async fn stub(&self, code: &str) -> Result<String, LangServerError> {
         let req = LSReq {
             cmd: "stub".to_string(),
             text: base64::encode(code),
@@ -97,8 +101,8 @@ impl LangServer for PyServer {
 
     async fn check_complete(
         &self,
-        _original: &str,
-        _completed: &str,
+        original: &str,
+        completed: &str,
     ) -> Result<(bool, i64), LangServerError> {
         // encode original and completed into json: {original: "", completed: ""}
         let req = LSCheckReq {
@@ -111,7 +115,7 @@ impl LangServer for PyServer {
         Ok((
             resp["text"].as_bool().unwrap(),
             resp["score"].as_i64().unwrap(),
-        ));
+        ))
     }
 
     async fn weave(
