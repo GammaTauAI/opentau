@@ -17,7 +17,11 @@ export const stubSource = (sourceFile: ts.SourceFile): string => {
         child.parent?.kind === ts.SyntaxKind.VariableDeclaration
       ) {
         let func = child as ts.FunctionExpression;
-        func.body = ts.createBlock([]); // TODO: does codex think that it needs to fill in here?
+        let varDec = child.parent as ts.VariableDeclaration;
+        // only stub if the vardecl has a type annotation
+        if (varDec.type) {
+          func.body = ts.createBlock([]); // TODO: does codex think that it needs to fill in here?
+        }
       }
       // method decls have at least 2 levels
     } else if (level > 1) {

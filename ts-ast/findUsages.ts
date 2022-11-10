@@ -26,11 +26,19 @@ export const findUsages = (
   // find all usages of the identifier in the outer block, and append them to the usagesStmts
   // skipping the first one (which is the declaration)
   const usageFinder = (node: ts.Node): void => {
-    var foundFirst = false;
+    // checks if the parent of this id is some sort of declaration
+    const isDecl = (id: ts.Identifier): boolean => {
+      return (
+        ts.isVariableDeclaration(id.parent) ||
+        ts.isFunctionDeclaration(id.parent) ||
+        ts.isMethodDeclaration(id.parent) ||
+        ts.isClassDeclaration(id.parent)
+      );
+    };
+
     const inner = (node: ts.Node): void => {
       if (ts.isIdentifier(node) && node.text === ident?.text) {
-        // TODO: this kinda breaks, do alpha-renaming instead
-        if (foundFirst) {
+        if (!isDecl(node)) {
           // go up the tree until we find a statement
           var stmt = node.parent;
           while (
@@ -49,7 +57,7 @@ export const findUsages = (
 
           usagesStmts.push(ts.createExpressionStatement(stmt as ts.Expression));
         } else {
-          foundFirst = true;
+          // we don't want to add the declaration to the usages
           return;
         }
       }

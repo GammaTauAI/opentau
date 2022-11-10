@@ -325,19 +325,21 @@ impl TreeCompletion for CompletionLevels {
 
     /// Completes the code block tree, mutating the tree in place.
     async fn tree_complete(&mut self, codex: CodexClient) {
-        async fn retry_query_until_ok(codex: &CodexClient, q: CompletionQuery) -> Vec<Completion> {
+        async fn retry_query_until_ok(
+            codex: &CodexClient,
+            q: CompletionQuery,
+        ) -> Option<Vec<Completion>> {
             let mut res = codex.complete(q.clone()).await;
             let mut retries = 0;
             while res.is_err() {
                 if retries > 5 {
-                    eprintln!("Failed to complete query: {}", q.input);
-                    std::process::exit(1);
+                    return None;
                 }
                 retries += 1;
                 let q = q.clone();
                 res = codex.complete(q).await;
             }
-            res.unwrap()
+            Some(res.unwrap())
         }
 
         // we start at the deepest level of the array, and we complete the code blocks
@@ -412,11 +414,21 @@ impl TreeCompletion for CompletionLevels {
 
                                 debug!("query: {}", q.input);
                                 let comps = retry_query_until_ok(&codex, q).await;
-                                for comp in comps {
-                                    debug!("level comp: \n{}", comp.code);
-                                    let rewoven = ls.weave(prompt, &comp.code, 0).await.unwrap();
-                                    println!("type-woven completion: \n{}", rewoven);
-                                    new_comps.insert(rewoven);
+                                match comps {
+                                    Some(comps) => {
+                                        for comp in comps {
+                                            debug!("level comp: \n{}", comp.code);
+                                            let rewoven =
+                                                ls.weave(prompt, &comp.code, 0).await.unwrap();
+                                            println!("type-woven completion: \n{}", rewoven);
+                                            new_comps.insert(rewoven);
+                                        }
+                                    }
+                                    None => {
+                                        println!(
+                                            "Failed to get completions for query, skipping prompt.",
+                                        );
+                                    }
                                 }
                             }
                             (node.name, new_comps.into_iter().collect())
