@@ -352,6 +352,7 @@ impl TreeCompletion for CompletionLevels {
                 let prev_level = prev_level.clone();
                 let num_comps = self.num_comps;
                 let retries = self.retries;
+                let fallback = self.fallback;
                 let codex = codex.clone();
                 lookup.insert(node.name.clone(), i);
                 // we concurrently complete the code blocks at the level.
@@ -405,13 +406,14 @@ impl TreeCompletion for CompletionLevels {
                                     printed = format!("{}\n{}", printed, node.usages);
                                 }
 
-                                let q = CompletionQuery::new(printed, num_comps, retries, false);
+                                let q = CompletionQuery::new(printed, num_comps, retries, fallback);
 
                                 debug!("query: {}", q.input);
                                 let comps = retry_query_until_ok(&codex, q).await;
                                 for comp in comps {
                                     debug!("level comp: \n{}", comp.code);
                                     let rewoven = ls.weave(prompt, &comp.code, 0).await.unwrap();
+                                    println!("type-woven completion: \n{}", rewoven);
                                     new_comps.insert(rewoven);
                                 }
                             }

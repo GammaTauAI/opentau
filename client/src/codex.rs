@@ -188,7 +188,7 @@ impl CompletionQuery {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Completion {
     pub code: String,
     pub score: i64,

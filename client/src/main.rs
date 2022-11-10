@@ -4,6 +4,7 @@ use codex_types::{
     cache::Cache,
     codex::{CodexClient, CodexClientBuilder, CodexError, Completion, CompletionQuery},
     langserver::{py::PyServer, ts::TsServer, LangServer},
+    tree::{CompletionLevels, TreeCompletion},
 };
 use tokio::{sync::Mutex, task::JoinHandle};
 
@@ -157,7 +158,7 @@ async fn main() {
     // the typechecked and completed code(s). here if we get errors we exit with 1
     let good_ones: Vec<Completion> = match args.strategy.as_str() {
         "simple" => ctx.simple_strategy().await,
-        "tree" => todo!("tree completion"),
+        "tree" => ctx.tree_strategy().await,
         _ => {
             eprintln!("Unknown strategy, {}", args.strategy);
             std::process::exit(1);
@@ -198,45 +199,17 @@ struct MainCtx {
 }
 
 impl MainCtx {
-    /// Runs the simple completion strategy, which just runs the completion on the given file
-    /// without any transformation, other than adding "_hole_" to each unknwon type
-    async fn simple_strategy(self) -> Vec<Completion> {
-        let printed = self
-            .codex
-            .get_ls()
-            .pretty_print(&self.file_contents, "_hole_")
-            .await
-            .unwrap();
-
-        println!("pretty:\n{}", printed);
-
-        let query = CompletionQuery::new(printed, self.num_comps, self.retries, self.fallback);
-
-        let resp = match self.codex.complete(query.clone()).await {
-            Ok(r) => r,
-            Err(CodexError::RateLimit(r)) if !r.is_empty() => {
-                eprintln!(
-                    "Rate limited, but got {} canditate completions before.",
-                    r.len()
-                );
-                r
-            }
-            Err(e) => {
-                eprintln!("Fatal error: {}", e);
-                std::process::exit(1);
-            }
-        };
-
-        let lang_client = self.codex.get_ls();
+    /// Returns the subset of completions that type check from the given set of completions
+    async fn type_check_candidates(&self, candidates: Vec<Completion>) -> Vec<Completion> {
         let mut comps: Vec<Completion> = vec![];
         let mut handles: Vec<JoinHandle<Option<Completion>>> = vec![];
-        for (i, comp) in resp.into_iter().enumerate() {
-            println!("comp {}:\n {}", i, comp.code);
-            let lang_client = lang_client.clone();
+        for (i, candidate) in candidates.into_iter().enumerate() {
+            println!("candidate {}:\n{}", i, candidate.code);
+            let lang_client = self.codex.get_ls();
             handles.push(tokio::task::spawn(async move {
-                let type_checks = lang_client.type_check(&comp.code).await.unwrap();
+                let type_checks = lang_client.type_check(&candidate.code).await.unwrap();
                 if type_checks {
-                    Some(comp)
+                    Some(candidate)
                 } else {
                     None
                 }
@@ -251,6 +224,80 @@ impl MainCtx {
                 break;
             }
         }
+
+        comps
+    }
+    /// Runs the tree completion strategy. Documentation on the strategy is in the `tree.rs` file.
+    async fn tree_strategy(&self) -> Vec<Completion> {
+        let tree = self
+            .codex
+            .get_ls()
+            .to_tree(&self.file_contents)
+            .await
+            .unwrap();
+
+        let mut levels: CompletionLevels = CompletionLevels::prepare(tree, self.codex.get_ls())
+            .await
+            .unwrap();
+        levels.num_comps = self.num_comps;
+        levels.retries = self.retries;
+        levels.fallback = self.fallback;
+
+        levels.tree_complete(self.codex.clone()).await;
+
+        let root = levels.levels[0].nodes.remove(0);
+
+        let mut candidates = vec![];
+        for code in root.completed {
+            // score the code
+            let (_, score) = self
+                .codex
+                .get_ls()
+                .check_complete(&code, &code)
+                .await
+                .unwrap();
+            candidates.push(Completion {
+                code,
+                score,
+                fallbacked: false,
+            });
+        }
+        // sort by lowest score first
+        candidates.sort_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
+
+        self.type_check_candidates(candidates).await
+    }
+
+    /// Runs the simple completion strategy, which just runs the completion on the given file
+    /// without any transformation, other than adding "_hole_" to each unknwon type
+    async fn simple_strategy(self) -> Vec<Completion> {
+        let printed = self
+            .codex
+            .get_ls()
+            .pretty_print(&self.file_contents, "_hole_")
+            .await
+            .unwrap();
+
+        println!("pretty:\n{}", printed);
+
+        let query = CompletionQuery::new(printed, self.num_comps, self.retries, self.fallback);
+
+        let candidates = match self.codex.complete(query.clone()).await {
+            Ok(r) => r,
+            Err(CodexError::RateLimit(r)) if !r.is_empty() => {
+                eprintln!(
+                    "Rate limited, but got {} canditate completions before.",
+                    r.len()
+                );
+                r
+            }
+            Err(e) => {
+                eprintln!("Fatal error: {}", e);
+                std::process::exit(1);
+            }
+        };
+
+        let comps: Vec<Completion> = self.type_check_candidates(candidates).await;
 
         // cache the type-checked completions if we have a cache
         if let Some(mut cache) = self.codex.get_cache().await {
