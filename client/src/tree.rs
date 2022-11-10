@@ -372,6 +372,7 @@ impl TreeCompletion for CompletionLevels {
                             // make all possible permutations between prompt elements and
                             // child.completed elements
                             let mut new_prompts = vec![];
+                            // TODO: this is not the right traversal...
                             for parent_code in prompts.iter() {
                                 for child_code in child.completed.iter() {
                                     let comp = codex

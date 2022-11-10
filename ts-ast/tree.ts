@@ -18,9 +18,6 @@ export const makeTree = (sourceFile: ts.SourceFile): CodeBlockTree => {
     return prefix + "$" + n;
   };
 
-  // TODO: add these
-  // - classes
-  // - methods
   const traverse = (child: ts.Node, ctxParentNode: CodeBlockTree): void => {
     const code = codePrinter.printNode(
       ts.EmitHint.Unspecified,
@@ -81,24 +78,6 @@ export const makeTree = (sourceFile: ts.SourceFile): CodeBlockTree => {
         let thisNode = { name, code, children: [] };
 
         classDec.members.forEach((child) => traverse(child, thisNode));
-
-        ctxParentNode.children.push(thisNode);
-
-        return;
-      }
-    }
-
-    // methods
-    if (child.kind === ts.SyntaxKind.MethodDeclaration) {
-      const methodDec = child as ts.MethodDeclaration;
-      if (methodDec.name) {
-        const idObj = methodDec.name as ts.Identifier;
-        const name = symgen(idObj.escapedText.toString());
-        let thisNode = { name, code, children: [] };
-
-        methodDec.body?.statements.forEach((child) =>
-          traverse(child, thisNode)
-        );
 
         ctxParentNode.children.push(thisNode);
 

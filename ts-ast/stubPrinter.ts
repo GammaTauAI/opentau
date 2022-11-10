@@ -19,13 +19,16 @@ export const stubSource = (sourceFile: ts.SourceFile): string => {
         let func = child as ts.FunctionExpression;
         func.body = ts.createBlock([]); // TODO: does codex think that it needs to fill in here?
       }
+      // method decls have at least 2 levels
+    } else if (level > 1) {
+      if (child.kind === ts.SyntaxKind.MethodDeclaration) {
+        const func = child as ts.MethodDeclaration;
+        func.body = undefined;
+      }
       // normal function declarations are more sane, only one level
     } else if (level > 0) {
       if (child.kind === ts.SyntaxKind.FunctionDeclaration) {
         const func = child as ts.FunctionDeclaration;
-        func.body = undefined;
-      } else if (child.kind === ts.SyntaxKind.MethodDeclaration) {
-        const func = child as ts.MethodDeclaration;
         func.body = undefined;
       }
     }

@@ -41,8 +41,6 @@ export const weavePrograms = (
   // the types from the nettle AST to the original AST
   const typeMap = new Map<string, ts.TypeNode>();
 
-  // TODO: do other types: classes, methods
-
   function buildTypeMap(node: ts.Node, scope: string) {
     if (node.kind === ts.SyntaxKind.VariableDeclaration) {
       const varDec = node as ts.VariableDeclaration;
@@ -52,6 +50,13 @@ export const weavePrograms = (
         const name = varDec.name.getText();
         typeMap.set(scope + name, nettleChecker.typeToTypeNode(type)!);
       }
+    } else if (ts.isPropertyDeclaration(node)) {
+      const propDec = node as ts.PropertyDeclaration;
+      if (propDec.name.kind === ts.SyntaxKind.Identifier) {
+        const type = nettleChecker.getTypeAtLocation(propDec);
+        const name = propDec.name.getText();
+        typeMap.set(scope + name, nettleChecker.typeToTypeNode(type)!);
+      }
     } else if (ts.isFunctionDeclaration(node)) {
       const type = nettleChecker.getTypeAtLocation(node);
       const name = node.name!.getText();
@@ -59,6 +64,10 @@ export const weavePrograms = (
       // we change the scope
       ts.forEachChild(node, (child) => buildTypeMap(child, scope + name + "$"));
       return;
+    } else if (ts.isMethodDeclaration(node)) {
+      const type = nettleChecker.getTypeAtLocation(node);
+      const name = node.name.getText();
+      typeMap.set(scope + name, nettleChecker.typeToTypeNode(type)!);
     } else if (ts.isFunctionExpression(node) || ts.isArrowFunction(node)) {
       // we need some name for the function, so we check for a variable declaration
       if (node.parent?.kind === ts.SyntaxKind.VariableDeclaration) {
@@ -73,6 +82,11 @@ export const weavePrograms = (
 
         return;
       }
+    } else if (ts.isClassDeclaration(node)) {
+      // we just want to change the scope
+      const name = node.name!.getText();
+      ts.forEachChild(node, (child) => buildTypeMap(child, scope + name + "$"));
+      return;
     }
     ts.forEachChild(node, (child) => buildTypeMap(child, scope));
   }
@@ -89,6 +103,13 @@ export const weavePrograms = (
       const type = typeMap.get(scope + name);
       if (type) {
         varDecl.type = type;
+      }
+    } else if (ts.isPropertyDeclaration(node)) {
+      const propDecl = node as ts.PropertyDeclaration;
+      const name = propDecl.name.getText();
+      const type = typeMap.get(scope + name);
+      if (type) {
+        propDecl.type = type;
       }
     } else if (ts.isFunctionDeclaration(node)) {
       const funcDecl = node as ts.FunctionDeclaration;
@@ -109,6 +130,15 @@ export const weavePrograms = (
         ts.forEachChild(node, (child) => weaveNode(child, scope, level + 1));
         return;
       }
+    } else if (ts.isMethodDeclaration(node)) {
+      const methodDecl = node as ts.MethodDeclaration;
+      const name = methodDecl.name.getText();
+      const type = typeMap.get(scope + name) as ts.FunctionTypeNode;
+      if (type) {
+        methodDecl.typeParameters = type.typeParameters;
+        methodDecl.parameters = type.parameters;
+        methodDecl.type = type.type;
+      }
     } else if (ts.isFunctionExpression(node) || ts.isArrowFunction(node)) {
       // we need some name for the function, so we check for a variable declaration
       if (node.parent?.kind === ts.SyntaxKind.VariableDeclaration) {
@@ -126,6 +156,18 @@ export const weavePrograms = (
           ts.forEachChild(node, (child) => weaveNode(child, scope, level + 1));
           return;
         }
+      }
+    } else if (ts.isClassDeclaration(node)) {
+      // we just want to handle the scope
+      const name = node.name!.getText();
+      if (level >= nettleLevel) {
+        ts.forEachChild(node, (child) =>
+          weaveNode(child, scope + name + "$", level + 1)
+        );
+        return;
+      } else {
+        ts.forEachChild(node, (child) => weaveNode(child, scope, level + 1));
+        return;
       }
     }
     ts.forEachChild(node, (child) => weaveNode(child, scope, level));

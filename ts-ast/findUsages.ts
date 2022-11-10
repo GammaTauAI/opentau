@@ -8,6 +8,7 @@ export const findUsages = (
   const usagesStmts: ts.Statement[] = [];
 
   // finds the first identifier in the inner block
+  // TODO: do alpha-renaming, maybe borrow from the type-weaving code?
   const identFinder = (node: ts.Node): ts.Identifier | undefined => {
     if (ts.isIdentifier(node)) {
       return node;
@@ -28,6 +29,7 @@ export const findUsages = (
     var foundFirst = false;
     const inner = (node: ts.Node): void => {
       if (ts.isIdentifier(node) && node.text === ident?.text) {
+        // TODO: this kinda breaks, do alpha-renaming instead
         if (foundFirst) {
           // go up the tree until we find a statement
           var stmt = node.parent;

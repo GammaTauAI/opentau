@@ -63,7 +63,8 @@ async fn main() {
             .await
             .unwrap();
         comps.retries = 1;
-        comps.num_comps = 4;
+        comps.num_comps = 3;
+        // comps.fallback = true;
         println!("tree: {:#?}", comps);
         comps.tree_complete(codex).await;
         println!("root comps:\n");
