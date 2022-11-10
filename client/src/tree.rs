@@ -246,9 +246,10 @@ pub struct CompLevel {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct CompletionLevels {
     pub levels: Vec<CompLevel>,
-    // the comp levels have variable retries and num_comps for codex
+    // we propagate these query params to the completion queries
     pub retries: usize,
     pub num_comps: usize,
+    pub fallback: bool,
 }
 
 #[async_trait::async_trait]
@@ -316,6 +317,7 @@ impl TreeCompletion for CompletionLevels {
             levels,
             retries: 1,
             num_comps: 1,
+            fallback: false,
         })
     }
 
@@ -366,7 +368,7 @@ impl TreeCompletion for CompletionLevels {
                                     level_below.len()
                                 )
                             });
-                            // make all possible permutations between code elements and
+                            // make all possible permutations between prompt elements and
                             // child.completed elements
                             let mut new_prompts = vec![];
                             for parent_code in prompts.iter() {
@@ -383,9 +385,12 @@ impl TreeCompletion for CompletionLevels {
                             }
 
                             prompts = new_prompts;
-                            debug!("number of level prompts: {}", prompts.len());
                         }
                     }
+                    debug!("number of level prompts: {}", prompts.len());
+                    // remove duplicates from prompts
+                    let prompts_set = prompts.iter().cloned().collect::<HashSet<_>>();
+                    prompts = prompts_set.into_iter().collect();
                     match level.cmp(&0) {
                         Ordering::Greater => {
                             let ls = codex.get_ls();
