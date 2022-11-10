@@ -34,7 +34,7 @@ export const weavePrograms = (
 ): string => {
   const sourceFile = original.getSourceFile(originalPath)!;
   const nettleFile = nettle.getSourceFile(nettlePath)!;
-  original.getTypeChecker(); // this is necessary to populate identifiers...
+  const originalChecker = original.getTypeChecker();
   const nettleChecker = nettle.getTypeChecker();
 
   // we want a map of identifier names to types, such that we can transplant
@@ -145,7 +145,9 @@ export const weavePrograms = (
         const varDec = node.parent as ts.VariableDeclaration;
         const name = varDec.name.getText();
         const type = typeMap.get(scope + name);
-        varDec.type = type;
+        if (type) {
+          varDec.type = type;
+        }
         // we change the scope, if we are at the nettle level
         if (level >= nettleLevel) {
           ts.forEachChild(node, (child) =>
