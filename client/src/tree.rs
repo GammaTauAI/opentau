@@ -172,6 +172,7 @@ impl TreeCompletion for NaiveCompletionLevels {
                                     level_below.len()
                                 )
                             });
+                            debug!("before weave:\n{}", code);
                             code = codex
                                 .get_ls()
                                 // we take the min because at level 0 we have the root node
@@ -179,6 +180,7 @@ impl TreeCompletion for NaiveCompletionLevels {
                                 .weave(&code, &child.code, std::cmp::min(1, level))
                                 .await
                                 .unwrap();
+                            debug!("weaved {} into:\n{}", child.name, code);
                         }
                     }
                     match level.cmp(&0) {
@@ -372,7 +374,6 @@ impl TreeCompletion for CompletionLevels {
                             // make all possible permutations between prompt elements and
                             // child.completed elements
                             let mut new_prompts = vec![];
-                            // TODO: this is not the right traversal...
                             for parent_code in prompts.iter() {
                                 for child_code in child.completed.iter() {
                                     let comp = codex
