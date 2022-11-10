@@ -21,14 +21,14 @@ export const makeTree = (sourceFile: ts.SourceFile): CodeBlockTree => {
   // TODO: add these
   // - classes
   // - methods
-  const traverse = (child: ts.Node, ctxNode: CodeBlockTree): void => {
+  const traverse = (child: ts.Node, ctxParentNode: CodeBlockTree): void => {
     const code = codePrinter.printNode(
       ts.EmitHint.Unspecified,
       child,
       sourceFile
     );
 
-    // only make children out of function declarations
+    // function declarations
     if (child.kind === ts.SyntaxKind.FunctionDeclaration) {
       const func = child as ts.FunctionDeclaration;
       // idk why, but sometimes a func doesn't have a name, but it's not necessarily an anonymous function
@@ -38,9 +38,7 @@ export const makeTree = (sourceFile: ts.SourceFile): CodeBlockTree => {
 
         func.body?.statements.forEach((child) => traverse(child, thisNode));
 
-        if (ctxNode) {
-          ctxNode.children.push(thisNode);
-        }
+        ctxParentNode.children.push(thisNode);
 
         return;
       }
@@ -49,6 +47,7 @@ export const makeTree = (sourceFile: ts.SourceFile): CodeBlockTree => {
     // console.log("kind: ", child.kind);
     // console.log("code: ", code);
 
+    // arrow funcs / anonymous functions (that are let-bound)
     if (
       child.kind === ts.SyntaxKind.FunctionExpression ||
       child.kind === ts.SyntaxKind.ArrowFunction
@@ -68,16 +67,47 @@ export const makeTree = (sourceFile: ts.SourceFile): CodeBlockTree => {
 
         if (func.body.statements) {
           func.body?.statements.forEach((child) => traverse(child, thisNode));
-          if (ctxNode) {
-            ctxNode.children.push(thisNode);
-          }
+          ctxParentNode.children.push(thisNode);
           return;
         }
       }
     }
 
+    // classes
+    if (child.kind === ts.SyntaxKind.ClassDeclaration) {
+      const classDec = child as ts.ClassDeclaration;
+      if (classDec.name) {
+        const name = symgen(classDec.name.escapedText.toString());
+        let thisNode = { name, code, children: [] };
+
+        classDec.members.forEach((child) => traverse(child, thisNode));
+
+        ctxParentNode.children.push(thisNode);
+
+        return;
+      }
+    }
+
+    // methods
+    if (child.kind === ts.SyntaxKind.MethodDeclaration) {
+      const methodDec = child as ts.MethodDeclaration;
+      if (methodDec.name) {
+        const idObj = methodDec.name as ts.Identifier;
+        const name = symgen(idObj.escapedText.toString());
+        let thisNode = { name, code, children: [] };
+
+        methodDec.body?.statements.forEach((child) =>
+          traverse(child, thisNode)
+        );
+
+        ctxParentNode.children.push(thisNode);
+
+        return;
+      }
+    }
+
     child.forEachChild((child) => {
-      traverse(child, ctxNode);
+      traverse(child, ctxParentNode);
     });
 
     return;
