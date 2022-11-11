@@ -247,21 +247,25 @@ impl MainCtx {
 
         let root = levels.levels[0].nodes.remove(0);
 
-        let mut candidates = vec![];
+        // score the code at the root
+        let mut handles: Vec<JoinHandle<Completion>> = vec![];
         for code in root.completed {
-            // score the code
-            let (_, score) = self
-                .codex
-                .get_ls()
-                .check_complete(&code, &code)
-                .await
-                .unwrap();
-            candidates.push(Completion {
-                code,
-                score,
-                fallbacked: false,
-            });
+            let ls = self.codex.get_ls();
+            handles.push(tokio::task::spawn(async move {
+                let (_, score) = ls.check_complete(&code, &code).await.unwrap();
+                Completion {
+                    code,
+                    score,
+                    fallbacked: false,
+                }
+            }));
         }
+        let mut candidates = vec![];
+        for handle in handles {
+            let comp = handle.await.unwrap();
+            candidates.push(comp);
+        }
+
         // sort by lowest score first
         candidates.sort_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
 

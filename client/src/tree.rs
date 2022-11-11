@@ -392,10 +392,10 @@ impl TreeCompletion for CompletionLevels {
                             prompts = new_prompts;
                         }
                     }
-                    debug!("number of level prompts: {}", prompts.len());
                     // remove duplicates from prompts
                     let prompts_set = prompts.iter().cloned().collect::<HashSet<_>>();
                     prompts = prompts_set.into_iter().collect();
+                    debug!("number of level prompts: {}", prompts.len());
                     match level.cmp(&0) {
                         Ordering::Greater => {
                             let ls = codex.get_ls();
