@@ -1,10 +1,19 @@
 import ast
+import copy
 from astor import to_source
 
-from typing import Union
+from typing import Tuple
 
 _FAKE_TYPE = '_hole_'
 
+
+# TODO: implement
+def get_comments(source_file: ast.AST) -> int:
+    return 0
+
+# TODO: implement
+def strip_types(source_file: ast.AST) -> ast.AST:
+    return ast.AST()
 
 def count_nodes(child: ast.AST) -> int:
     count = 1
@@ -12,7 +21,7 @@ def count_nodes(child: ast.AST) -> int:
         count += count_nodes(c)
     return count
 
-def check_completed(original: ast.AST, completed: ast.AST) -> Union[bool, int]:
+def check_completed(original: ast.AST, completed: ast.AST) -> Tuple[bool, int]:
     is_completed: bool = True
     score: int = 0
 
@@ -25,18 +34,21 @@ def check_completed(original: ast.AST, completed: ast.AST) -> Union[bool, int]:
                 score += 5
 
     if not is_completed:
-        return False, score # type: ignore
+        return False, score
 
-    original_comments = ...
-    completed_commments = ...
+    original_copy = copy.deepcopy(original)
+    completed_copy = copy.deepcopy(completed)
+
+    original_comments = get_comments(original_copy)
+    completed_commments = get_comments(completed_copy)
 
     if original_comments != completed_commments:
-        return False, score # type: ignore
-    
-    original_stripped = ...
-    completed_stripped = ...
+        return False, score
 
-    original_count = count_nodes(original_stripped) # type: ignore
-    original_count = count_nodes(completed_stripped) # type: ignore
+    original_stripped = strip_types(original_copy)
+    completed_stripped = strip_types(original_copy)
 
-    return original_count == completed_count, score # type: ignore
+    original_count = count_nodes(original_stripped)
+    completed_count = count_nodes(completed_stripped)
+
+    return original_count == completed_count, score
