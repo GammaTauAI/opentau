@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 use tokio::{sync::Mutex, task::JoinHandle};
@@ -92,6 +92,8 @@ pub struct CodexClient {
     pub endpoint: String,
     // the temperature to use for the completion
     pub temperature: f64,
+    // the maxmimum type score
+    pub max_type_score: i64,
     // The cache to use for the completions
     cache: Option<Arc<Mutex<Cache>>>,
     // The rate limited token pool, that produces the token used for this client
@@ -105,6 +107,7 @@ pub struct CodexClientBuilder {
     pub lang_server: ArcLangServer,
     pub endpoint: Option<String>,
     pub temperature: Option<f64>,
+    pub max_type_score: Option<i64>,
     pub cache: Option<Arc<Mutex<Cache>>>,
     pub rate_limit: bool,
 }
@@ -117,6 +120,7 @@ impl CodexClientBuilder {
             lang_server,
             endpoint: None,
             temperature: None,
+            max_type_score: None,
             cache: None,
             rate_limit: true,
         }
@@ -147,6 +151,11 @@ impl CodexClientBuilder {
         self
     }
 
+    pub fn max_type_score(&mut self, max_type_score: i64) -> &mut Self {
+        self.max_type_score = Some(max_type_score);
+        self
+    }
+
     /// Builds the client and consumes the builder
     pub fn build(&mut self) -> CodexClient {
         let client = self.client.take().unwrap_or_else(reqwest::Client::new);
@@ -155,6 +164,7 @@ impl CodexClientBuilder {
             .take()
             .unwrap_or_else(|| "https://api.openai.com/v1/edits".to_string());
         let temperature = self.temperature.take().unwrap_or(1.0);
+        let max_type_score = self.max_type_score.take().unwrap_or(999999999);
         let cache = self.cache.take();
         let rate_limiter =
             rl::RateLimitedTokenPool::new(self.tokens.drain(..).collect(), self.rate_limit);
@@ -163,6 +173,7 @@ impl CodexClientBuilder {
             lang_server: self.lang_server.clone(),
             endpoint,
             temperature,
+            max_type_score,
             cache,
             rate_limiter,
         }
@@ -266,6 +277,7 @@ impl CodexClient {
             .collect::<Vec<Completion>>();
 
         if query.fallback {
+            // NOTE: we add the fallback despite the type score limit
             final_completions.push(Completion {
                 code: self.lang_server.pretty_print(&query.input, "any").await?,
                 score: 999999999,
@@ -306,6 +318,7 @@ impl CodexClient {
         let temp = self.temperature;
         let num_comps = query.num_comps;
         let rl = self.rate_limiter.clone();
+        let max_type_score = self.max_type_score;
 
         tokio::spawn(async move {
             let token = rl.wait_token().await;
@@ -352,13 +365,17 @@ impl CodexClient {
                     continue;
                 }
 
-                let (is_complete, score) = lang_client
+                let (mut is_complete, score) = lang_client
                     .check_complete(&input, &text)
                     .await
                     .unwrap_or_else(|e| {
                         println!("Error checking completion: {}", e);
                         (false, 0) // if there is an error, we assume it is not complete
                     });
+                // we don't want completions with higher type score than the max
+                if score > max_type_score {
+                    is_complete = false;
+                }
                 if is_complete {
                     filtered_completions.lock().await.push((text, score));
                 }

@@ -73,6 +73,10 @@ struct Args {
     /// this flag you can disable this behavior.
     #[clap(long, value_parser, default_value_t = false)]
     disable_rate_limit: bool,
+
+    /// The maximum type-quality score for a completion to be valid (lower means better quality)
+    #[clap(long, short, value_parser, default_value_t = 9999999)]
+    max_type_quality: i64,
 }
 
 impl Args {
@@ -138,6 +142,7 @@ async fn main() {
     codex
         .endpoint(args.endpoint)
         .temperature(args.temp)
+        .max_type_score(args.max_type_quality)
         .rate_limit(!args.disable_rate_limit);
 
     if let Some(cache) = cache {
