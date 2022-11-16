@@ -104,7 +104,12 @@ def handle_check(decoded_text: str, req: Any) -> str:
     original_file = gen_source_file(decoded_original)
     completed_file = gen_source_file(decoded_text)
     # FIXME: fix type return
-    text, score = check_completed(original=original_file, completed=completed_file) # type: ignore
+    text, score = check_completed(
+        original_ast=original_file,
+        completed_ast=completed_file,
+        original_str=decoded_original,
+        completed_str=decoded_text,
+    )
     return json.dumps({"type": "checkResponse", "text": text, "score": score})
 
 # TODO: implement

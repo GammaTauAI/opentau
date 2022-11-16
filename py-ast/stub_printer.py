@@ -1,7 +1,6 @@
 import os
 import ast
 import subprocess
-from astor import to_source
 
 TMP_DIR = '/tmp'
 TMP_FILE = os.path.join(TMP_DIR, 'temp__.py')
@@ -9,7 +8,7 @@ TMP_FILE = os.path.join(TMP_DIR, 'temp__.py')
 
 def stub_source(source_file: ast.AST) -> str:
     with open(TMP_FILE, 'w') as f:
-        f.write(to_source(source_file))
+        f.write(ast.unparse(source_file))
     cmd = f'stubgen {TMP_FILE} --output {TMP_DIR} --no-import'
     sp = subprocess.Popen(cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = sp.communicate()
