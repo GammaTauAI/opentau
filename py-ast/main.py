@@ -8,15 +8,15 @@ import base64
 import socket
 import signal
 from threading import Thread
+from redbaron import RedBaron
 from functools import partial
 
 from printer import print_source
 from check import check_completed
 from stub_printer import stub_source
 
-from typing import Any
+from typing import Any, Union
 
-_FAKETYPE_ = '_hole_'
 
 if len(sys.argv) != 4:
     print(f'usage: [path to socket] [pid of rust proc]')
@@ -77,11 +77,14 @@ def recvall(s: socket.socket) -> bytes:
             break
     return data
 
-def gen_source_file(decoded_text) -> ast.AST:
+def gen_source_file(decoded_text: str, with_comments: bool = False) -> Union[ast.AST, RedBaron]:
+    if with_comments:
+        return RedBaron(decoded_text)
     return ast.parse(decoded_text)
 
 def handle_print(decoded_text: str) -> str:
-    source_file = gen_source_file(decoded_text)
+    source_file = gen_source_file(decoded_text, with_comments=True)
+    assert isinstance(source_file, RedBaron)
     res = print_source(source_file)
     # FIXME: figure out output format
     return json.dumps({"type": "printResponse", "text": res})
@@ -89,12 +92,14 @@ def handle_print(decoded_text: str) -> str:
 # TODO: implement
 def handle_tree(decoded_text: str) -> str:
     source_file = gen_source_file(decoded_text)
+    assert isinstance(source_file, ast.AST)
     res = ...
     # FIXME: figure out output format
     return json.dumps({"type": "treeResponse", "text": res})
 
 def handle_stub(decoded_text: str) -> str:
     source_file = gen_source_file(decoded_text)
+    assert isinstance(source_file, ast.AST)
     res = stub_source(source_file)
     # FIXME: figure out output format
     return json.dumps({"type": "stubResponse", "text": res})
@@ -103,6 +108,8 @@ def handle_check(decoded_text: str, req: Any) -> str:
     decoded_original = str(base64.b64decode(req.original))
     original_file = gen_source_file(decoded_original)
     completed_file = gen_source_file(decoded_text)
+    assert isinstance(original_file, ast.AST)
+    assert isinstance(completed_file, ast.AST)
     # FIXME: fix type return
     text, score = check_completed(
         original_ast=original_file,

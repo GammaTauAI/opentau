@@ -1,36 +1,38 @@
 import ast
 import copy
-from comment_parser import comment_parser
+from redbaron import RedBaron
 
 from typing import Tuple
 
 _FAKE_TYPE = '_hole_'
 
 
-# TODO: implement
-def get_comment_count(s: str) -> int:
-    return len(comment_parser.extract_comments_from_str(s, mime='text/x-script.python'))
+def get_comment_count(source_file: RedBaron) -> int:
+    return len(source_file.find_all('CommentNode'))
 
-# TODO: implement
-def strip_types(source_file: ast.AST) -> ast.AST:
-    return ast.AST()
+def strip_types(source_file: RedBaron) -> ast.AST:
+    return ast.parse(source_file.dumps())
 
-def count_nodes(child: ast.AST) -> int:
-    count = 1
-    for c in ast.walk(child):
-        count += count_nodes(c)
-    return count
+def count_nodes(source_file: RedBaron) -> int:
+    def count_nodes_inner(ast_node: ast.AST) -> int:
+        count = 1
+        for c in ast.walk(ast_node):
+            count += count_nodes_inner(c)
+        return count
 
-def check_completed(original_ast: ast.AST, completed_ast: ast.AST, original_str: str, completed_str: str) -> Tuple[bool, int]:
+    ast_without_comments = strip_types(source_file)
+    return count_nodes_inner(ast_without_comments)
+
+def check_completed(original_ast: RedBaron, completed_ast: RedBaron) -> Tuple[bool, int]:
     is_completed: bool = True
     score: int = 0
 
-    for child in ast.walk(completed_ast):
-        if isinstance(child, ast.arg):
-            annotation_str = ast.unparse(child.annotation)
-            if _FAKE_TYPE in annotation_str:
+    completed_funcs = completed_ast.find_all('DefNode')
+    for func in completed_funcs:
+        for arg in func.arguments:
+            if arg.annotation == _FAKE_TYPE:
                 is_completed = False
-            elif 'Any' in annotation_str:
+            elif arg.annotation == 'Any':
                 score += 5
 
     if not is_completed:
@@ -39,21 +41,22 @@ def check_completed(original_ast: ast.AST, completed_ast: ast.AST, original_str:
     original_copy = copy.deepcopy(original_ast)
     completed_copy = copy.deepcopy(completed_ast)
 
-    original_comments = get_comment_count(original_str)
-    completed_commments = get_comment_count(completed_str)
+    original_comments = get_comment_count(original_ast)
+    completed_commments = get_comment_count(completed_ast)
 
     if original_comments != completed_commments:
         return False, score
 
-    original_stripped = strip_types(original_copy)
-    completed_stripped = strip_types(completed_copy)
-
-    original_count = count_nodes(original_stripped)
-    completed_count = count_nodes(completed_stripped)
+    original_count = count_nodes(original_copy)
+    completed_count = count_nodes(completed_copy)
 
     return original_count == completed_count, score
 
+
 if __name__ == '__main__':
-    with open('./temp.py', 'r') as f:
-        res = get_comment_count(f.read())
-        print(res)
+    with open('./example.py', 'r') as f_orig:
+        original_ast = RedBaron(f_orig.read())
+    with open('./example_typed.py', 'r') as f_comp:
+        completed_ast = RedBaron(f_comp.read())
+    status, score = check_completed(original_ast, completed_ast)
+    print(status, score)

@@ -30,3 +30,10 @@ def handle_cutoff_err(s: str) -> str:
     if s.startswith('ef'):
         return 'def' + s[2:]
     return s
+
+""" TEST
+if __name__ == '__main__':
+    with open('./temp.py', 'r') as f:
+        res = stub_source(ast.parse(f.read()))
+        print(res)
+"""
