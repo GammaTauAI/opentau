@@ -13,6 +13,7 @@ def get_comment_count(source_file: RedBaron) -> int:
 def strip_types(source_file: RedBaron) -> ast.AST:
     return ast.parse(source_file.dumps())
 
+# FIXME: recursion depth error
 def count_nodes(source_file: RedBaron) -> int:
     def count_nodes_inner(ast_node: ast.AST) -> int:
         count = 1
@@ -23,6 +24,7 @@ def count_nodes(source_file: RedBaron) -> int:
     ast_without_comments = strip_types(source_file)
     return count_nodes_inner(ast_without_comments)
 
+# FIXME: recursion depth error
 def check_completed(original_ast: RedBaron, completed_ast: RedBaron) -> Tuple[bool, int]:
     is_completed: bool = True
     score: int = 0
