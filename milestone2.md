@@ -1,31 +1,133 @@
 ---
 title: "Using OpenAI Codex for Gradual Type Inference"
-subtitle: "Milestone I Report"
+subtitle: "Milestone II Report"
 author: Federico Cassano, Noah Shinn
 geometry: "left=3cm,right=3cm,top=3cm,bottom=3cm"
 output: pdf_document
 ---
 
-## Report
+\newpage
+
+# Report
 
 Our high-level approach to type-inference via Codex is the following:
 
-- 1. We insert the identifier `_hole_` in place of missing types in our input JavaScript program. To do this, we use a compiler $\mathcal{K} : \text{File} \rightarrow \mathcal{P}$.
-- 2. We define an instruction $\mathcal{I}$, which is the constant string:  
-     $\mathcal{I} = \text{"Substitute the identifier \_hole\_ with the correct type."}$
-- 3. We query the `davinci-edit` model using the compiled prompt $\mathcal{P}$ and instruction $\mathcal{I}$. We receive back a set of completions $\mathcal{C}$, $0 \leq |\mathcal{C}| \leq n$, where $n$ is a pre-defined maximum number of completions.
-- 4. We use a cheap and admissible heuristic $h : c \rightarrow (\text{Boolean},\ \mathcal{N})$ that determines if a given completion $c$ is _correct_ (a _correct_ completion however, may still not type-check) and the quality of the type annotations $q$, where the lower the $q$ the better.
-- 5. We apply $h$ to all elements in $\mathcal{C}$ and we add the completions that produced $\text{True}$ to an ordered set $\mathcal{Q}$ sorted by $q$.
-- 6. Using the command: `tsc --allowJs --checkJs --noEmit --target es2022 <file.ts>` we run a full type-check on every completion in $\mathcal{Q}$, terminating as soon as the command returns code `0`, meaning that the completion is type-correct. By terminating early on the sorted set, we guarantee that our solution is optimal with respect to $\mathcal{Q}$. We let $c^*$ be the optimal type-correct solution.
-- 7. We produce $c^*$ if it exists, otherwise we produce an error.
+- 1. We create a tree of nested code-blocks $T$ in our JavaScript program. Where the top-level is the root of the tree and each function, class or method has a node below the parent block. The node of the tree is identified by $\text{id-}\alpha$, the $\alpha$-renamed name of the function/class/method. The root node id is defined as $\text{id-}\alpha = root$.
+- 2. For each $\text{id-}\alpha$, we find usages of the identifier and we save them in the node for prompt-engineering.
+- 3. We start traversing the tree using a bottom-up traversal, starting from the leaves. To each node we apply the steps described below:
+  - 1. If this is not a leaf node, we extract the completions for all the direct children of this node and we type-weave the types of the children into this node. This process creates permutations for all completions of all direct children of this node. For each permutation, we create a prompt $\mathcal{P}_i$. We use the type-weaving procedure:  
+       $\mathcal{W}: \text{Original File, Nettle File} \rightarrow \text{Resulting File}$.
+  - 2. For each prompt, we insert the saved usages of $\text{id-}\alpha$ at the bottom of the prompt, to help Codex infer the types.
+  - 1. For each prompt, we insert the identifier `_hole_` in place of missing types in our prompts. To do this, we use a compiler $\mathcal{K} : \text{File} \rightarrow \mathcal{P}$.
+  - 2. We define an instruction $\mathcal{I}$, which is the constant string:  
+       $\mathcal{I} = \text{"Substitute the identifier \_hole\_ with the correct type."}$
+  - 3. For each prompt computed for the node, query the `davinci-edit` or `incoder` model using the prompt $\mathcal{P}_i$ and instruction $\mathcal{I}$. We receive back a set of completions $\mathcal{C}_{\text{id-}\alpha}$, $0 \leq |\mathcal{C}_{\text{id-}\alpha}| \leq n$, where $n$ is a pre-defined maximum number of completions.
+  - 4. We use a cheap and admissible heuristic $h : c \rightarrow (\text{Boolean},\ \mathcal{N})$ that determines if a given completion $c$ is _correct_ (a _correct_ completion however, may still not type-check) and the quality of the type annotations $q$, where the lower the $q$ the better.
+  - 5. We apply $h$ to all elements in $\mathcal{C}_{\text{id-}\alpha}$ and add the completions that produced $\text{True}$ to an ordered set $\mathcal{Q}_{\text{id-}\alpha}$ sorted by $q$.
+- 4. Using the command: `tsc --allowJs --checkJs --noEmit --target es2022 <file.ts>` we run a full type-check on every completion in $\mathcal{Q}_{root}$, terminating as soon as the command returns code `0`, meaning that the completion is type-correct. By terminating early on the sorted set, we guarantee that our solution is optimal with respect to $\mathcal{Q}_\text{root}$. We let $c^*$ be the optimal type-correct solution.
+- 5. We produce $c^*$ if it exists, otherwise we produce an error.
 
 \newpage
 
-### Implementation of the Pipeline
+## Implementation of the Pipeline
+
+#### Initial Tree Generation
+
+We have implemented a procedure that generates a code-block tree from a given program.
+
+For instance, given this input:
+
+```ts
+function hello2(name) {
+  const helloInner = (name) => {
+    return "Hello " + name;
+  };
+  return helloInner(name);
+}
+
+const hello1 = (name) => {
+  return "Hello " + name;
+};
+```
+
+The procedure is going to output:  
+![](./assets/tree_example.png){ width=100px }
+
+Where each node in the tree is annotated using the definition:
+
+```rs
+pub struct CompNode {
+  pub children_idxs: Vec<usize>, // pointers to the children
+  pub name: String, // the alpha-renamed id
+  pub code: String, // the code of this node
+  pub completed: Vec<String>, // the completions of this node (starts empty)
+  pub usages: String, // the usages of the alpha-renamed id of this node
+}
+```
+
+\newpage
+
+#### Type-Weaving Procedure
+
+We have implemented a type-weaving procedure $\mathcal{W}$. This procedure is used to transplant
+the type-annotations from one program to another without being affected by structural differences
+in either programs. The procedure uses scope-based $\alpha$-renaming in order to extract
+the types from matching identifiers in different scopes. This gives us fine-grained control
+for selecting which scopes should have types extracted and which scopes should not.
+
+For instance, the given program:
+
+```ts
+function hello(msg: string): string {
+  function inner(): string {
+    let my_string: string = "Hello " + msg;
+    return my_string;
+  }
+  return inner();
+}
+```
+
+Has the following $\alpha$-renamed type-table:
+
+| $\alpha$-renamed id     | Type                      |
+| ----------------------- | ------------------------- |
+| `hello`                 | `(msg: string) => string` |
+| `hello$inner`           | `() => string`            |
+| `hello$inner$my_string` | `string`                  |
+
+Using this program as our _nettle_ (the reference program that donates types to be transplanted),
+we can transplant types into the following program, starting from scope `hello`:
+
+```ts
+function hello(msg) {
+  function inner() {
+    let my_string = "Hello " + msg;
+    return my_string;
+  }
+  return inner();
+}
+```
+
+We will receive back the program:
+
+```ts
+function hello(msg) {
+  function inner(): string {
+    let my_string: string = "Hello " + msg;
+    return my_string;
+  }
+  return inner();
+}
+```
+
+This allows us to ignore any types given to the `hello` function, while transplanting types given to
+the `hello$inner` function and the `hello$inner$my_string` variable.
+
+\newpage
 
 #### Compiler
 
-Firstly, in the development of this pipeline we have implemented $\mathcal{K}$ by interfacing with the TypeScript compiler API for inserting type-holes into identifiers that lack type annotations.
+We have implemented $\mathcal{K}$ by interfacing with the TypeScript compiler API for inserting type-holes into identifiers that lack type annotations.
 
 For instance, given this input:
 
@@ -47,7 +149,7 @@ function hello(name: string): _hole_ {
 
 #### Heuristic
 
-Secondly, we have implemented our heuristic $h$, which is part of the compiler $\mathcal{K}$. The heuristic traverses the program's abstract syntax tree identifying different types, which will be scored. Some types terminate the heuristic early and denote that the program cannot possibly be correct. The scores are summed to compose $q$ using the following table:
+We have implemented our heuristic $h$. The heuristic traverses the program's abstract syntax tree identifying different types, which will be scored. Some types terminate the heuristic early and denote that the program cannot possibly be correct. The scores are summed to compose $q$ using the following table:
 
 | Type                                     | Score | Correct          |
 | ---------------------------------------- | ----- | ---------------- |
@@ -81,12 +183,12 @@ function hello(name: string): _hole_ {
 
 $h$ will terminate early and output $(\text{False}, 0)$, as the presence of one `_hole_` type terminates the heuristic early.
 
-Additionally, $h$ checks if Codex didn't add anything other than just types (such as additonal code blocks and comments) to the original prompt. If that condition isn't met, $(\text{False}, 0)$ will be produced.
+Additionally, $h$ checks if the model didn't add anything other than just types (such as additonal code blocks and comments) to the original prompt. If that condition isn't met, $(\text{False}, 0)$ will be produced.
 \newpage
 
 #### Client
 
-Finally, we have implemented a client in Rust that manages the pipeline and queries the Codex API. The client will communicate with the compiler $K$, which is written in TypeScript and will send the outputs to Codex. The client can be downloaded from [https://github.com/GammaTauAI/opentau](https://github.com/GammaTauAI/opentau) and can be utilized by using the following terminal interface:
+Finally, we have implemented a client in Rust that manages the pipeline and queries the Codex API. The client will communicate with the compiler $K$, which is written in TypeScript and will send the outputs to the model. The client can be downloaded from [https://github.com/GammaTauAI/opentau](https://github.com/GammaTauAI/opentau) and can be utilized by using the following terminal interface:
 
 ```
 USAGE:
@@ -123,8 +225,7 @@ _The appendix at the end of the paper provides a set of prompts and completions 
 
 \newpage
 
-## Reflect
-
+# Reflect
 
 #### Initial Progress Goals
 
@@ -132,11 +233,10 @@ _"By now, we will have implemented type-inference for Python and a prompt engine
 
 #### Current Achievements
 
-
-## Replan
-
+# Replan
 
 #### Plan Moving Forward
+
 We plan to implement Python type-inference. Additionally, we plan to benchmark our TypeScript and Python type-inference across a randomly selected 100-file subset of Leetcode solutions. The accuracy will be reported as the proportion of files that type-checked over the total number of files attempted (100).
 
 #### Timeline
