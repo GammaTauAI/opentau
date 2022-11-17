@@ -15,14 +15,11 @@ def strip_types(source_file: RedBaron) -> ast.AST:
 
 # FIXME: recursion depth error
 def count_nodes(source_file: RedBaron) -> int:
-    def count_nodes_inner(ast_node: ast.AST) -> int:
-        count = 1
-        for c in ast.walk(ast_node):
-            count += count_nodes_inner(c)
-        return count
-
     ast_without_comments = strip_types(source_file)
-    return count_nodes_inner(ast_without_comments)
+    count = 1
+    for _ in ast.walk(ast_without_comments):
+        count += 1
+    return count
 
 # FIXME: recursion depth error
 def check_completed(original_ast: RedBaron, completed_ast: RedBaron) -> Tuple[bool, int]:
@@ -40,25 +37,24 @@ def check_completed(original_ast: RedBaron, completed_ast: RedBaron) -> Tuple[bo
     if not is_completed:
         return False, score
 
-    original_copy = copy.deepcopy(original_ast)
-    completed_copy = copy.deepcopy(completed_ast)
-
     original_comments = get_comment_count(original_ast)
     completed_commments = get_comment_count(completed_ast)
 
     if original_comments != completed_commments:
         return False, score
 
-    original_count = count_nodes(original_copy)
-    completed_count = count_nodes(completed_copy)
+    original_count = count_nodes(original_ast)
+    completed_count = count_nodes(completed_ast)
+    print(f'original count: {original_count}')
+    print(f'completed count: {completed_count}')
 
     return original_count == completed_count, score
 
 
 if __name__ == '__main__':
-    with open('./example.py', 'r') as f_orig:
+    with open('./temp.py', 'r') as f_orig:
         original_ast = RedBaron(f_orig.read())
-    with open('./example_typed.py', 'r') as f_comp:
+    with open('./temp_no_types.py', 'r') as f_comp:
         completed_ast = RedBaron(f_comp.read())
     status, score = check_completed(original_ast, completed_ast)
-    print(status, score)
+    # print(status, score)
