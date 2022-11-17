@@ -13,7 +13,7 @@ output: pdf_document
 Our high-level approach to type-inference via Codex is the following:
 
 - 1. We create a tree of nested code-blocks $T$ in our JavaScript program. Where the top-level is the root of the tree and each function, class or method has a node below the parent block. The node of the tree is identified by $\text{id-}\alpha$, the $\alpha$-renamed name of the function/class/method. The root node id is defined as $\text{id-}\alpha = root$.
-- 2. For each $\text{id-}\alpha$, we find usages of the identifier and we save them in the node for prompt-engineering.
+- 2. For each $\text{id-}\alpha$, we find usages of the identifier and we save them in the node for prompt-engineering purposes.
 - 3. We start traversing the tree using a bottom-up traversal, starting from the leaves. To each node we apply the steps described below:
   - 1. If this is not a leaf node, we extract the completions for all the direct children of this node and we type-weave the types of the children into this node. This process creates permutations for all completions of all direct children of this node. For each permutation, we create a prompt $\mathcal{P}_i$. We use the type-weaving procedure:  
        $\mathcal{W}: \text{Original File, Nettle File} \rightarrow \text{Resulting File}$.
@@ -89,11 +89,11 @@ function hello(name: string): string {
 
 Has the following $\alpha$-renamed type-table:
 
-| $\alpha$-renamed id     | Type                      |
-| ----------------------- | ------------------------- |
+| $\alpha$-renamed id     | Type                       |
+| ----------------------- | -------------------------- |
 | `hello`                 | `(name: string) => string` |
-| `hello$inner`           | `() => string`            |
-| `hello$inner$my_string` | `string`                  |
+| `hello$inner`           | `() => string`             |
+| `hello$inner$my_string` | `string`                   |
 
 Using this program as our _nettle_ (the reference program that donates types to be transplanted),
 we can transplant types into the following program, starting from scope `hello`:
@@ -198,9 +198,9 @@ OPTIONS:
     -c, --cache <CACHE>
             The Redis URL for the cache
         --disable-rate-limit
-            Whether or not to prevent rate limits. You may want to set this to false if You are
-            using your own model. By default, we try to prevent rate limits, by using this flag you
-            can disable this behavior
+            Whether or not to prevent rate limits. You may want to set this to
+            false if you are using your own model. By default, we try to prevent
+            rate limits, by using this flag you can disable this behavior
     -e, --endpoint <ENDPOINT>
             The url of the codex endpoint [default: https://api.openai.com/v1/edits]
     -f, --file <FILE>
@@ -212,8 +212,8 @@ OPTIONS:
     -l, --lang <LANG>
             The target language. Either `ts` or `py` [default: ts]
     -m, --max-type-quality <MAX_TYPE_QUALITY>
-            The maximum type-quality score for a completion to be valid (lower means better quality)
-            [default: 9999999]
+            The maximum type-quality score for a completion to be
+            valid (lower means better quality) [default: 9999999]
     -n, --n <N>
             The number of completions to return [default: 3]
     -o, --output <OUTPUT>
@@ -221,8 +221,8 @@ OPTIONS:
     -r, --retries <RETRIES>
             The number of request to send to Codex [default: 1]
     -s, --strategy <STRATEGY>
-            Completion strategy. Either: {"simple": simple completion, "tree": tree completion}
-            [default: simple]
+            Completion strategy. Either: {"simple": simple completion,
+            "tree": tree completion} [default: simple]
         --stop-at <STOP_AT>
             The maximum number of type-checkable completions to return [default: 1]
     -t, --tokens <TOKENS>
@@ -241,7 +241,10 @@ _The appendix at the end of the paper provides a set of prompts and completions 
 
 ## Building our own Codex
 
-The InCoder model query system was implemented as a simple HTTP server that evaluates the InCoder model $M$ and receives an untyped input and several hyperparameters from the language server and returns a list of `type infills`. Then, the `type infills` are inserted into the original untyped code to yield the final completion. The pipeline is shown below:
+The InCoder model query system was implemented as a simple HTTP server that evaluates the
+InCoder model $M$ and receives an untyped input and several hyperparameters from the language
+server and returns a list of `type infills`. Then, the `type infills` are inserted into the
+original untyped code to yield the final completion. The pipeline is shown below:
 
 Given the following prompt $\mathcal{P}$: we have the untyped `input`
 
@@ -342,7 +345,7 @@ length of the type infill. It is important to note that the hyperparameter for m
 must be greater than 1 to accommodate the possibility of larger type-infills,
 such as `[str, int]`, `LargeCustomTypeLongName` or first-class function types.
 
-As for the prompt-engineering algorithm, it has been successfully 
+As for the prompt-engineering algorithm, it has been successfully
 implemented using a bottom-up tree traversal algorithm, described in the Report section.
 
 # Replan
@@ -355,7 +358,7 @@ temperature hyperparameters to find a list of the most optimal temperatures for 
 of completions that were generated with varying temperatures. In addition, we plan to implement
 type-inference for Python using the same completion pipeline that is used for TypeScript.
 Then, we plan to formally benchmark our TypeScript and Python type-inference across a randomly
-selected 100-file subset of Leetcode solutions. 
+selected 100-file subset of Leetcode solutions.
 
 #### Timeline
 
