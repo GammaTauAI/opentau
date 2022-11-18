@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use tokio::task::JoinHandle;
 
 use crate::{
-    codex::{CodexClient, Completion, CompletionQuery},
+    codex::{CodexClient, CodexError, Completion, CompletionQuery},
     debug,
     langserver::{ArcLangServer, LangServerError},
 };
@@ -332,6 +332,13 @@ impl TreeCompletion for CompletionLevels {
             let mut res = codex.complete(q.clone()).await;
             let mut retries = 0;
             while res.is_err() {
+                // if it's a rate limit, print out to stderr
+                if let CodexError::RateLimit(r) = res.unwrap_err() {
+                    eprintln!(
+                        "Rate limited, but got {} canditate completions before.",
+                        r.len()
+                    );
+                }
                 if retries > 5 {
                     return None;
                 }
