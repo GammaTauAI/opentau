@@ -11,6 +11,8 @@
   - `tsc`
 - Python inference requirements:
   - `mypy` | `pyright`
+- Python AST requirements:
+  - `redbaron`
 
 
 ## Installation
