@@ -18,12 +18,12 @@ Our high-level approach to type-inference via Codex is the following:
   - 1. If the current node is not a leaf node, we extract the completions for all the direct children of this node and then type-weave the types of the children into this node. This process creates permutations for all completions of all direct children of this node. For each permutation, we create a prompt $\mathcal{P}_i$. We use the type-weaving procedure:  
        $\mathcal{W}: \text{Original File, Nettle File} \rightarrow \text{Resulting File}$.
   - 2. For each prompt, we insert the saved usages of $\text{id-}\alpha$ at the bottom of the prompt, to help Codex infer the types.
-  - 1. For each prompt, we insert the identifier `_hole_` in place of missing types in our prompts. To do this, we use a compiler $\mathcal{K} : \text{File} \rightarrow \mathcal{P}$.
-  - 2. We define an instruction $\mathcal{I}$, which is the constant string:  
+  - 3. For each prompt, we insert the identifier `_hole_` in place of missing types in our prompts. To do this, we use a compiler $\mathcal{K} : \text{File} \rightarrow \mathcal{P}$.
+  - 4. We define an instruction $\mathcal{I}$, which is the constant string:  
        $\mathcal{I} = \text{"Substitute the identifier \_hole\_ with the correct type."}$
-  - 3. For each prompt computed for the node, query the `davinci-edit` or `incoder` model using the prompt $\mathcal{P}_i$ and instruction $\mathcal{I}$. We receive back a set of completions $\mathcal{C}_{\text{id-}\alpha}$, $0 \leq |\mathcal{C}_{\text{id-}\alpha}| \leq n$, where $n$ is a pre-defined maximum number of completions.
-  - 4. We use a cheap and admissible heuristic $h : c \rightarrow (\text{Boolean},\ \mathcal{N})$ that determines if a given completion $c$ is _correct_ (a _correct_ completion however, may still not type-check) and the quality of the type annotations $q$, where the lower the $q$ the better.
-  - 5. We apply $h$ to all elements in $\mathcal{C}_{\text{id-}\alpha}$ and add the completions that produced $\text{True}$ to an ordered set $\mathcal{Q}_{\text{id-}\alpha}$ sorted by $q$.
+  - 5. For each prompt computed for the node, query the `davinci-edit` or `incoder` model using the prompt $\mathcal{P}_i$ and instruction $\mathcal{I}$. We receive back a set of completions $\mathcal{C}_{\text{id-}\alpha}$, $0 \leq |\mathcal{C}_{\text{id-}\alpha}| \leq n$, where $n$ is a pre-defined maximum number of completions.
+  - 6. We use a cheap and admissible heuristic $h : c \rightarrow (\text{Boolean},\ \mathcal{N})$ that determines if a given completion $c$ is _correct_ (a _correct_ completion however, may still not type-check) and the quality of the type annotations $q$, where the lower the $q$ the better.
+  - 7. We apply $h$ to all elements in $\mathcal{C}_{\text{id-}\alpha}$ and add the completions that produced $\text{True}$ to an ordered set $\mathcal{Q}_{\text{id-}\alpha}$ sorted by $q$.
 - 4. Using the command: `tsc --allowJs --checkJs --noEmit --target es2022 <file.ts>` we run a full type-check test on every completion in $\mathcal{Q}_{root}$, terminating as soon as the command returns code `0`, meaning that the completion is type-correct. By terminating early on the sorted set, we guarantee that our solution is optimal with respect to $\mathcal{Q}_\text{root}$. We let $c^*$ be the optimal type-correct solution.
 - 5. We produce $c^*$ if it exists, otherwise we produce an error.
 
