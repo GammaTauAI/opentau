@@ -15,6 +15,15 @@ const mike = (p) => {
   }
 };
 
+var steve = function (p) {
+  if (p.name === "Steve") {
+    return p;
+  } else {
+    var person = new Person("Steve");
+    return person;
+  }
+};
+
 class House {
   person;
   constructor(person) {
@@ -47,6 +56,7 @@ class Person {
 
 console.log(joe(new Person("Joe")).sayHello());
 console.log(mike(new Person("Mike")).sayHello());
+console.log(steve(new Person("Steve")).sayHello());
 console.log(new Person("Joe").make_house(new Person("Mike")).person.name);
 console.log(new Person("Mike").make_house(new Person("Joe")).person.name);
 console.log(new Person("Joe").getHouse().person.name);

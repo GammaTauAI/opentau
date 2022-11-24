@@ -76,8 +76,6 @@ export const printSource = (
             (declaration.initializer.kind === ts.SyntaxKind.ArrowFunction ||
               declaration.initializer.kind === ts.SyntaxKind.FunctionExpression)
           ) {
-            console.error("function expression");
-            console.error(declaration.initializer.getText(sourceFile));
             // get the arguments
             const arrowFunction = // same as function expression
               declaration.initializer as ts.ArrowFunction;
