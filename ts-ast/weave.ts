@@ -34,7 +34,7 @@ export const weavePrograms = (
 ): string => {
   const sourceFile = original.getSourceFile(originalPath)!;
   const nettleFile = nettle.getSourceFile(nettlePath)!;
-  const originalChecker = original.getTypeChecker();
+  original.getTypeChecker();
   const nettleChecker = nettle.getTypeChecker();
 
   // we want a map of identifier names to types, such that we can transplant
@@ -45,7 +45,18 @@ export const weavePrograms = (
     if (node.kind === ts.SyntaxKind.VariableDeclaration) {
       const varDec = node as ts.VariableDeclaration;
       // if name is not a ident, skip
-      if (varDec.name.kind === ts.SyntaxKind.Identifier) {
+      // NOTE: we have to be careful, we want to ignore variable decls
+      // that are inside a for (let x of y) loop, because those
+      // cannot be type annotated.
+      // we can do this by checking if the parent of the parent is a for of statement
+      if (
+        varDec.name.kind === ts.SyntaxKind.Identifier &&
+        !(
+          node.parent && // we do the check noted above
+          node.parent.parent &&
+          node.parent.parent.kind === ts.SyntaxKind.ForOfStatement
+        )
+      ) {
         const type = nettleChecker.getTypeAtLocation(varDec);
         const name = varDec.name.getText();
         typeMap.set(scope + name, nettleChecker.typeToTypeNode(type)!);
