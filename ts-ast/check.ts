@@ -33,7 +33,7 @@ export const checkCompleted = (
   let score = 0;
   // checks completed types and scores them
   completed.forEachChild((child) => {
-    typeTraversal(child, (ty) => {
+    typeTraversal(child, (ty, _) => {
       // means codex removed the type
       if (!ty) {
         isCompleted = false;
