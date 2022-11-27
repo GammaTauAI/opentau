@@ -3,6 +3,7 @@ use std::sync::Arc;
 use codex_types::{
     cache::Cache,
     codex::{CodexClient, CodexClientBuilder, CodexError, Completion, CompletionQuery},
+    debug,
     langserver::{py::PyServer, ts::TsServer, LangServer},
     tree::{CompletionLevels, TreeCompletion},
 };
@@ -209,7 +210,7 @@ impl MainCtx {
         let mut comps: Vec<Completion> = vec![];
         let mut handles: Vec<JoinHandle<Option<Completion>>> = vec![];
         for (i, candidate) in candidates.into_iter().enumerate() {
-            println!("candidate {}:\n{}", i, candidate.code);
+            debug!("candidate {}:\n{}", i, candidate.code);
             let lang_client = self.codex.get_ls();
             handles.push(tokio::task::spawn(async move {
                 let type_checks = lang_client.type_check(&candidate.code).await.unwrap();
@@ -287,7 +288,7 @@ impl MainCtx {
             .await
             .unwrap();
 
-        println!("pretty:\n{}", printed);
+        debug!("pretty:\n{}", printed);
 
         let query = CompletionQuery::new(printed, self.num_comps, self.retries, self.fallback);
 

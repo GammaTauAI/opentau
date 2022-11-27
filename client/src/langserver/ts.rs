@@ -3,7 +3,7 @@ use std::process::Stdio;
 use async_trait::async_trait;
 use tokio::io::AsyncBufReadExt;
 
-use crate::tree::CodeBlockTree;
+use crate::{debug, tree::CodeBlockTree};
 
 use super::{
     abstraction::SocketAbstraction, LSCheckReq, LSPrintReq, LSReq, LSUsagesReq, LSWeaveReq,
@@ -21,7 +21,7 @@ impl LangServer for TsServer {
         let pid = std::process::id();
         let tmp_dir = std::env::temp_dir();
         let tmp_socket_file = tmp_dir.join(format!("codex-{}.sock", pid));
-        println!("tmp_socket_file: {:?}", tmp_socket_file);
+        debug!("tmp_socket_file: {:?}", tmp_socket_file);
 
         let mut process = match tokio::process::Command::new("npm")
             .args([
@@ -44,16 +44,16 @@ impl LangServer for TsServer {
             let stdout = process.stdout.as_mut().unwrap();
             let reader = tokio::io::BufReader::new(stdout);
             let mut lines = reader.lines();
-            println!("client output:");
+            debug!("client output:");
             while let Some(line) = lines.next_line().await.unwrap() {
-                println!("{}", line);
+                debug!("{}", line);
                 if line.contains("Listening") {
                     break;
                 }
             }
         }
 
-        println!("client ready to connect to socket!");
+        debug!("client ready to connect to socket!");
         let socket_path = tmp_socket_file.to_str().unwrap().to_string();
         let socket = SocketAbstraction {
             socket_path,
