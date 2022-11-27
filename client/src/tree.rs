@@ -427,12 +427,12 @@ impl TreeCompletion for CompletionLevels {
                                             debug!("level comp: \n{}", comp.code);
                                             let rewoven =
                                                 ls.weave(prompt, &comp.code, 0).await.unwrap();
-                                            println!("type-woven completion: \n{}", rewoven);
+                                            debug!("type-woven completion: \n{}", rewoven);
                                             new_comps.insert(rewoven);
                                         }
                                     }
                                     None => {
-                                        println!(
+                                        debug!(
                                             "Failed to get completions for query, skipping prompt.",
                                         );
                                     }
