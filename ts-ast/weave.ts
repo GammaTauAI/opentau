@@ -24,7 +24,11 @@ export const resolveType = (
   typeChecker: ts.TypeChecker
 ): ts.TypeNode => {
   const type = typeChecker.getTypeAtLocation(node);
-  const inferredTypeNode = typeChecker.typeToTypeNode(type)!;
+  const inferredTypeNode = typeChecker.typeToTypeNode(type);
+  if (!inferredTypeNode) {
+    // fallback to any...
+    return ts.createTypeReferenceNode("any", []);
+  }
   if (ts.isFunctionTypeNode(inferredTypeNode)) {
     if (ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node)) {
       if (
