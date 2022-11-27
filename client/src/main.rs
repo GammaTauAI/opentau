@@ -258,7 +258,10 @@ impl MainCtx {
         for code in root.completed {
             let ls = self.codex.get_ls();
             handles.push(tokio::task::spawn(async move {
-                let (_, score) = ls.check_complete(&code, &code).await.unwrap();
+                let (_, score) = ls
+                    .check_complete(&code, &code)
+                    .await
+                    .unwrap_or((false, 9999999999999));
                 Completion {
                     code,
                     score,

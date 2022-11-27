@@ -425,10 +425,11 @@ impl TreeCompletion for CompletionLevels {
                                     Some(comps) => {
                                         for comp in comps {
                                             debug!("level comp: \n{}", comp.code);
-                                            let rewoven =
-                                                ls.weave(prompt, &comp.code, 0).await.unwrap();
-                                            debug!("type-woven completion: \n{}", rewoven);
-                                            new_comps.insert(rewoven);
+                                            let rewoven = ls.weave(prompt, &comp.code, 0).await;
+                                            if let Ok(rewoven) = rewoven {
+                                                debug!("type-woven completion: \n{}", rewoven);
+                                                new_comps.insert(rewoven);
+                                            }
                                         }
                                     }
                                     None => {
