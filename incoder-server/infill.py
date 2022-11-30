@@ -12,7 +12,7 @@ from utils import (
 from typing import List, Set, Tuple
 
 # set BIG_MODEL to use the 6.7B parameter model
-BIG_MODEL = False
+BIG_MODEL = True
 
 # use a GPU
 CUDA = torch.cuda.is_available()
