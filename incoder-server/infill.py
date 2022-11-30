@@ -18,7 +18,7 @@ BIG_MODEL = False
 CUDA = torch.cuda.is_available()
 
 # infill max length allowed
-MAX_TO_GENERATE = 5
+MAX_TO_GENERATE = 1
 
 if BIG_MODEL:
     model_name = "facebook/incoder-6B"
