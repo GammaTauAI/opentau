@@ -26,6 +26,7 @@ class IncoderServer(BaseHTTPRequestHandler):
         # call model
         res = infill(
             input=body["input"],
+            n=body["n"],
             temperature=body["temperature"],
         )
 
