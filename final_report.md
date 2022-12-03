@@ -9,16 +9,17 @@ output: pdf_document
 \newpage
 
 # Abstract
-Type inference for gradually-typed languages such as TypeScript and Python has become increasingly prevalent in the field of programming languages. However, current approaches often struggle with inferring descriptive types in cases in which user-defined type annotations are absent, especially when inferring function signatures. In our dataset, we found that TypeScript's inference procedure was only able to correctly type-infer 59% of the given files. Furthermore, we found that the quality of the type annotations were permissive, which may lead to an increased number of dynamic type errors, which makes the procedure ineffective in practice. In this report, we show an effective use of large natural language models to aid these type inference procedures. Our approach utilizes static insertion of type holes to generate a prompt to be edited by a language model. Our paper mainly uses Codex's *code-davinci-edit* model for TypeScript type inference. Additionally, we also explore other languages such as Python and other language models such as Facebook's *InCoder* model. Across our dataset, we were able to type-infer 91% of the files with descriptive, high quality type annotations.
+
+Type inference for gradually-typed languages such as TypeScript and Python has become increasingly prevalent in the field of programming languages. However, current approaches often struggle with inferring descriptive types in cases in which user-defined type annotations are absent, especially when inferring function signatures. In our dataset, we found that TypeScript's inference procedure was only able to correctly type-infer 59% of the given files. Furthermore, we found that the quality of the type annotations were permissive, which may lead to an increased number of dynamic type errors, which makes the procedure ineffective in practice. In this report, we show an effective use of large natural language models to aid these type inference procedures. Our approach utilizes static insertion of type holes to generate a prompt to be edited by a language model. Our paper mainly uses Codex's _code-davinci-edit_ model for TypeScript type inference. Additionally, we also explore other languages such as Python and other language models such as Facebook's _InCoder_ model. Across our dataset, we were able to type-infer 91% of the files with descriptive, high quality type annotations.
 
 \newpage
 
 # Introduction
 
-
 ### Motivating Example and Problem
 
 Given this untyped file,
+
 ```ts
 const kClosest = (points, K) => {
   let len = points.length,
@@ -37,11 +38,16 @@ const kClosest = (points, K) => {
 }
 
 function helper(A, l, r) {
-  ...
+  ... // omitted for length (uses compare on an element of A)
+}
+
+function compare(p1, p2) {
+    return p1[0] * p1[0] + p1[1] * p1[1] - p2[0] * p2[0] - p2[1] * p2[1];
 }
 ```
 
 TypeScript's inference procedure gives this completion:
+
 ```ts
 const kClosest: (
   points: any,
@@ -52,24 +58,18 @@ const kClosest: (
     r: number = len - 1;
   while (l <= r) {
     let mid: any = helper(points, l, r);
-    if (mid === K) break;
-    if (mid < K) {
-      l = mid + 1;
-    } else {
-      r = mid - 1;
-    }
+    ... // omitted for length
   }
-  return points.slice(0, K);
 };
 
-function helper(A: any, l: any, r: any): any {
-  ...
-}
+function helper(A: any, l: any, r: any): any;
+
+function compare(p1: any, p2: any): number;
 ```
 
 While the completion from TypeScript's inference procedure may successfully type check, it is important to note the overuse of the `any` type annotation. For example, note the `any` annotation for the `points` parameter. On the first line of the function, `points.length` is being accessed. Given the context, it would seem rational to type-annotate `points` with `any[]`. However, consider the case that the `kClosest` function is given `{ length: 3 }` as the `points` argument. Clearly, `{ length: 3 }` is not an `any[]`. However, a deterministic type inference procedure must consider this case. Therefore, annotating the `points` argument with `any` is the most rational decision in this case. This problem motivates the use of a probabilistic approach to overcome similar cases.
 
-For a simple approach, we could feed the program to a natural language model that is able to make edits on the prompt. We would instruct the model to insert type annotations on the given untyped TypeScript program. The model would output a set of completions that *may* be type-annotated. Then, we would need a way to validate the given completions to find correctly annotated programs.
+For a simple approach, we could feed the program to a natural language model that is able to make edits on the prompt. We would instruct the model to insert type annotations on the given untyped TypeScript program. The model would output a set of completions that _may_ be type-annotated. Then, we would need a way to validate the given completions to find correctly annotated programs.
 
 ### Simple Implementation
 
@@ -84,12 +84,35 @@ We have employed the approach described above in the following manner:
 - 6. Using the command: `tsc --allowJs --checkJs --noEmit --target es2022 <file.ts>` we run a full type-check on every completion in $\mathcal{Q}$, terminating as soon as the command returns code `0`, meaning that the completion is type-correct. By terminating early on the sorted set, we guarantee that our solution is optimal with respect to $\mathcal{Q}$. We let $c^*$ be the optimal type-correct solution.
 - 7. We produce $c^*$ if it exists, otherwise we produce an error.
 
-However, this approach does not scale for large input sizes, such as larger functions or files for several reasons. First, the Codex model has a maximum input token limit of 2048 tokens. Second, the quality of the infilled type annotations declines as the size of the completion context increases. 
+Using this strategy, we were able to type-infer our motivating example as such:
+
+```ts
+const kClosest: (
+  points: [number, number][],
+  K: number
+) => [number, number][] = (points, K) => {
+  let len: number = points.length,
+    l: number = 0,
+    r: number = len - 1;
+  while (l <= r) {
+    let mid: number = helper(points, l, r);
+    ... // omitted for length
+  }
+};
+
+function helper(A: [number, number][], l: number, r: number): number;
+
+function compare(p1: [number, number], p2: [number, number]): number;
+```
+
+We believe that these types are as descriptive as they can get. The `compare` function ever only accesses the first two elements of `p1` and `p2`, therefore a pair type is a good choice.
+
+However, this approach does not scale for large input sizes, such as larger functions or files for several reasons. First, the Codex model has a maximum input token limit of 2048 tokens. Second, the quality of the infilled type annotations declines as the size of the completion context increases.
 
 ### Scalable Prompt Engineering Implementation
 
 An obvious approach to solve this problem is to simply split the original program into chunks, which are then sent to the Codex model. Then, these completed chunks would be reassembled to compose a set of candidate completions. A systematic way of chunking the original program is to create a tree of code blocks in which each level represents an inner scope of the level above. Given this approach, it is important to note that we lose context of other code blocks that may be referenced in the current code block. To alleviate this problem, we include signatures of the child scopes in the current scope. Additionally, we include usages of identifiers that defined in the current scope and are used in other scopes. Our step-by-step algorithm is explained below:
- 
+
 - 1. We create a tree of nested code-blocks $T$ in our JavaScript program. Where the top-level is the root of the tree and each function, class or method has a node below the parent block. The node of the tree is identified by $\text{id-}\alpha$, the $\alpha$-renamed name of the function/class/method. The root node id is defined as $\text{id-}\alpha = root$.
 - 2. For each $\text{id-}\alpha$, we find usages of the identifier and we save them in the node for prompt-engineering purposes.
 - 3. We start traversing the tree using a bottom-up traversal, starting from the leaves. We process each level in parallel. To each node we apply the steps described below:
@@ -365,21 +388,13 @@ We randomly picked 100 files from a dataset composed of 1934 small to medium-siz
 
 We employed a best-of-3 evaluation approach in which we ran each configuration of our client three times and saved the best outcome. We run both the simple and tree strategy with Codex using temperatures of 0.8 and 1.0. We also test InCoder using the tree strategy with temperatures of 0.8 and 1.0. The results are shown in **Figure 0** below.
 
-
 ![Figure 0: The columns of the bar graph are labeled as <model>-<strategy>-<temperature index> where 0 is a temperature of 1.0 and 1 is 0.8.](./assets/successes_per_config.png)
 
-
 # TODO:
-  - We forgot to show results of our motivating example
-  - Analyze results (expectation, reflection) (Noah)
-    - incoder bad
-  - Protocol (Federico)
-  - Bar graph for accuracy of strategy vs lines of code (Noah)
-  - Python evaluation (Noah)
-  - Future directions and discussion (Federico)
 
-
-  
-
-
-
+- Analyze results (expectation, reflection) (Noah)
+  - incoder bad
+- Protocol (Federico)
+- Bar graph for accuracy of strategy vs lines of code (Noah)
+- Python evaluation (Noah)
+- Future directions and discussion (Federico)
