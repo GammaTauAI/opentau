@@ -370,6 +370,7 @@ We employed a best-of-3 evaluation approach in which we ran each configuration o
 
 
 # TODO:
+  - We forgot to show results of our motivating example
   - Analyze results (expectation, reflection) (Noah)
     - incoder bad
   - Protocol (Federico)
