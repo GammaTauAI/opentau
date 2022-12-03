@@ -394,6 +394,7 @@ We employed a best-of-3 evaluation approach in which we ran each configuration o
 
 - Analyze results (expectation, reflection) (Noah)
   - incoder bad
+  - talk about quality metric
 - Protocol (Federico)
 - Bar graph for accuracy of strategy vs lines of code (Noah)
 - Python evaluation (Noah)
