@@ -368,3 +368,17 @@ We employed a best-of-3 evaluation approach in which we ran each configuration o
 
 ![Figure 0: The columns of the bar graph are labeled as <model>-<strategy>-<temperature index> where 0 is a temperature of 1.0 and 1 is 0.8.](./assets/successes_per_config.png)
 
+
+# TODO:
+  - Analyze results (expectation, reflection) (Noah)
+    - incoder bad
+  - Protocol (Federico)
+  - Bar graph for accuracy of strategy vs lines of code (Noah)
+  - Python evaluation (Noah)
+  - Future directions and discussion (Federico)
+
+
+  
+
+
+
