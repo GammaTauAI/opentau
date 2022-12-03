@@ -39,6 +39,12 @@ elif sys.argv[2] == "usages":
         "text": base64.b64encode(data).decode("utf-8"),
         "innerBlock": base64.b64encode(open(sys.argv[4], "rb").read()).decode("utf-8"),
     }
+elif sys.argv[2] == "print":
+    msg = {
+        "cmd": sys.argv[2],
+        "text": base64.b64encode(data).decode("utf-8"),
+        "typeName": sys.argv[4] if len(sys.argv) > 4 else "_hole_"
+    }
 else:
     msg = {
         "cmd": sys.argv[2],
