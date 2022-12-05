@@ -331,10 +331,10 @@ One limitation with using Codex is the max request limit of 20 requests per minu
 
 The InCoder model query system was implemented as a simple HTTP server that evaluates the
 InCoder model $M$ and receives an untyped input and several hyperparameters from the language
-server and returns a list of `type infills`. Then, the `type infills` are inserted into the
+server and returns a list of type infills. Then, the type infills are inserted into the
 original untyped code to yield the final completion. The pipeline is shown below:
 
-Given the following prompt $\mathcal{P}$: we have the untyped `input`
+Given the following prompt $\mathcal{P}$: we have the untyped input
 
 ```ts
 function hello(name: _hole_): _hole_ {
@@ -343,7 +343,7 @@ function hello(name: _hole_): _hole_ {
 }
 ```
 
-and the hyperparameters `max_to_generate=5`, `temperature=0.8`, and `max_retries=1` in a POST request, the server will split the `input` by the fake type, `_hole_` to yield the following list:
+and the hyperparameters `max_to_generate=5`, `temperature=0.8`, and `max_retries=1` in a POST request, the server will split the input by the fake type, `_hole_` to yield the following list:
 
 ```ts
 parts_list = [
