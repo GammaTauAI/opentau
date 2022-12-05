@@ -390,11 +390,11 @@ In production, we execute the InCoder model on NVIDIA A100 GPUs using Northeaste
 
 # Dataset, Evaluation and Results
 
-#### Dataset
+### Dataset
 
 We randomly picked 100 files from a dataset composed of 1934 small to medium-sized JavaScript Leetcode solutions. First, we converted the JavaScript files to TypeScript files and then manually validated every file to ensure that there exists a type checkable solution. This includes linting the untyped files and scanning for logical errors.
 
-#### Evaluation
+### Evaluation
 
 We employed a best-of-3 evaluation approach in which we ran each configuration of our client three times and saved the best outcome. We run both the simple and tree strategy with Codex using temperatures of 0.8 and 1.0. We also test InCoder using the tree strategy with temperatures of 0.8 and 1.0. The results are shown in **Figure 1** below.
 
