@@ -408,7 +408,7 @@ Using a combination of prompt engineering and Codex's `code-davinci-edit` model,
 
 ### Future Directions
 
-One limitation of our approach is the reliance on a commercial product, Codex, which may render our approach expensive and infeasible for an individual or a small research group to use. However, our work also explored the use of an open-source language model, `InCoder`, as a replacement for Codex. While the results from `InCoder` were not as good as those from Codex, with further fine-tuning, the model could be used as an effective replacement for Codex, allowing our approach to be used by individuals and small research groups. Additionally, thanks to our protocol, our approach could be extended to other programming languages, such as Rust and Java, by training a language model on the task of type inference for these languages.
+One limitation of our approach is the reliance on a commercial product, Codex, which may render our approach expensive and infeasible for an individual or a small research group to use. However, our work also explored the use of an open-source language model, `InCoder`, as a replacement for Codex. While the results from `InCoder` were not as good as those from Codex, with further fine-tuning, the model could be used as an effective replacement for Codex, allowing our approach to be used by individuals and small research groups. Additionally, thanks to our language server protocol, our approach could be extended to other programming languages, such as Rust and Java, by training a language model on the task of type inference for these languages.
 
 # TODO:
 
