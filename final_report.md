@@ -400,6 +400,16 @@ We employed a best-of-3 evaluation approach in which we ran each configuration o
 
 ![The columns of the bar graph are labeled as *model*-*strategy*-*temperature index* where 0 is a temperature of 1.0 and 1 is 0.8.](./assets/successes_per_config.png){ width=550px }
 
+# Discussion and Future Directions
+
+### Discussion
+
+Using a combination of prompt engineering and Codex's `code-davinci-edit` model, we were able to effectively type-infer a medium-sized dataset of TypeScript files. Across all of our experimental dataset, we were able to type-infer 91% of the files with descriptive, high quality type annotations. Furthermore, we were able to observe a significant improvement in the quality of the type annotations, as the types were more descriptive and restrictive than the type annotations inferred by TypeScript's built-in type inference procedure. Additionally, we explored other languages such as Python and other language models such as Facebook's `InCoder` model. We found that the results from `InCoder` were significantly worse than those from Codex, likely due to the model not being trained on typed code.
+
+### Future Directions
+
+One limitation of our approach is the reliance on a commercial product, Codex, which may render our approach expensive and infeasible for an individual or a small research group to use. However, our work also explored the use of an open-source language model, `InCoder`, as a replacement for Codex. While the results from `InCoder` were not as good as those from Codex, with further fine-tuning, the model could be used as an effective replacement for Codex, allowing our approach to be used by individuals and small research groups. Additionally, thanks to our protocol, our approach could be extended to other programming languages, such as Rust and Java, by training a language model on the task of type inference for these languages.
+
 # TODO:
 
 - Analyze results (expectation, reflection) (Noah)
@@ -407,4 +417,3 @@ We employed a best-of-3 evaluation approach in which we ran each configuration o
   - talk about quality metric
 - Bar graph for accuracy of strategy vs lines of code (Noah)
 - Python evaluation (Noah)
-- Future directions and discussion (Federico)
