@@ -321,9 +321,12 @@ We have developed a protocol similar to Microsoft's LSP, that allows to generali
 for any language server that implements $\mathcal{K}$, $h$, $\mathcal{W}$ and the tree generation procedure. The protocol expects communication using
 JSON over Unix domain sockets. A client for the protocol is implemented in the Rust client described above.
 Adding a new server for the protocol is as simple as implementing the `LangServer` trait in the Rust client.
+The flow of information using the protocol is described in **Figure 1**.
 The server needs to be designed with concurrent requests in mind as the `tree` strategy queries each node of the current
 level of the tree in parallel.
 Our TypeScript and Python language servers implement such protocol.
+
+![Diagram of information flow using our protocol. The numbers in red represent the step.](./assets/pipeline.png){ width=400px }
 
 ### Building Our Own Codex
 
@@ -396,7 +399,7 @@ We randomly picked 100 files from a dataset composed of 1934 small to medium-siz
 
 ### Evaluation
 
-We employed a best-of-3 evaluation approach in which we ran each configuration of our client three times and saved the best outcome. We run both the simple and tree strategy with Codex using temperatures of 0.8 and 1.0. We also test InCoder using the tree strategy with temperatures of 0.8 and 1.0. The results are shown in **Figure 1** below.
+We employed a best-of-3 evaluation approach in which we ran each configuration of our client three times and saved the best outcome. We run both the simple and tree strategy with Codex using temperatures of 0.8 and 1.0. We also test InCoder using the tree strategy with temperatures of 0.8 and 1.0. The results are shown in **Figure 2** below.
 
 ![The columns of the bar graph are labeled as *model*-*strategy*-*temperature index* where 0 is a temperature of 1.0 and 1 is 0.8.](./assets/successes_per_config.png){ width=550px }
 
