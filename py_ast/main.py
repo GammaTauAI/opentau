@@ -19,7 +19,7 @@ from typing import Any, Union
 
 
 if len(sys.argv) != 4:
-    print(f'usage: [path to socket] [pid of rust proc]')
+    print(f'usage: [path to socket] [server addr] [pid of rust proc]')
     sys.exit(1)
 
 SERVER_ADDR = sys.argv[2]
@@ -37,14 +37,6 @@ rust_pid = int(sys.argv[3])
 
 s = sched.scheduler(time.time, time.sleep)
 
-# periodically check rust proc
-def run_func(sc):
-    is_pid_running(rust_pid)
-    sc.enter(3, 1, run_func, (sc,))
-
-s.enter(3, 1, run_func, (s,))
-s.run()
-
 # determines if rust proc is still running
 def is_pid_running(pid: int) -> bool:
     try:
@@ -53,6 +45,14 @@ def is_pid_running(pid: int) -> bool:
         return False
     else:
         return True
+
+# periodically check rust proc
+def run_func(sc):
+    is_pid_running(rust_pid)
+    sc.enter(3, 1, run_func, (sc,))
+
+s.enter(3, 1, run_func, (s,))
+s.run()
 
 # used to store and close all sockets before exit
 class SocketManager:
@@ -108,14 +108,12 @@ def handle_check(decoded_text: str, req: Any) -> str:
     decoded_original = str(base64.b64decode(req.original))
     original_file = gen_source_file(decoded_original)
     completed_file = gen_source_file(decoded_text)
-    assert isinstance(original_file, ast.AST)
-    assert isinstance(completed_file, ast.AST)
+    assert isinstance(original_file, RedBaron)
+    assert isinstance(completed_file, RedBaron)
     # FIXME: fix type return
     text, score = check_completed(
         original_ast=original_file,
         completed_ast=completed_file,
-        original_str=decoded_original,
-        completed_str=decoded_text,
     )
     return json.dumps({"type": "checkResponse", "text": text, "score": score})
 

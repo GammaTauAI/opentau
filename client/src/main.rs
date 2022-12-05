@@ -89,7 +89,7 @@ impl Args {
                 let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                     .parent()
                     .unwrap()
-                    .join("py-ast")
+                    .join("py-ast/main.py")
                     .to_str()
                     .unwrap()
                     .to_string();
@@ -194,6 +194,7 @@ impl MainCtx {
     /// Runs the simple completion strategy, which just runs the completion on the given file
     /// without any transformation, other than adding "_hole_" to each unknwon type
     async fn simple_strategy(self) -> Vec<Completion> {
+        println!("{}", &self.file_contents);
         let printed = self
             .codex
             .lang_server

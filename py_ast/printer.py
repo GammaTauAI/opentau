@@ -32,7 +32,9 @@ def _handle_source(source: RedBaron) -> None:
 
 def print_source(source_file: RedBaron) -> str:
     _handle_source(source_file)
-    return source_file.dumps()
+    out = source_file.dumps()
+    print(out)
+    return out
 
 
 """ TEST

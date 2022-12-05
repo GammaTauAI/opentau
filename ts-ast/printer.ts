@@ -69,5 +69,6 @@ export const printSource = (
   });
 
   // Print the new code
+  console.log("\n\nhere\n\n");
   return codePrinter.printFile(sourceFile);
 };

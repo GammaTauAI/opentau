@@ -74,12 +74,12 @@ def check_completed(original_ast: RedBaron, completed_ast: RedBaron) -> Tuple[bo
     return original_count == completed_count, score
 
 
-"""
+""" Test
 if __name__ == '__main__':
     with open('./__example.py', 'r') as f_orig:
         original_ast = RedBaron(f_orig.read())
     with open('./__example_typed.py', 'r') as f_comp:
         completed_ast = RedBaron(f_comp.read())
     status, score = check_completed(original_ast, completed_ast)
-    # print(status, score)
+    print(status, score)
 """

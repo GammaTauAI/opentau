@@ -21,11 +21,11 @@ impl LangServer for PyServer {
         let pid = std::process::id();
         let tmp_dir = std::env::temp_dir();
         let tmp_socket_file = tmp_dir.join(format!("codex-{}.sock", pid));
-        println!("tmp_socket_file: {:?}", tmp_socket_file);
 
         let mut process = match tokio::process::Command::new("python")
             .args([
                 server_path,
+                "8000",
                 tmp_socket_file.to_str().unwrap(),
                 pid.to_string().as_str(),
             ])
@@ -46,6 +46,7 @@ impl LangServer for PyServer {
             while let Some(line) = lines.next_line().await.unwrap() {
                 println!("{}", line);
                 if line.contains("Listening") {
+                    println!("HERE");
                     break;
                 }
             }
@@ -60,6 +61,7 @@ impl LangServer for PyServer {
     }
 
     async fn pretty_print(&self, code: &str, type_name: &str) -> Result<String, LangServerError> {
+        println!("in langserver {}", code);
         let req = LSPrintReq {
             cmd: "print".to_string(),
             text: base64::encode(code),

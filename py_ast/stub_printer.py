@@ -33,7 +33,7 @@ def handle_cutoff_err(s: str) -> str:
 
 """ TEST
 if __name__ == '__main__':
-    with open('./temp.py', 'r') as f:
+    with open('./__example.py', 'r') as f:
         res = stub_source(ast.parse(f.read()))
         print(res)
 """
