@@ -318,10 +318,10 @@ Type-correct solutions will be written to the specified directory.
 #### Language Server Protocol
 
 We have developed a protocol similar to Microsoft's LSP, that allows to generalize our type inference strategies
-for any language server that implements $\mathcal{K}$, $h$, $\mathcal{W}$ and $M$. The protocol communicates using
+for any language server that implements $\mathcal{K}$, $h$, $\mathcal{W}$ and $M$. The protocol expects communication using
 JSON over Unix domain sockets. A client for the protocol is implemented in the Rust client described above.
 Adding a new server for the protocol is as simple as implementing the `LangServer` trait in the Rust client.
-The protocol server needs to allow concurrent requests as the `tree` strategy queries each node of the current
+The server needs to be designed with concurrent requests in mind as the `tree` strategy queries each node of the current
 level of the tree in parallel.
 Our TypeScript and Python language servers implement such protocol.
 
