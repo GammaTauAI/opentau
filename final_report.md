@@ -69,6 +69,8 @@ While the completion from TypeScript's inference procedure may successfully type
 
 As an initial approach, we could try feeding the program to a natural language model that is able to make edits on the prompt. We would instruct the model to insert type annotations on the given untyped TypeScript program. The model would then output a set of completions that _may_ type-check. Then, we would run type-checks on each completion to find ones that pass the checks.
 
+# Implementation
+
 ### Simple Implementation
 
 We have employed the approach described above in the following manner:
@@ -190,7 +192,7 @@ Additionally, $h$ checks if the model didn't add anything other than just types 
 
 #### Initial Tree Generation
 
-We have implemented a procedure that generates a code-block tree from a given program.
+We have implemented a procedure $M$ that generates a code-block tree from a given program.
 
 For instance, given this input:
 
@@ -313,6 +315,16 @@ OPTIONS:
 
 Type-correct solutions will be written to the specified directory.
 
+#### Language Server Protocol
+
+We have developed a protocol similar to Microsoft's LSP, that allows to generalize our type inference strategies
+for any language server that implements $\mathcal{K}$, $h$, $\mathcal{W}$ and $M$. The protocol communicates using
+JSON over Unix domain sockets. A client for the protocol is implemented in the Rust client described above.
+Adding a new server for the protocol is as simple as implementing the `LangServer` trait in the Rust client.
+The protocol server needs to allow concurrent requests as the `tree` strategy queries each node of the current
+level of the tree in parallel.
+Our TypeScript and Python language servers implement such protocol.
+
 ### Building Our Own Codex
 
 One limitation with using Codex is the max request limit of 20 requests per minute. To solve this issue, we tried to utilize a different model that we could self host. We decided to use Facebook's InCoder model as it was the only other model that is trained to provide prompt edit completions on code.
@@ -376,7 +388,7 @@ This API mimics the Codex API in order to be an effective drop-in replacement, a
 
 In production, we execute the InCoder model on NVIDIA A100 GPUs using Northeastern's Discovery Cluster.
 
-### Results
+# Dataset, Evaluation and Results
 
 #### Dataset
 
@@ -393,7 +405,6 @@ We employed a best-of-3 evaluation approach in which we ran each configuration o
 - Analyze results (expectation, reflection) (Noah)
   - incoder bad
   - talk about quality metric
-- Protocol (Federico)
 - Bar graph for accuracy of strategy vs lines of code (Noah)
 - Python evaluation (Noah)
 - Future directions and discussion (Federico)
