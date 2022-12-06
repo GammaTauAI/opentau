@@ -15,7 +15,8 @@
   - `ts-node`
   - `tsc`
 - Python inference requirements:
-  - `mypy` | `pyright`
+  - `mypy` | `pyright` for static type checking
+  - `redbaron` for AST parsing with comments
 
 
 ## Installation
