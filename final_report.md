@@ -154,13 +154,16 @@ function hello(name: string): _hole_ {
 
 #### Completion Validation Heuristic
 
-We have implemented our heuristic $h$. The heuristic traverses the program's abstract syntax tree identifying different types, which will be scored. Some types terminate the heuristic early and denote that the program cannot possibly be correct. The scores are summed to compose $q$ using the following table:
+We have implemented our heuristic $h$. The heuristic traverses the program's abstract syntax tree identifying different types, which will be scored.
+Some types terminate the heuristic early and denote that the program cannot possibly be correct.
+The heuristic is used as a preliminary check before a full type-check is performed, as it is significantly less expensive to compute.
+The scores are summed to compose $q$ using the following table:
 
 | Type                                     | Score | Correct          |
 | ---------------------------------------- | ----- | ---------------- |
-| _missing_ (example: `let x = 1`)         | +0    | False, terminate |
-| _literal type_ (example: `let x: 3 = 1`) | +0    | False, terminate |
-| `_hole_`                                 | +0    | False, terminate |
+| _missing_ (example: `let x = 1`)         | N/A   | False, terminate |
+| _literal type_ (example: `let x: 3 = 1`) | N/A   | False, terminate |
+| `_hole_`                                 | N/A   | False, terminate |
 | `unknown`                                | +10   | True, continue   |
 | `any`                                    | +5    | True, continue   |
 | `undefined`                              | +2    | True, continue   |
@@ -188,7 +191,7 @@ function hello(name: string): _hole_ {
 
 $h$ will terminate early and output $(\text{False}, 0)$, as the presence of one `_hole_` type terminates the heuristic early.
 
-Additionally, $h$ checks if the model didn't add anything other than just types (such as additonal code blocks and comments) to the original prompt. If that condition isn't met, $(\text{False}, 0)$ will be produced.
+Additionally, $h$ checks if the model didn't add anything other than just types (such as additional code blocks and comments) to the original prompt. If that condition isn't met, $(\text{False}, 0)$ will be produced.
 
 #### Initial Tree Generation
 
@@ -416,5 +419,6 @@ Using a combination of prompt engineering and Codex's `code-davinci-edit` model,
 In future work, we plan to expand our prompt engineering approach to include additional static analysis techniques in order to add context. For example, we could find free variables in inner scopes and include them in the outer scope, in order to show dependency. One limitation of our approach is the reliance on a commercial product, Codex, which may render our approach expensive and infeasible for an individual or a small research group to use. While the results from `InCoder` were not as good as those from Codex, with further fine-tuning and more precise prompt engineering, the model could be used as an effective replacement for Codex, allowing our approach to be used by individuals and small research groups. Additionally, thanks to our language server protocol, our approach could be extended to other programming languages, such as Rust and Java, by training a language model on the task of type inference for these languages. Additionally, we plan to explore more language models and techniques to improve the accuracy of the type inference procedure. We believe that our approach has the potential to improve type inference in gradually-typed languages, and we hope that our work will lead to more robust and accurate type inference procedures in the future.
 
 # TODO:
+
 - Bar graph for accuracy of strategy vs lines of code (Noah)
 - Python evaluation (Noah)
