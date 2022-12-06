@@ -420,5 +420,4 @@ In future work, we plan to expand our prompt engineering approach to include add
 
 # TODO:
 
-- Bar graph for accuracy of strategy vs lines of code (Noah)
-- Python evaluation (Noah)
+  - Python evaluation (Noah)
