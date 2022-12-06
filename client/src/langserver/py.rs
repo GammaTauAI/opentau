@@ -44,7 +44,7 @@ impl LangServer for PyServer {
             let mut lines = reader.lines();
             println!("client output:");
             while let Some(line) = lines.next_line().await.unwrap() {
-                println!("{}", line);
+                println!("here {}", line);
                 if line.contains("Listening") {
                     println!("HERE");
                     break;
