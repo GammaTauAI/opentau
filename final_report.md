@@ -1,7 +1,7 @@
 ---
 title: "Using OpenAI Codex for Gradual Type Inference"
 subtitle: "Final Report"
-author: Federico Cassano, Noah Shinn
+author: Federico Cassano and Noah Shinn
 geometry: "left=3cm,right=3cm,top=3cm,bottom=3cm"
 output: pdf_document
 ---
