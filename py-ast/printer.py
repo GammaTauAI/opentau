@@ -22,18 +22,18 @@ def _handle_assignment(a) -> None:
         and a.annotation is None:
         a.annotation = _FAKE_TYPE
 
-def _handle_source(source: RedBaron) -> None:
+def _handle_source(source: RedBaron, handle_assignments: bool) -> None:
     funcs = source.find_all('DefNode')
     assignments = source.find_all('AssignmentNode')
     for func in funcs:
         _handle_func(func)
-    for a in assignments:
-        _handle_assignment(a)
+    if handle_assignments:
+        for a in assignments:
+            _handle_assignment(a)
 
-def print_source(source_file: RedBaron) -> str:
-    _handle_source(source_file)
+def print_source(source_file: RedBaron, handle_assignments: bool = False) -> str:
+    _handle_source(source_file, handle_assignments)
     out = source_file.dumps()
-    print(out)
     return out
 
 
