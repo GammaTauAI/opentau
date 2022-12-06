@@ -3,9 +3,8 @@ use std::sync::Arc;
 use codex_types::{
     codex::CodexClientBuilder,
     langserver::{ts::TsServer, LangServer},
-    tree::NaiveCompletionLevels,
+    tree::{CompletionLevels, NaiveCompletionLevels, TreeCompletion},
 };
-use tokio::sync::Mutex;
 
 #[tokio::main]
 async fn main() {
@@ -25,7 +24,7 @@ async fn main() {
         .unwrap()
         .to_string();
 
-    let lang_server = Arc::new(Mutex::new(TsServer::make(&client_path).await.unwrap()));
+    let lang_server = Arc::new(TsServer::make(&client_path).await.unwrap());
     let codex = CodexClientBuilder::new(vec![token], lang_server).build();
 
     // {
@@ -45,17 +44,33 @@ async fn main() {
     // }
     // }
 
-    // testing out "tree"
+    // testing out "naive tree"
+    // {
+    // let tree = codex.get_ls().to_tree(&input).await.unwrap();
+    // let mut naive: NaiveCompletionLevels = NaiveCompletionLevels::prepare(tree, codex.get_ls())
+    // .await
+    // .unwrap();
+    // println!("tree: {:#?}", naive);
+    // let codex = codex.clone();
+    // naive.tree_complete(codex).await;
+    // println!("root comp:\n {}", naive.levels[0].nodes[0].code);
+    // }
+
+    // testing out "tree v2"
     {
-        let tree = codex
-            .lang_server
-            .lock()
-            .await
-            .to_tree(&input)
+        let tree = codex.get_ls().to_tree(&input).await.unwrap();
+        let mut comps: CompletionLevels = CompletionLevels::prepare(tree, codex.get_ls())
             .await
             .unwrap();
-        let naive: NaiveCompletionLevels = tree.into();
-        println!("tree: {:#?}", naive);
+        comps.retries = 1;
+        comps.num_comps = 3;
+        // comps.fallback = true;
+        println!("tree: {:#?}", comps);
+        comps.tree_complete(codex).await;
+        println!("root comps:\n");
+        for (i, comp) in comps.levels[0].nodes[0].completed.iter().enumerate() {
+            println!("{}:\n{}", i, comp);
+        }
     }
 
     // testing out "stub"

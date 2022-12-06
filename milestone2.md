@@ -1,31 +1,133 @@
 ---
 title: "Using OpenAI Codex for Gradual Type Inference"
-subtitle: "Milestone I Report"
+subtitle: "Milestone II Report"
 author: Federico Cassano, Noah Shinn
 geometry: "left=3cm,right=3cm,top=3cm,bottom=3cm"
 output: pdf_document
 ---
 
-## Report
+\newpage
+
+# Report
 
 Our high-level approach to type-inference via Codex is the following:
 
-- 1. We insert the identifier `_hole_` in place of missing types in our input JavaScript program. To do this, we use a compiler $\mathcal{K} : \text{File} \rightarrow \mathcal{P}$.
-- 2. We define an instruction $\mathcal{I}$, which is the constant string:  
-     $\mathcal{I} = \text{"Substitute the identifier \_hole\_ with the correct type."}$
-- 3. We query the `davinci-edit` model using the compiled prompt $\mathcal{P}$ and instruction $\mathcal{I}$. We receive back a set of completions $\mathcal{C}$, $0 \leq |\mathcal{C}| \leq n$, where $n$ is a pre-defined maximum number of completions.
-- 4. We use a cheap and admissible heuristic $h : c \rightarrow (\text{Boolean},\ \mathcal{N})$ that determines if a given completion $c$ is _correct_ (a _correct_ completion however, may still not type-check) and the quality of the type annotations $q$, where the lower the $q$ the better.
-- 5. We apply $h$ to all elements in $\mathcal{C}$ and we add the completions that produced $\text{True}$ to an ordered set $\mathcal{Q}$ sorted by $q$.
-- 6. Using the command: `tsc --allowJs --checkJs --noEmit --target es2022 <file.ts>` we run a full type-check on every completion in $\mathcal{Q}$, terminating as soon as the command returns code `0`, meaning that the completion is type-correct. By terminating early on the sorted set, we guarantee that our solution is optimal with respect to $\mathcal{Q}$. We let $c^*$ be the optimal type-correct solution.
-- 7. We produce $c^*$ if it exists, otherwise we produce an error.
+- 1. We create a tree of nested code-blocks $T$ in our JavaScript program. Where the top-level is the root of the tree and each function, class or method has a node below the parent block. The node of the tree is identified by $\text{id-}\alpha$, the $\alpha$-renamed name of the function/class/method. The root node id is defined as $\text{id-}\alpha = root$.
+- 2. For each $\text{id-}\alpha$, we find usages of the identifier and we save them in the node for prompt-engineering purposes.
+- 3. We start traversing the tree using a bottom-up traversal, starting from the leaves. To each node we apply the steps described below:
+  - 1. If the current node is not a leaf node, we extract the completions for all the direct children of this node and then type-weave the types of the children into this node. This process creates permutations for all completions of all direct children of this node. For each permutation, we create a prompt $\mathcal{P}_i$. We use the type-weaving procedure:  
+       $\mathcal{W}: \text{Original File, Nettle File} \rightarrow \text{Resulting File}$.
+  - 2. For each prompt, we insert the saved usages of $\text{id-}\alpha$ at the bottom of the prompt, to help Codex infer the types.
+  - 3. For each prompt, we insert the identifier `_hole_` in place of missing types in our prompts. To do this, we use a compiler $\mathcal{K} : \text{File} \rightarrow \mathcal{P}$.
+  - 4. We define an instruction $\mathcal{I}$, which is the constant string:  
+       $\mathcal{I} = \text{"Substitute the identifier \_hole\_ with the correct type."}$
+  - 5. For each prompt computed for the node, query the `davinci-edit` or `incoder` model using the prompt $\mathcal{P}_i$ and instruction $\mathcal{I}$. We receive back a set of completions $\mathcal{C}_{\text{id-}\alpha}$, $0 \leq |\mathcal{C}_{\text{id-}\alpha}| \leq n$, where $n$ is a pre-defined maximum number of completions.
+  - 6. We use a cheap and admissible heuristic $h : c \rightarrow (\text{Boolean},\ \mathcal{N})$ that determines if a given completion $c$ is _correct_ (a _correct_ completion however, may still not type-check) and the quality of the type annotations $q$, where the lower the $q$ the better.
+  - 7. We apply $h$ to all elements in $\mathcal{C}_{\text{id-}\alpha}$ and add the completions that produced $\text{True}$ to an ordered set $\mathcal{Q}_{\text{id-}\alpha}$ sorted by $q$.
+- 4. Using the command: `tsc --allowJs --checkJs --noEmit --target es2022 <file.ts>` we run a full type-check test on every completion in $\mathcal{Q}_{root}$, terminating as soon as the command returns code `0`, meaning that the completion is type-correct. By terminating early on the sorted set, we guarantee that our solution is optimal with respect to $\mathcal{Q}_\text{root}$. We let $c^*$ be the optimal type-correct solution.
+- 5. We produce $c^*$ if it exists, otherwise we produce an error.
 
 \newpage
 
-### Implementation of the Pipeline
+## Implementation of the Pipeline
+
+#### Initial Tree Generation
+
+We have implemented a procedure that generates a code-block tree from a given program.
+
+For instance, given this input:
+
+```ts
+function hello2(name) {
+  const helloInner = (name) => {
+    return "Hello " + name;
+  };
+  return helloInner(name);
+}
+
+const hello1 = (name) => {
+  return "Hello " + name;
+};
+```
+
+The procedure is going to output:  
+![](./assets/tree_example.png){ width=100px }
+
+Where each node in the tree is annotated using the definition:
+
+```rs
+pub struct CompNode {
+  pub children_idxs: Vec<usize>, // pointers to the children
+  pub name: String, // the alpha-renamed id
+  pub code: String, // the code of this node
+  pub completed: Vec<String>, // the completions of this node (starts empty)
+  pub usages: String, // the usages of the alpha-renamed id of this node
+}
+```
+
+\newpage
+
+#### Type-Weaving Procedure
+
+We have implemented a type-weaving procedure $\mathcal{W}$. This procedure is used to transplant
+the type-annotations from one program to another without being affected by structural differences
+in either programs. The procedure uses scope-based $\alpha$-renaming in order to extract
+the types from matching identifiers in different scopes. This gives us fine-grained control
+for selecting which scopes should have types extracted and which scopes should not.
+
+For instance, the given program:
+
+```ts
+function hello(name: string): string {
+  function inner(): string {
+    let my_string: string = "Hello " + name;
+    return my_string;
+  }
+  return inner();
+}
+```
+
+Has the following $\alpha$-renamed type-table:
+
+| $\alpha$-renamed id     | Type                       |
+| ----------------------- | -------------------------- |
+| `hello`                 | `(name: string) => string` |
+| `hello$inner`           | `() => string`             |
+| `hello$inner$my_string` | `string`                   |
+
+Using this program as our _nettle_ (the reference program that donates types to be transplanted),
+we can transplant types into the following program, starting from scope `hello`:
+
+```ts
+function hello(name) {
+  function inner() {
+    let my_string = "Hello " + name;
+    return my_string;
+  }
+  return inner();
+}
+```
+
+We will receive back the program:
+
+```ts
+function hello(name) {
+  function inner(): string {
+    let my_string: string = "Hello " + name;
+    return my_string;
+  }
+  return inner();
+}
+```
+
+This allows us to ignore any types given to the `hello` function, while transplanting types given to
+the `hello$inner` function and the `hello$inner$my_string` variable.
+
+\newpage
 
 #### Compiler
 
-Firstly, in the development of this pipeline we have implemented $\mathcal{K}$ by interfacing with the TypeScript compiler API for inserting type-holes into identifiers that lack type annotations.
+We have implemented $\mathcal{K}$ by interfacing with the TypeScript compiler API for inserting type-holes into identifiers that lack type annotations.
 
 For instance, given this input:
 
@@ -47,7 +149,7 @@ function hello(name: string): _hole_ {
 
 #### Heuristic
 
-Secondly, we have implemented our heuristic $h$, which is part of the compiler $\mathcal{K}$. The heuristic traverses the program's abstract syntax tree identifying different types, which will be scored. Some types terminate the heuristic early and denote that the program cannot possibly be correct. The scores are summed to compose $q$ using the following table:
+We have implemented our heuristic $h$. The heuristic traverses the program's abstract syntax tree identifying different types, which will be scored. Some types terminate the heuristic early and denote that the program cannot possibly be correct. The scores are summed to compose $q$ using the following table:
 
 | Type                                     | Score | Correct          |
 | ---------------------------------------- | ----- | ---------------- |
@@ -81,40 +183,54 @@ function hello(name: string): _hole_ {
 
 $h$ will terminate early and output $(\text{False}, 0)$, as the presence of one `_hole_` type terminates the heuristic early.
 
-Additionally, $h$ checks if Codex didn't add anything other than just types (such as additonal code blocks and comments) to the original prompt. If that condition isn't met, $(\text{False}, 0)$ will be produced.
+Additionally, $h$ checks if the model didn't add anything other than just types (such as additonal code blocks and comments) to the original prompt. If that condition isn't met, $(\text{False}, 0)$ will be produced.
 \newpage
 
 #### Client
 
-Finally, we have implemented a client in Rust that manages the pipeline and queries the Codex API. The client will communicate with the compiler $K$, which is written in TypeScript and will send the outputs to Codex. The client can be downloaded from [https://github.com/GammaTauAI/opentau](https://github.com/GammaTauAI/opentau) and can be utilized by using the following terminal interface:
+Finally, we have implemented a client in Rust that manages the pipeline and queries the Codex API. The client will communicate with the compiler $K$, which is written in TypeScript and will send the outputs to the model. The client can be downloaded from [https://github.com/GammaTauAI/opentau](https://github.com/GammaTauAI/opentau) and can be utilized by using the following terminal interface:
 
 ```
 USAGE:
     client [OPTIONS] --tokens <TOKENS> --file <FILE> --output <OUTPUT>
 
 OPTIONS:
-    -c, --cache <CACHE>          The Redis URL for the cache
-        --disable-rate-limit     Whether or not to prevent rate limits.
-                                 You may want to set this to false if you are using
-                                 your own model. By default, we try to
-                                 prevent rate limits, by using this
-                                 flag you can disable this behavior
-    -e, --endpoint <ENDPOINT>    The url of the codex endpoint [default:
-                                 https://api.openai.com/v1/edits]
-    -f, --file <FILE>            The target file path
-        --fallback               Whether to fallback to "any" or not
-    -h, --help                   Print help information
-    -l, --lang <LANG>            The target language. Either `ts` or `py` [default: ts]
-    -n, --n <N>                  The number of completions to return [default: 3]
-    -o, --output <OUTPUT>        Output file directory path
-    -r, --retries <RETRIES>      The number of request to send to Codex [default: 1]
-    -s, --strategy <STRATEGY>    Completion strategy. Either: {"simple": simple completion,
-                                "tree": tree completion} [default: simple]
-        --stop-at <STOP_AT>      The maximum number of type-checkable completions to return
-                                 [default: 1]
-    -t, --tokens <TOKENS>        Codex tokens to use, separated by commas
-        --temp <TEMP>            The temperature to use for the completion [default: 1]
-    -V, --version                Print version information
+    -c, --cache <CACHE>
+            The Redis URL for the cache
+        --disable-rate-limit
+            Whether or not to prevent rate limits. You may want to set this to
+            false if you are using your own model. By default, we try to prevent
+            rate limits, by using this flag you can disable this behavior
+    -e, --endpoint <ENDPOINT>
+            The url of the codex endpoint [default: https://api.openai.com/v1/edits]
+    -f, --file <FILE>
+            The target file path
+        --fallback
+            Whether to fallback to "any" or not
+    -h, --help
+            Print help information
+    -l, --lang <LANG>
+            The target language. Either `ts` or `py` [default: ts]
+    -m, --max-type-quality <MAX_TYPE_QUALITY>
+            The maximum type-quality score for a completion to be
+            valid (lower means better quality) [default: 9999999]
+    -n, --n <N>
+            The number of completions to return [default: 3]
+    -o, --output <OUTPUT>
+            Output file directory path
+    -r, --retries <RETRIES>
+            The number of request to send to Codex [default: 1]
+    -s, --strategy <STRATEGY>
+            Completion strategy. Either: {"simple": simple completion,
+            "tree": tree completion} [default: simple]
+        --stop-at <STOP_AT>
+            The maximum number of type-checkable completions to return [default: 1]
+    -t, --tokens <TOKENS>
+            Codex tokens to use, separated by commas
+        --temp <TEMP>
+            The temperature to use for the completion [default: 1]
+    -V, --version
+            Print version information
 ```
 
 Type-correct solutions will be written to the specified directory.
@@ -123,46 +239,129 @@ _The appendix at the end of the paper provides a set of prompts and completions 
 
 \newpage
 
-## Reflect
+## Building our own Codex
+
+The InCoder model query system was implemented as a simple HTTP server that evaluates the
+InCoder model $M$ and receives an untyped input and several hyperparameters from the language
+server and returns a list of `type infills`. Then, the `type infills` are inserted into the
+original untyped code to yield the final completion. The pipeline is shown below:
+
+Given the following prompt $\mathcal{P}$: we have the untyped `input`
+
+```ts
+function hello(name: _hole_): _hole_ {
+  let msg: string = "Hello";
+  return msg + ", " + name + "!";
+}
+```
+
+and the hyperparameters `max_to_generate=5`, `temperature=0.8`, and `max_retries=1` in a POST request, the server will split the `input` by the fake type, `_hole_` to yield the following list:
+
+```ts
+parts_list = [
+  "function hello(name: ",
+  "): ",
+  ' { let msg: string = "Hello"; return msg + ", " + name + "!";}',
+];
+```
+
+The `parts_list` and the given hyperparameters will form prompt $\mathcal{P}$' and will be given to $M$ for the `infill` task. $M$($\mathcal{P}$') will yield a list of inferred types, such as
+
+```ts
+type_list = ["string", "string"];
+```
+
+Then, the `type_list` will be inserted into the original `parts_list` to build the final completion:
+
+```ts
+function hello(name: string): string {
+  let msg: string = "Hello";
+  return msg + ", " + name + "!";
+}
+```
+
+The describes process will execute $N$ number of times where $N$ is the number of requested completions.
+Finally, the InCoder server will return the following JSON response:
+
+```json
+{
+  "choices": [
+    "text": "<completion0>",
+    "text": "<completion1>",
+    ...
+    "text": "<completionN>"
+  ]
+}
+```
+
+where `choices` is of length $N$.
+
+This API mimics the Codex API in order to be an effective drop-in replacement, all we had to do in our client is changing the url.
+
+In production, we execute the InCoder model on NVIDIA A100 GPUs using Northeastern's Discovery Cluster.
+
+\newpage
+
+# Reflect
 
 #### Initial Progress Goals
 
-_"By now, we will have implemented type-inference for TypeScript using a simple approach that does not involve prompt engineering. This approach will allow us to correctly type-check small files such as LeetCode JavaScript solutions."_
+_"By now, we will have implemented type-inference for Python and a prompt engineering approach that will allow us to type-infer larger files."_
 
 #### Current Achievements
 
-We achieved every goal that was listed in our initial project proposal for the first milestone. In addition, we added a heuristic $h$ to catch several erroneous cases and to save compute time.
+While we were initially planning to implement Python type-inference for milestone 2, we decided
+to focus on the InCoder completion implementation as it would allow us to have access to an
+infinite number of calls to the model without reaching certain rate limitations. However, after
+we briefly tested the InCoder server, we observed a trade-off between the effectiveness of the
+Codex model and the speed of the InCoder model. So far, the Codex model has shown a strong
+performance in the type-inference task, but the model can only be queried up to 20x per minute
+per API key. On the other hand, the InCoder model can be evaluated several times in less
+than a second without reaching a rate limitation, but the respective completions have proven
+to be significantly less accurate than the Codex model. In particular, the InCoder model struggles
+with the case of inferring a single type where appropriate while being given a max token length
+hyperparameter greater than 1. For example:
 
-- $h$ is evaluated _before_ we opt to type-check the solution, which saves compute time due to `tsc` being significantly more expensive to compute.
-- $h$ verifies that the given completion does not contain any additional content that is not a type-annotation.
-- $h$ protects against completions that type-check but contain permissive types such as `any`, `undefined`, and `unknown` (in some cases).
+Given the following untyped input,
 
-Additionally, we were surprised that this simple solution allowed us to type-infer medium-sized files (see appendix) as we expected to be able to only type-infer small files.
+```ts
+function hello(name: _hole_): _hole_ {
+  let msg: string = "Hello";
+  return msg + ", " + name + "!";
+}
+```
 
-## Replan
+the correct types should be `string` and `string`. However, given a max token length hyperparameter of 5, the model may return the following typed completion,
 
-#### Problem
+```ts
+function hello(name: stringstring): stringstringstring {
+  let msg: string = "Hello";
+  return msg + ", " + name + "!";
+}
+```
 
-While our current type-inference pipeline using Codex's `davinci-edit` model has shown good results, the strategy comes with a few limitations. First, the number of API calls to Codex has a limit of 20 per API key per minute. For a single query, Codex allows for any number of completions to be requested. However, the completions are sorted in decreasing order of confidence; from testing we have observed that the completions given beyond the 10th index are generally incorrect.
+Clearly, the model is trying to infill `string` but is unable to effectively determine the appropriate
+length of the type infill. It is important to note that the hyperparameter for max token length
+must be greater than 1 to accommodate the possibility of larger type-infills,
+such as `[str, int]`, `LargeCustomTypeLongName` or first-class function types.
 
-#### Possible Solutions
+As for the prompt-engineering algorithm, it has been successfully
+implemented using a bottom-up tree traversal algorithm, described in the Report section.
 
-We have considered several alterations/new methods for solving this problem.
-
-- API key rotation: Apply to the Codex Beta with multiple accounts in order to "rotate" API keys. We would have access to a maximum of $N$ \* 20 completions per minute, where $N$ is the number of API keys. We have applied with different accounts but none of them have been accepted yet.
-- Facebook's "InCoder" model: Use Facebook's open-source code-infill model which is open-source and available on Huggingface. We would also be able to fine-tune this model to our specific type-inference purpose.
+# Replan
 
 #### Plan Moving Forward
 
-While the API key rotation strategy may give us access to significantly more completions, it is hard to secure new API keys from Codex in a timely manner. Therefore, we are writing an interface for querying the InCoder model. The InCoder strategy would theoretically allow us to make an unbounded number of queries for an unbounded number of completions returned per query. The only limitation for the InCoder strategy is the cumulative time to evaluate the model.
-
-Additionally, we plan to apply our type-inference strategy (or a variation for our strategy) to other gradually-typed languages, such as Python with Pyright.
+To address the max token hyperparameter problem, we plan to run a benchmark test for several
+temperature hyperparameters to find a list of the most optimal temperatures for the general
+`type infill` task. Then, we will update the InCoder server implementation to return a list
+of completions that were generated with varying temperatures. In addition, we plan to implement
+type-inference for Python using the same completion pipeline that is used for TypeScript.
+Then, we plan to formally benchmark our TypeScript and Python type-inference across a randomly
+selected 100-file subset of Leetcode solutions.
 
 #### Timeline
 
-- **11/22:**
-  - InCoder query implementation
-  - Prompt-engineering strategy implementation
 - **12/13:**
   - Python type-inference
   - Benchmarking for accuracy across a 100-file dataset

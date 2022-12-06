@@ -6,13 +6,17 @@
 ## Requirements
 
 - `rust`
+- Incoder model requirements:
+  - `torch`
+  - `tokenizers>=0.12`
+  - `transformers`
+
 - TypeScript inference requirements:
   - `ts-node`
   - `tsc`
 - Python inference requirements:
-  - `mypy` | `pyright`
-- Python AST requirements:
-  - `redbaron`
+  - `mypy` | `pyright` for static type checking
+  - `redbaron` for AST parsing with comments
 
 
 ## Installation

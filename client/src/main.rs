@@ -3,9 +3,11 @@ use std::sync::Arc;
 use codex_types::{
     cache::Cache,
     codex::{CodexClient, CodexClientBuilder, CodexError, Completion, CompletionQuery},
+    debug,
     langserver::{py::PyServer, ts::TsServer, LangServer},
+    tree::{CompletionLevels, TreeCompletion},
 };
-use tokio::sync::Mutex;
+use tokio::{sync::Mutex, task::JoinHandle};
 
 use clap::Parser;
 
@@ -38,12 +40,12 @@ struct Args {
     #[clap(short, long, value_parser, default_value = "3")]
     n: usize,
 
-    /// The number of retries to make to codex
+    /// The number of request to send to Codex
     #[clap(short, long, value_parser, default_value = "1")]
     retries: usize,
 
-    /// Whether to fallback to any or not
-    #[clap(short, long, value_parser, default_value_t = false)]
+    /// Whether to fallback to "any" or not
+    #[clap(long, value_parser, default_value_t = false)]
     fallback: bool,
 
     /// The url of the codex endpoint
@@ -66,38 +68,45 @@ struct Args {
     /// The Redis URL for the cache
     #[clap(short, long, value_parser)]
     cache: Option<String>,
+
+    /// Whether or not to prevent rate limits. You may want to set this to false if You
+    /// are using your own model. By default, we try to prevent rate limits, by using
+    /// this flag you can disable this behavior.
+    #[clap(long, value_parser, default_value_t = false)]
+    disable_rate_limit: bool,
+
+    /// The maximum type-quality score for a completion to be valid (lower means better quality)
+    #[clap(long, short, value_parser, default_value_t = 9999999)]
+    max_type_quality: i64,
 }
 
 impl Args {
-    async fn lang_client(&self) -> Arc<Mutex<dyn LangServer + Send + Sync>> {
+    async fn lang_client(&self) -> Arc<dyn LangServer + Send + Sync> {
+        fn get_path(folder: String) -> String {
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .parent()
+                .unwrap()
+                .join(folder)
+                .to_str()
+                .unwrap()
+                .to_string()
+        }
         match self.lang.as_str() {
             "ts" => {
-                let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .parent()
-                    .unwrap()
-                    .join("ts-ast")
-                    .to_str()
-                    .unwrap()
-                    .to_string();
-                Arc::new(Mutex::new(
+                let path = get_path("ts-ast".to_string());
+                Arc::new(
                     TsServer::make(&path)
                         .await
                         .expect("failed to make ts server"),
-                ))
+                )
             }
             "py" => {
-                let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .parent()
-                    .unwrap()
-                    .join("py_ast/main.py")
-                    .to_str()
-                    .unwrap()
-                    .to_string();
-                Arc::new(Mutex::new(
+                let path = get_path("py-ast".to_string());
+                Arc::new(
                     PyServer::make(&path)
                         .await
                         .expect("failed to make py server"),
-                ))
+                )
             }
             _ => {
                 eprintln!("Unknown language, {}", self.lang);
@@ -131,7 +140,11 @@ async fn main() {
         .collect::<Vec<_>>();
 
     let mut codex = CodexClientBuilder::new(tokens, lang_client);
-    codex.endpoint(args.endpoint).temperature(args.temp);
+    codex
+        .endpoint(args.endpoint)
+        .temperature(args.temp)
+        .max_type_score(args.max_type_quality)
+        .rate_limit(!args.disable_rate_limit);
 
     if let Some(cache) = cache {
         codex.cache(cache);
@@ -151,7 +164,7 @@ async fn main() {
     // the typechecked and completed code(s). here if we get errors we exit with 1
     let good_ones: Vec<Completion> = match args.strategy.as_str() {
         "simple" => ctx.simple_strategy().await,
-        "tree" => todo!("tree completion"),
+        "tree" => ctx.tree_strategy().await,
         _ => {
             eprintln!("Unknown strategy, {}", args.strategy);
             std::process::exit(1);
@@ -173,9 +186,10 @@ async fn main() {
 
     // write to the output dir
     for (i, comp) in good_ones.into_iter().enumerate() {
+        let fallback = if comp.fallbacked { "_fallback" } else { "" };
         let output_path = format!(
-            "{}/{}_score_{}_fallback_{}.{}",
-            args.output, i, args.lang, comp.score, comp.fallbacked
+            "{}/{}_score_{}{}.{}",
+            args.output, i, comp.score, fallback, args.lang
         );
         tokio::fs::write(&output_path, comp.code).await.unwrap();
     }
@@ -191,24 +205,97 @@ struct MainCtx {
 }
 
 impl MainCtx {
+    /// Returns the subset of completions that type check from the given set of completions
+    async fn type_check_candidates(&self, candidates: Vec<Completion>) -> Vec<Completion> {
+        let mut comps: Vec<Completion> = vec![];
+        let mut handles: Vec<JoinHandle<Option<Completion>>> = vec![];
+        for (i, candidate) in candidates.into_iter().enumerate() {
+            debug!("candidate {}:\n{}", i, candidate.code);
+            let lang_client = self.codex.get_ls();
+            handles.push(tokio::task::spawn(async move {
+                let type_checks = lang_client.type_check(&candidate.code).await.unwrap();
+                if type_checks {
+                    Some(candidate)
+                } else {
+                    None
+                }
+            }));
+        }
+
+        for handle in handles {
+            if let Some(comp) = handle.await.unwrap() {
+                comps.push(comp);
+            }
+            if comps.len() >= self.stop_at {
+                break;
+            }
+        }
+
+        comps
+    }
+    /// Runs the tree completion strategy. Documentation on the strategy is in the `tree.rs` file.
+    async fn tree_strategy(&self) -> Vec<Completion> {
+        let tree = self
+            .codex
+            .get_ls()
+            .to_tree(&self.file_contents)
+            .await
+            .unwrap();
+
+        let mut levels: CompletionLevels = CompletionLevels::prepare(tree, self.codex.get_ls())
+            .await
+            .unwrap();
+        levels.num_comps = self.num_comps;
+        levels.retries = self.retries;
+        levels.fallback = self.fallback;
+
+        levels.tree_complete(self.codex.clone()).await;
+
+        let root = levels.levels[0].nodes.remove(0);
+
+        // score the code at the root
+        let mut handles: Vec<JoinHandle<Completion>> = vec![];
+        for code in root.completed {
+            let ls = self.codex.get_ls();
+            handles.push(tokio::task::spawn(async move {
+                let (_, score) = ls
+                    .check_complete(&code, &code)
+                    .await
+                    .unwrap_or((false, 9999999999999));
+                Completion {
+                    code,
+                    score,
+                    fallbacked: false,
+                }
+            }));
+        }
+        let mut candidates = vec![];
+        for handle in handles {
+            let comp = handle.await.unwrap();
+            candidates.push(comp);
+        }
+
+        // sort by lowest score first
+        candidates.sort_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
+
+        self.type_check_candidates(candidates).await
+    }
+
     /// Runs the simple completion strategy, which just runs the completion on the given file
     /// without any transformation, other than adding "_hole_" to each unknwon type
     async fn simple_strategy(self) -> Vec<Completion> {
-        println!("{}", &self.file_contents);
         let printed = self
             .codex
-            .lang_server
-            .lock()
-            .await
+            .get_ls()
             .pretty_print(&self.file_contents, "_hole_")
             .await
             .unwrap();
 
-        println!("pretty:\n{}", printed);
+        debug!("pretty:\n{}", printed);
 
         let query = CompletionQuery::new(printed, self.num_comps, self.retries, self.fallback);
 
-        let resp = match self.codex.complete(query.clone()).await {
+        let candidates = match self.codex.complete(query.clone()).await {
             Ok(r) => r,
             Err(CodexError::RateLimit(r)) if !r.is_empty() => {
                 eprintln!(
@@ -223,21 +310,10 @@ impl MainCtx {
             }
         };
 
-        let lang_client = self.codex.lang_server.lock().await;
-        let mut comps: Vec<Completion> = vec![];
-        for (i, comp) in resp.into_iter().enumerate() {
-            println!("comp {}:\n {}", i, comp.code);
-            let type_checks = lang_client.type_check(&comp.code).await.unwrap();
-            if type_checks {
-                comps.push(comp);
-            }
-            if comps.len() >= self.stop_at {
-                break;
-            }
-        }
+        let comps: Vec<Completion> = self.type_check_candidates(candidates).await;
 
         // cache the type-checked completions if we have a cache
-        if let Some(cache) = &self.codex.cache {
+        if let Some(mut cache) = self.codex.get_cache().await {
             // we want to get all the completions that are typechecked
             // except the one that fallbacked (if there is any)
             let comps_no_fallback = comps
@@ -248,8 +324,6 @@ impl MainCtx {
 
             if !comps_no_fallback.is_empty() {
                 cache
-                    .lock()
-                    .await
                     .store(&query, &comps_no_fallback)
                     .expect("failed to store in cache");
             }

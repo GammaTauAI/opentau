@@ -3,11 +3,11 @@ use std::process::Stdio;
 use async_trait::async_trait;
 use tokio::io::AsyncBufReadExt;
 
-use crate::tree::CodeBlockTree;
+use crate::{debug, tree::CodeBlockTree};
 
 use super::{
-    abstraction::SocketAbstraction, LSCheckReq, LSPrintReq, LSReq, LSWeaveReq, LangServer,
-    LangServerError,
+    abstraction::SocketAbstraction, LSCheckReq, LSPrintReq, LSReq, LSUsagesReq, LSWeaveReq,
+    LangServer, LangServerError,
 };
 
 #[derive(Debug)]
@@ -21,7 +21,7 @@ impl LangServer for TsServer {
         let pid = std::process::id();
         let tmp_dir = std::env::temp_dir();
         let tmp_socket_file = tmp_dir.join(format!("codex-{}.sock", pid));
-        println!("tmp_socket_file: {:?}", tmp_socket_file);
+        debug!("tmp_socket_file: {:?}", tmp_socket_file);
 
         let mut process = match tokio::process::Command::new("npm")
             .args([
@@ -44,16 +44,16 @@ impl LangServer for TsServer {
             let stdout = process.stdout.as_mut().unwrap();
             let reader = tokio::io::BufReader::new(stdout);
             let mut lines = reader.lines();
-            println!("client output:");
+            debug!("client output:");
             while let Some(line) = lines.next_line().await.unwrap() {
-                println!("{}", line);
+                debug!("{}", line);
                 if line.contains("Listening") {
                     break;
                 }
             }
         }
 
-        println!("client ready to connect to socket!");
+        debug!("client ready to connect to socket!");
         let socket_path = tmp_socket_file.to_str().unwrap().to_string();
         let socket = SocketAbstraction {
             socket_path,
@@ -142,10 +142,30 @@ impl LangServer for TsServer {
         Ok(String::from_utf8(resp).unwrap())
     }
 
+    async fn usages(
+        &self,
+        outer_block: &str,
+        inner_block: &str,
+    ) -> Result<String, LangServerError> {
+        let req = LSUsagesReq {
+            cmd: "usages".to_string(),
+            text: base64::encode(outer_block),
+            inner_block: base64::encode(inner_block),
+        };
+
+        let resp = self.socket.send_req(&req).await?;
+        // decode the response
+        let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
+
+        Ok(String::from_utf8(resp).unwrap())
+    }
+
     async fn type_check(&self, code: &str) -> Result<bool, LangServerError> {
         // get a temp file (overwrite if exists)
         let tmp_dir = std::env::temp_dir();
-        let tmp_file = tmp_dir.join(format!("codex-{}.ts", std::process::id()));
+        // get a random number
+        let rand = rand::random::<u64>();
+        let tmp_file = tmp_dir.join(format!("codex-{}-{}.ts", std::process::id(), rand));
         tokio::fs::write(&tmp_file, code).await?;
 
         // run: tsc --allowJs --checkJs --noEmit filename.ts

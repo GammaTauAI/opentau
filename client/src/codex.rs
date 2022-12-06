@@ -1,11 +1,11 @@
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 use tokio::{sync::Mutex, task::JoinHandle};
 
 use crate::{
     cache::Cache,
-    langserver::{ArcLangServer, LangServerError},
+    langserver::{ArcLangServer, LangServer, LangServerError},
 };
 
 mod rl {
@@ -29,13 +29,14 @@ mod rl {
     >;
 
     #[derive(Clone, Debug)]
-    pub(super) struct LimiterPool {
+    /// Rate limited pool of tokens that can be used to query codex
+    pub(super) struct RateLimitedTokenPool {
         tokens: Arc<Vec<String>>,
         token_idx: Arc<Mutex<usize>>,
-        rl: RL,
+        rl: Option<RL>, // we may not have a rate limiting policy
     }
 
-    impl LimiterPool {
+    impl RateLimitedTokenPool {
         async fn next_token(&self) -> String {
             let mut token_idx = self.token_idx.lock().await;
             let token = self.tokens[*token_idx].clone();
@@ -45,17 +46,22 @@ mod rl {
 
         /// Waits for a token to become available, then returns it.
         pub async fn wait_token(&self) -> String {
-            println!("Waiting rl");
             let token = self.next_token().await;
-            self.rl.until_key_ready(&token).await;
+            match &self.rl {
+                Some(rl) => {
+                    rl.until_key_ready(&token).await;
+                }
+                None => (),
+            }
             token
         }
 
         /// Creates a new limiter pool given the list of tokens.
+        /// If rl is false, then no rate limiting is applied.
         ///
         /// # Panics
         /// Panics if the list of tokens is empty.
-        pub fn new(tokens: Vec<String>) -> Self {
+        pub fn new(tokens: Vec<String>, rl: bool) -> Self {
             assert!(!tokens.is_empty());
             let reset = 120 / 10; // 2 minutes / 10 cells = 12 seconds
             let rate_limiter = Arc::new(RateLimiter::keyed(
@@ -67,7 +73,7 @@ mod rl {
             rate_limiter.check_key(&tokens[0]).unwrap();
 
             Self {
-                rl: rate_limiter,
+                rl: if rl { Some(rate_limiter) } else { None },
                 tokens: Arc::new(tokens),
                 token_idx: Arc::new(Mutex::new(0)),
             }
@@ -75,18 +81,23 @@ mod rl {
     }
 }
 
+/// Represents a client to the codex API. Safe to clone as most of the fields are
+/// wrapped in an Arc.
+#[derive(Clone)]
 pub struct CodexClient {
     pub client: reqwest::Client,
-    // NOTE: mutex so that we make sure the socket is only used by one thread at a time
-    pub lang_server: ArcLangServer,
+    // the language server
+    lang_server: ArcLangServer,
     // the codex URL endpoint
     pub endpoint: String,
     // the temperature to use for the completion
     pub temperature: f64,
+    // the maxmimum type score
+    pub max_type_score: i64,
     // The cache to use for the completions
-    pub cache: Option<Arc<Mutex<Cache>>>,
-    // The rate limiter
-    rate_limiter: rl::LimiterPool,
+    cache: Option<Arc<Mutex<Cache>>>,
+    // The rate limited token pool, that produces the token used for this client
+    rate_limiter: rl::RateLimitedTokenPool,
 }
 
 #[derive(Clone)]
@@ -96,11 +107,12 @@ pub struct CodexClientBuilder {
     pub lang_server: ArcLangServer,
     pub endpoint: Option<String>,
     pub temperature: Option<f64>,
+    pub max_type_score: Option<i64>,
     pub cache: Option<Arc<Mutex<Cache>>>,
+    pub rate_limit: bool,
 }
 
 impl CodexClientBuilder {
-    // TODO: multiple tokens
     pub fn new(tokens: Vec<String>, lang_server: ArcLangServer) -> Self {
         Self {
             client: None,
@@ -108,7 +120,9 @@ impl CodexClientBuilder {
             lang_server,
             endpoint: None,
             temperature: None,
+            max_type_score: None,
             cache: None,
+            rate_limit: true,
         }
     }
 
@@ -132,6 +146,16 @@ impl CodexClientBuilder {
         self
     }
 
+    pub fn rate_limit(&mut self, rate_limit: bool) -> &mut Self {
+        self.rate_limit = rate_limit;
+        self
+    }
+
+    pub fn max_type_score(&mut self, max_type_score: i64) -> &mut Self {
+        self.max_type_score = Some(max_type_score);
+        self
+    }
+
     /// Builds the client and consumes the builder
     pub fn build(&mut self) -> CodexClient {
         let client = self.client.take().unwrap_or_else(reqwest::Client::new);
@@ -140,13 +164,16 @@ impl CodexClientBuilder {
             .take()
             .unwrap_or_else(|| "https://api.openai.com/v1/edits".to_string());
         let temperature = self.temperature.take().unwrap_or(1.0);
+        let max_type_score = self.max_type_score.take().unwrap_or(999999999);
         let cache = self.cache.take();
-        let rate_limiter = rl::LimiterPool::new(self.tokens.drain(..).collect());
+        let rate_limiter =
+            rl::RateLimitedTokenPool::new(self.tokens.drain(..).collect(), self.rate_limit);
         CodexClient {
             client,
             lang_server: self.lang_server.clone(),
             endpoint,
             temperature,
+            max_type_score,
             cache,
             rate_limiter,
         }
@@ -172,14 +199,14 @@ impl CompletionQuery {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Completion {
     pub code: String,
     pub score: i64,
     pub fallbacked: bool, // is this completion from fallback?
 }
 
-const INSTRUCTIONS: &str = "Substitute the token _hole_ with the correct type.";
+const INSTRUCTIONS: &str = "Substitute the identifier _hole_ with the correct type.";
 
 impl CodexClient {
     /// Completes the given input code using the codex API. The given input code has to be pretty
@@ -250,20 +277,16 @@ impl CodexClient {
             .collect::<Vec<Completion>>();
 
         if query.fallback {
+            // NOTE: we add the fallback despite the type score limit
             final_completions.push(Completion {
-                code: self
-                    .lang_server
-                    .lock()
-                    .await
-                    .pretty_print(&query.input, "any")
-                    .await?,
+                code: self.lang_server.pretty_print(&query.input, "any").await?,
                 score: 999999999,
                 fallbacked: true,
             });
         }
 
         if rate_limit {
-            // if we rate limit, we still want to return the completions we have
+            // if we rate limit, we still want to return the completions we have (may not have any)
             return Err(CodexError::RateLimit(final_completions));
         }
 
@@ -295,10 +318,10 @@ impl CodexClient {
         let temp = self.temperature;
         let num_comps = query.num_comps;
         let rl = self.rate_limiter.clone();
+        let max_type_score = self.max_type_score;
 
         tokio::spawn(async move {
             let token = rl.wait_token().await;
-            println!("Ready rl, {}", token);
             let req = client
                 .post(&endpoint)
                 .bearer_auth(token)
@@ -315,7 +338,6 @@ impl CodexClient {
                     (num_comps * 10) as u64,
                 )));
             let res = req.send().await?;
-            println!("Dropped rl");
             let body = res.text().await?;
             let choices: Vec<EditRespChoice> = match serde_json::from_str::<EditResp>(&body)? {
                 EditResp::Choices { choices } => choices,
@@ -324,8 +346,6 @@ impl CodexClient {
 
             println!("Got {} responses from codex", choices.len());
 
-            let mut filtered_completions = filtered_completions.lock().await;
-            let lang_client = lang_client.lock().await;
             for comp in choices.into_iter() {
                 let text = match comp {
                     EditRespChoice::Text { text } => text,
@@ -336,24 +356,47 @@ impl CodexClient {
                 };
 
                 // check first if it's duplicate in our filtered completions
-                if filtered_completions.iter().any(|(c, _)| c == &text) {
+                if filtered_completions
+                    .lock()
+                    .await
+                    .iter()
+                    .any(|(c, _)| c == &text)
+                {
                     continue;
                 }
 
-                let (is_complete, score) = lang_client
+                let (mut is_complete, score) = lang_client
                     .check_complete(&input, &text)
                     .await
                     .unwrap_or_else(|e| {
                         println!("Error checking completion: {}", e);
                         (false, 0) // if there is an error, we assume it is not complete
                     });
+                // we don't want completions with higher type score than the max
+                if score > max_type_score {
+                    is_complete = false;
+                }
                 if is_complete {
-                    filtered_completions.push((text, score));
+                    filtered_completions.lock().await.push((text, score));
                 }
             }
 
             Ok(())
         })
+    }
+
+    /// Gets the language server object from the codex client
+    pub fn get_ls(&self) -> Arc<dyn LangServer + Send + Sync> {
+        self.lang_server.clone()
+    }
+
+    /// Gets a mutex guard to the cache from the codex client, if a cache is being used
+    pub async fn get_cache(&self) -> Option<tokio::sync::MutexGuard<Cache>> {
+        if let Some(cache) = &self.cache {
+            Some(cache.lock().await)
+        } else {
+            None
+        }
     }
 }
 
