@@ -403,7 +403,7 @@ We employed a best-of-3 evaluation approach in which we ran each configuration o
 
 ![The columns of the bar graph are labeled as *model*-*strategy*-*temperature index* where 0 is a temperature of 1.0 and 1 is 0.8.](./assets/successes_per_config.png){ width=550px }
 
-From **Figure 2**, we observe a significantly higher accuracy using Codex with a temperature of 0.8 (91%) compared to TypeScript's built-in static type inference procedure (59%). However, we also note a very poor performance using InCoder for temperatures of 0.8 and 1.0 (14%). It is also important to note the increased average quality of type annotations given by Codex and InCoder in succesfully-annotated files compared to TypeScript's built-in type inference. Our heuristic $h gives an average score of 22.29 for the built-in TypeScript inference procedure, while the Codex and InCoder models produce scores as low as 1.21 and 12.62, respectively.
+From **Figure 2**, we observe a significantly higher accuracy using Codex with a temperature of 0.8 (91%) compared to TypeScript's built-in static type inference procedure (59%). However, we also note a very poor performance using InCoder for temperatures of 0.8 and 1.0 (14%). It is also important to note the increased average quality of type annotations given by Codex and InCoder in successfully-annotated files compared to TypeScript's built-in type inference. Our heuristic $h$ gives an average score of 22.29 for the built-in TypeScript inference procedure, while the Codex and InCoder models produce scores as low as 1.21 and 12.62, respectively.
 
 # Discussion and Future Directions
 
