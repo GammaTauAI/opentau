@@ -403,6 +403,8 @@ We employed a best-of-3 evaluation approach in which we ran each configuration o
 
 ![The columns of the bar graph are labeled as *model*-*strategy*-*temperature index* where 0 is a temperature of 1.0 and 1 is 0.8.](./assets/successes_per_config.png){ width=550px }
 
+From **Figure 2**, we observe a significantly higher accuracy using Codex with a temperature of 0.8 (91%) compared to TypeScript's built-in static type inference procedure (59%). However, we also note a very poor performance using InCoder for temperatures of 0.8 and 1.0 (14%). It is also important to note the increased average quality of type annotations given by Codex and InCoder in succesfully-annotated files compared to TypeScript's built-in type inference. Our heuristic $h gives an average score of 22.29 for the built-in TypeScript inference procedure, while the Codex and InCoder models produce scores as low as 1.21 and 12.62, respectively.
+
 # Discussion and Future Directions
 
 ### Discussion
@@ -411,12 +413,8 @@ Using a combination of prompt engineering and Codex's `code-davinci-edit` model,
 
 ### Future Directions
 
-In future work, we plan to expand our prompt engineering approach to include additional static analysis techniques in order to add context. For example, we could find free variables in inner scopes and include them in the outer scope, in order to show dependency. One limitation of our approach is the reliance on a commercial product, Codex, which may render our approach expensive and infeasible for an individual or a small research group to use. While the results from `InCoder` were not as good as those from Codex, with further fine-tuning, the model could be used as an effective replacement for Codex, allowing our approach to be used by individuals and small research groups. Additionally, thanks to our language server protocol, our approach could be extended to other programming languages, such as Rust and Java, by training a language model on the task of type inference for these languages. Additionally, we plan to explore more language models and techniques to improve the accuracy of the type inference procedure. We believe that our approach has the potential to improve type inference in gradually-typed languages, and we hope that our work will lead to more robust and accurate type inference procedures in the future.
+In future work, we plan to expand our prompt engineering approach to include additional static analysis techniques in order to add context. For example, we could find free variables in inner scopes and include them in the outer scope, in order to show dependency. One limitation of our approach is the reliance on a commercial product, Codex, which may render our approach expensive and infeasible for an individual or a small research group to use. While the results from `InCoder` were not as good as those from Codex, with further fine-tuning and more precise prompt engineering, the model could be used as an effective replacement for Codex, allowing our approach to be used by individuals and small research groups. Additionally, thanks to our language server protocol, our approach could be extended to other programming languages, such as Rust and Java, by training a language model on the task of type inference for these languages. Additionally, we plan to explore more language models and techniques to improve the accuracy of the type inference procedure. We believe that our approach has the potential to improve type inference in gradually-typed languages, and we hope that our work will lead to more robust and accurate type inference procedures in the future.
 
 # TODO:
-
-- Analyze results (expectation, reflection) (Noah)
-  - incoder bad
-  - talk about quality metric
 - Bar graph for accuracy of strategy vs lines of code (Noah)
 - Python evaluation (Noah)
