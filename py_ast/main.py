@@ -183,4 +183,6 @@ print('179')
 # other way is to use a lambdas
 signal.signal(signal.SIGINT, partial(close, sm)) # type: ignore
 print(f'Listening on {SOCK_PATH}\n')
+# flush stdout
+sys.stdout.flush()
 init_wait(sock, sm)

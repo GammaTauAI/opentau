@@ -30,7 +30,7 @@ impl LangServer for PyServer {
 
         let mut process = match tokio::process::Command::new("python3")
             .args([
-                &format!("{}/main.py3", server_path),
+                &format!("{}/main.py", server_path),
                 tmp_socket_file.to_str().unwrap(),
                 pid.to_string().as_str(),
             ])
@@ -48,7 +48,7 @@ impl LangServer for PyServer {
             let mut lines = reader.lines();
             debug!("client output:");
             while let Some(line) = lines.next_line().await.unwrap() {
-                debug!("here {}", line);
+                debug!("{}", line);
                 if line.contains("Listening") {
                     break;
                 }
