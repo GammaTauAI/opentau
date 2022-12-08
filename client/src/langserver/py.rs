@@ -3,7 +3,7 @@ use std::process::Stdio;
 use async_trait::async_trait;
 use tokio::io::AsyncBufReadExt;
 
-use crate::tree::CodeBlockTree;
+use crate::{debug, tree::CodeBlockTree};
 
 use super::{
     abstraction::SocketAbstraction, LSCheckReq, LSPrintReq, LSReq, LSWeaveReq, LangServer,
@@ -21,16 +21,20 @@ impl LangServer for PyServer {
         let pid = std::process::id();
         let tmp_dir = std::env::temp_dir();
         let tmp_socket_file = tmp_dir.join(format!("codex-{}.sock", pid));
+        debug!(
+            "cmd: python3 {} {} {}",
+            &format!("{}/main.py", server_path),
+            tmp_socket_file.to_str().unwrap(),
+            pid.to_string().as_str()
+        );
 
-        let mut process = match tokio::process::Command::new("python")
+        let mut process = match tokio::process::Command::new("python3")
             .args([
-                server_path,
-                "8000",
+                &format!("{}/main.py3", server_path),
                 tmp_socket_file.to_str().unwrap(),
                 pid.to_string().as_str(),
             ])
             .stdout(Stdio::piped())
-            // stderr is open by default, we want to see the output
             .spawn()
         {
             Ok(p) => p,
@@ -42,16 +46,15 @@ impl LangServer for PyServer {
             let stdout = process.stdout.as_mut().unwrap();
             let reader = tokio::io::BufReader::new(stdout);
             let mut lines = reader.lines();
-            println!("client output:");
+            debug!("client output:");
             while let Some(line) = lines.next_line().await.unwrap() {
-                println!("here {}", line);
+                debug!("here {}", line);
                 if line.contains("Listening") {
-                    println!("HERE");
                     break;
                 }
             }
         }
-        println!("client ready to connect to socket!");
+        debug!("client ready to connect to socket!");
         let socket_path = tmp_socket_file.to_str().unwrap().to_string();
         let socket = SocketAbstraction {
             socket_path,
@@ -129,7 +132,11 @@ impl LangServer for PyServer {
         todo!()
     }
 
-    async fn usages(&self, outer_block: &str, inner_block: &str) -> Result<String, LangServerError> {
+    async fn usages(
+        &self,
+        outer_block: &str,
+        inner_block: &str,
+    ) -> Result<String, LangServerError> {
         todo!()
     }
 
@@ -138,8 +145,7 @@ impl LangServer for PyServer {
         let tmp_file = tmp_dir.join(format!("codex-{}.py", std::process::id()));
         tokio::fs::write(&tmp_file, code).await?;
 
-        // TODO: uses mypy for now, but pyright would be faster
-        let mut process = match tokio::process::Command::new("mypy")
+        let mut process = match tokio::process::Command::new("pyright")
             .args([tmp_file.to_str().unwrap()])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

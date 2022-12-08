@@ -12,7 +12,8 @@ if len(sys.argv) < 4:
 sock = sys.argv[1]
 fileName = sys.argv[3]
 
-data = open(fileName, "rb").read()
+with open(fileName, 'r') as f:
+    data = f.read()
 
 # json format:
 # {
@@ -23,32 +24,32 @@ data = open(fileName, "rb").read()
 if sys.argv[2] == "weave":
     msg = {
         "cmd": sys.argv[2],
-        "text": base64.b64encode(data).decode("utf-8"),
+        "text": data,
         "nettle": base64.b64encode(open(sys.argv[4], "rb").read()).decode("utf-8"),
         "level": sys.argv[5] if len(sys.argv) > 5 else 0  # super hacky
     }
 elif sys.argv[2] == "check":
     msg = {
         "cmd": sys.argv[2],
-        "text": base64.b64encode(data).decode("utf-8"),
+        "text": data,
         "original": base64.b64encode(open(sys.argv[4], "rb").read()).decode("utf-8"),
     }
 elif sys.argv[2] == "usages":
     msg = {
         "cmd": sys.argv[2],
-        "text": base64.b64encode(data).decode("utf-8"),
+        "text": data,
         "innerBlock": base64.b64encode(open(sys.argv[4], "rb").read()).decode("utf-8"),
     }
 elif sys.argv[2] == "print":
     msg = {
         "cmd": sys.argv[2],
-        "text": base64.b64encode(data).decode("utf-8"),
+        "text": data,
         "typeName": sys.argv[4] if len(sys.argv) > 4 else "_hole_"
     }
 else:
     msg = {
         "cmd": sys.argv[2],
-        "text": base64.b64encode(data).decode("utf-8")
+        "text": data
     }
 
 print("Sending msg: {}".format(msg))
@@ -65,7 +66,10 @@ data = s.recv(12288)
 res = data.decode("utf-8")
 try:
     jsonDecoded = json.loads(res)
-    base64Decoded = base64.b64decode(jsonDecoded["text"]).decode("utf-8")
+    # base64Decoded = base64.b64decode(jsonDecoded["text"]).decode("utf-8")
+    # base64Decoded = jsonDecoded["text"].decode("utf-8")
+    base64Decoded = jsonDecoded["text"]
+    print(f'base64Decoded: {base64Decoded}')
 
     if sys.argv[2] == "tree":
         # text is other json, decode it
@@ -79,8 +83,8 @@ except:
         # try to get the error message
         jsonDecoded = json.loads(res)
         print("Error: {}".format(jsonDecoded["message"]))
-    except:
-        print("Error decoding response")
+    except Exception as e:
+        print(f"Error decoding response: {e}")
         print("Response is:\n {}".format(res))
 
 s.close()

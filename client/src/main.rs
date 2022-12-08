@@ -101,7 +101,7 @@ impl Args {
                 )
             }
             "py" => {
-                let path = get_path("py-ast".to_string());
+                let path = get_path("py_ast".to_string());
                 Arc::new(
                     PyServer::make(&path)
                         .await
