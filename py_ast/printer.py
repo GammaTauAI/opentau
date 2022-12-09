@@ -33,7 +33,13 @@ def _handle_source(source: RedBaron, should_handle_assignments: bool) -> None:
 
 def print_source(source_file: RedBaron, should_handle_assignments: bool = False) -> str:
     _handle_source(source_file, should_handle_assignments)
-    out = source_file.dumps()
+    source_str_with_holes = source_file.dumps()
+    # out = f"""import typing
+# from typing import *
+
+# {source_str_with_holes}
+# """
+    out = source_str_with_holes
     return out
 
 

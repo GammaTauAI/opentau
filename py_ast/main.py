@@ -132,9 +132,7 @@ def on_client(c: socket.socket) -> None:
             req_ = data.decode('utf-8')
             req = json.loads(req_)
             decoded_text = base64.b64decode(req['text']).decode('utf-8')
-            print(f'decoded text: {decoded_text}\n\nend decoded text', file=sys.stderr)
             cmd = req['cmd']
-            print(f'cmd: {cmd}', file=sys.stderr)
             if cmd == 'print':
                 res = handle_print(decoded_text)
                 c.send(res.encode('utf-8'))

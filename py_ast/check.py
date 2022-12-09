@@ -56,12 +56,14 @@ def check_completed(original_ast: RedBaron, completed_ast: RedBaron, should_hand
         for arg in func.arguments:
             if arg.target.value == 'self':
                 continue
+            elif arg.annotation is None:
+                is_completed = False
             elif arg.annotation.value == _FAKE_TYPE:
                 is_completed = False
             elif arg.annotation.value == 'Any':
                 score += 5
-        if func.return_annotation.value is None:
-            return False, score
+        if func.return_annotation is None:
+            is_completed = False
         elif func.return_annotation.value == 'Any':
             score += 5
 
