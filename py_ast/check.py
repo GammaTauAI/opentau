@@ -60,6 +60,10 @@ def check_completed(original_ast: RedBaron, completed_ast: RedBaron, should_hand
                 is_completed = False
             elif arg.annotation.value == 'Any':
                 score += 5
+        if func.return_annotation.value is None:
+            return False, score
+        elif func.return_annotation.value == 'Any':
+            score += 5
 
     if not is_completed:
         return False, score

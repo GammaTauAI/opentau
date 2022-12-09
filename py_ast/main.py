@@ -105,9 +105,9 @@ def handle_stub(decoded_text: str) -> str:
     return json.dumps({"type": "stubResponse", "text": b64str})
 
 def handle_check(decoded_text: str, req: Any) -> str:
-    decoded_original = str(base64.b64decode(req.original))
-    original_file = gen_source_file(decoded_original)
-    completed_file = gen_source_file(decoded_text)
+    decoded_original = base64.b64decode(req['original']).decode('utf-8')
+    original_file = gen_source_file(decoded_original, with_comments=True)
+    completed_file = gen_source_file(decoded_text, with_comments=True)
     assert isinstance(original_file, RedBaron)
     assert isinstance(completed_file, RedBaron)
     text, score = check_completed(
@@ -126,11 +126,15 @@ def on_client(c: socket.socket) -> None:
     try:
         while True:
             data = recvall(c)
-            # req = json.loads(base64.b64decode(data).decode('ISO-8859-1'))
-            req = json.loads(data.decode('utf-8'))
-            # decoded_text = req['text']
+            if data == b'':
+                c.close()
+                break
+            req_ = data.decode('utf-8')
+            req = json.loads(req_)
             decoded_text = base64.b64decode(req['text']).decode('utf-8')
+            print(f'decoded text: {decoded_text}\n\nend decoded text', file=sys.stderr)
             cmd = req['cmd']
+            print(f'cmd: {cmd}', file=sys.stderr)
             if cmd == 'print':
                 res = handle_print(decoded_text)
                 c.send(res.encode('utf-8'))
