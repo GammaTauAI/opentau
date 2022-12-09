@@ -64,7 +64,6 @@ impl LangServer for PyServer {
     }
 
     async fn pretty_print(&self, code: &str, type_name: &str) -> Result<String, LangServerError> {
-        println!("in langserver {}", code);
         let req = LSPrintReq {
             cmd: "print".to_string(),
             text: base64::encode(code),

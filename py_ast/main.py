@@ -18,7 +18,6 @@ from stub_printer import stub_source
 from typing import Any, Union
 
 
-print('21')
 if len(sys.argv) != 3:
     print(f'usage: [path to socket] [pid of rust proc]')
     sys.exit(1)
@@ -88,7 +87,8 @@ def handle_print(decoded_text: str) -> str:
     source_file = gen_source_file(decoded_text, with_comments=True)
     assert isinstance(source_file, RedBaron)
     res = print_source(source_file)
-    return json.dumps({"type": "printResponse", "text": res})
+    b64str = base64.b64encode(res.encode('utf-8')).decode('utf-8')
+    return json.dumps({"type": "printResponse", "text": b64str})
 
 # TODO: implement
 def handle_tree(decoded_text: str) -> str:
@@ -101,7 +101,8 @@ def handle_stub(decoded_text: str) -> str:
     source_file = gen_source_file(decoded_text)
     assert isinstance(source_file, ast.AST)
     res = stub_source(source_file)
-    return json.dumps({"type": "stubResponse", "text": res})
+    b64str = base64.b64encode(res.encode('utf-8')).decode('utf-8')
+    return json.dumps({"type": "stubResponse", "text": b64str})
 
 def handle_check(decoded_text: str, req: Any) -> str:
     decoded_original = str(base64.b64decode(req.original))
@@ -125,24 +126,26 @@ def on_client(c: socket.socket) -> None:
     try:
         while True:
             data = recvall(c)
+            # req = json.loads(base64.b64decode(data).decode('ISO-8859-1'))
             req = json.loads(data.decode('utf-8'))
-            decoded_text = req['text']
+            # decoded_text = req['text']
+            decoded_text = base64.b64decode(req['text']).decode('utf-8')
             cmd = req['cmd']
             if cmd == 'print':
                 res = handle_print(decoded_text)
-                c.send(bytes(res, 'utf-8'))
+                c.send(res.encode('utf-8'))
             elif cmd == 'tree':
                 res = handle_tree(decoded_text)
-                c.send(bytes(res, 'utf-8'))
+                c.send(res.encode('utf-8'))
             elif cmd == 'stub':
                 res = handle_stub(decoded_text)
-                c.send(bytes(res, 'utf-8'))
+                c.send(res.encode('utf-8'))
             elif cmd == 'check':
                 res = handle_check(decoded_text, req)
-                c.send(bytes(res, 'utf-8'))
+                c.send(res.encode('utf-8'))
             elif cmd == 'weave':
                 res = handle_weave()
-                c.send(bytes(res, 'utf-8'))
+                c.send(res.encode('utf-8'))
             else:
                 c.send(json.dumps({
                     'type': 'error',
@@ -168,16 +171,11 @@ def close(_, __, sm: SocketManager) -> None:
 
 # init socket manager
 sm = SocketManager()
-print('170')
 sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-print('172')
 sock.bind(SOCK_PATH)
-print('174')
 sock.listen(1)
-print('176')
 # store socket for future close
 sm(sock)
-print('179')
 
 # this should work but should be tested
 # other way is to use a lambdas
