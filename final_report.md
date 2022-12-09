@@ -227,6 +227,8 @@ pub struct CompNode {
 }
 ```
 
+\newpage
+
 #### Type-Weaving Procedure
 
 We have implemented a type-weaving procedure $\mathcal{W}$. This procedure is used to transplant
@@ -283,9 +285,11 @@ function hello(name) {
 This allows us to ignore any types given to the `hello` function, while transplanting types given to
 the `hello$inner` function and the `hello$inner$my_string` variable.
 
+\newpage
+
 #### Client
 
-Finally, we have implemented a client in Rust that manages the pipeline and queries the Codex API. The client will communicate with the compiler $K$, which is written in TypeScript and will send the outputs to Codex. The client can be downloaded from [https://github.com/GammaTauAI/opentau](https://github.com/GammaTauAI/opentau) and can be utilized by using the following terminal interface:
+We have implemented a client in Rust that manages the pipeline and queries the Codex API. The client will communicate with the compiler $K$, which is written in TypeScript and will send the outputs to Codex. The client can be downloaded from [https://github.com/GammaTauAI/opentau](https://github.com/GammaTauAI/opentau) and can be utilized by using the following terminal interface:
 
 ```
 USAGE:
@@ -317,6 +321,8 @@ OPTIONS:
 ```
 
 Type-correct solutions will be written to the specified directory.
+
+\newpage
 
 #### Language Server Protocol
 
@@ -394,6 +400,8 @@ This API mimics the Codex API in order to be an effective drop-in replacement, a
 
 In production, we execute the InCoder model on NVIDIA A100 GPUs using Northeastern's Discovery Cluster.
 
+\newpage
+
 # Dataset, Evaluation and Results
 
 ### Dataset
@@ -417,7 +425,3 @@ Using a combination of prompt engineering and Codex's `code-davinci-edit` model,
 ### Future Directions
 
 In future work, we plan to expand our prompt engineering approach to include additional static analysis techniques in order to add context. For example, we could find free variables in inner scopes and include them in the outer scope, in order to show dependency. One limitation of our approach is the reliance on a commercial product, Codex, which may render our approach expensive and infeasible for an individual or a small research group to use. While the results from `InCoder` were not as good as those from Codex, with further fine-tuning and more precise prompt engineering, the model could be used as an effective replacement for Codex, allowing our approach to be used by individuals and small research groups. Additionally, thanks to our language server protocol, our approach could be extended to other programming languages, such as Rust and Java, by training a language model on the task of type inference for these languages. Additionally, we plan to explore more language models and techniques to improve the accuracy of the type inference procedure. We believe that our approach has the potential to improve type inference in gradually-typed languages, and we hope that our work will lead to more robust and accurate type inference procedures in the future.
-
-# TODO:
-
-  - Python evaluation (Noah)
