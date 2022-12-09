@@ -8,7 +8,7 @@ output: pdf_document
 
 # Abstract
 
-Type inference for gradually-typed languages such as TypeScript and Python has become increasingly prevalent in the field of programming languages. However, current approaches often struggle with inferring descriptive types in cases in which user-defined type annotations are absent, especially when inferring function signatures. In our dataset, we found that TypeScript's inference procedure was only able to correctly type-infer 59% of the given files. Furthermore, we found that the quality of the type annotations was low, as the types were too permissive, possibly leading to an increased number of dynamic type errors. This finding makes the built-in procedure ineffective in practice. In this report, we show an effective use of large natural language models to aid these type inference procedures. Our approach utilizes static insertion of type holes to generate a prompt to be edited by a language model. Our paper mainly uses Codex's _code-davinci-edit_ model for TypeScript type inference. Additionally, we also explore other languages such as Python and other language models such as Facebook's _InCoder_ model. Across our dataset, we were able to type-infer 91% of the files with descriptive, high quality type annotations.
+Type inference for gradually-typed languages such as TypeScript and Python has become increasingly prevalent in the field of programming languages. However, current approaches often struggle with inferring descriptive types in cases in which user-defined type annotations are absent, especially when inferring function signatures. In our dataset, we found that TypeScript's inference procedure was only able to correctly type-infer 59% of the given files. Furthermore, we found that the quality of the type annotations was low, as the types were too permissive, possibly leading to an increased number of dynamic type errors. This finding makes the built-in procedure ineffective in practice. In this report, we show an effective use of large natural language models to aid these type inference procedures. Our approach utilizes static insertion of type holes to generate a prompt to be edited by a language model. Our paper mainly uses Codex's _code-davinci-edit_ model for TypeScript type inference. Additionally, we also explore other language models such as Facebook's _InCoder_ model. Across our dataset, we were able to type-infer 91% of the files with descriptive, high quality type annotations.
 
 \newpage
 
@@ -333,7 +333,7 @@ Adding a new server for the protocol is as simple as implementing the `LangServe
 The flow of information using the protocol is described in **Figure 1**.
 The server needs to be designed with concurrent requests in mind as the `tree` strategy queries each node of the current
 level of the tree in parallel.
-Our TypeScript and Python language servers implement such protocol.
+Our TypeScript language server implement such protocol.
 
 ![Diagram of information flow using our protocol. The numbers in red represent the step.](./assets/pipeline.png){ width=400px }
 
@@ -420,7 +420,7 @@ From **Figure 2**, we observe a significantly higher accuracy using Codex with a
 
 ### Discussion
 
-Using a combination of prompt engineering and Codex's `code-davinci-edit` model, we were able to effectively type-infer a medium-sized dataset of TypeScript files. Across all of our experimental dataset, we were able to type-infer 91% of the files. Furthermore, we were able to observe a significant improvement in the quality of the type annotations, as the types were more descriptive and restrictive than the type annotations inferred by TypeScript's built-in type inference procedure. Additionally, we explored other languages such as Python and other language models such as Facebook's `InCoder` model. We found that the results from `InCoder` were significantly worse than those from Codex, likely due to the model not being trained on typed code. Additionally, we found that our prompt engineering implementation produced better results on larger files than our simple implementation, largely due to the improved scalability of this approach.
+Using a combination of prompt engineering and Codex's `code-davinci-edit` model, we were able to effectively type-infer a medium-sized dataset of TypeScript files. Across all of our experimental dataset, we were able to type-infer 91% of the files. Furthermore, we were able to observe a significant improvement in the quality of the type annotations, as the types were more descriptive and restrictive than the type annotations inferred by TypeScript's built-in type inference procedure. We found that the results from `InCoder` were significantly worse than those from Codex, likely due to the model not being trained on typed code. Additionally, we found that our prompt engineering implementation produced similar results to our simple implementation, despite the loss of context.
 
 ### Future Directions
 
