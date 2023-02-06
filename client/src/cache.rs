@@ -1,6 +1,6 @@
 use redis::Commands;
 
-use crate::codex::CompletionQuery;
+use crate::completion::CompletionQuery;
 
 pub struct Cache {
     stop_at: usize, // TODO: document why we need this

@@ -2,7 +2,11 @@ use std::sync::Arc;
 
 use codex_types::{
     cache::Cache,
-    codex::{CodexClient, CodexClientBuilder, CodexError, Completion, CompletionQuery},
+    completion::{
+        codex::{CodexClient, CodexClientBuilder},
+        ArcCompletionEngine, CompletionEngine,
+    },
+    completion::{Completion, CompletionError, CompletionQuery},
     debug,
     langserver::{py::PyServer, ts::TsServer, LangServer},
     tree::{CompletionLevels, TreeCompletion},
@@ -154,7 +158,7 @@ async fn main() {
 
     let ctx = MainCtx {
         file_contents,
-        codex,
+        engine: Arc::new(codex), // TODO: add option for different engines
         num_comps: args.n,
         retries: args.retries,
         fallback: args.fallback,
@@ -195,8 +199,10 @@ async fn main() {
     }
 }
 
+/// The context for the program.
+/// Splits into different strategies.
 struct MainCtx {
-    codex: CodexClient,
+    engine: ArcCompletionEngine,
     file_contents: String,
     num_comps: usize,
     retries: usize,
@@ -211,7 +217,7 @@ impl MainCtx {
         let mut handles: Vec<JoinHandle<Option<Completion>>> = vec![];
         for (i, candidate) in candidates.into_iter().enumerate() {
             debug!("candidate {}:\n{}", i, candidate.code);
-            let lang_client = self.codex.get_ls();
+            let lang_client = self.engine.get_ls();
             handles.push(tokio::task::spawn(async move {
                 let type_checks = lang_client.type_check(&candidate.code).await.unwrap();
                 if type_checks {
@@ -236,27 +242,27 @@ impl MainCtx {
     /// Runs the tree completion strategy. Documentation on the strategy is in the `tree.rs` file.
     async fn tree_strategy(&self) -> Vec<Completion> {
         let tree = self
-            .codex
+            .engine
             .get_ls()
             .to_tree(&self.file_contents)
             .await
             .unwrap();
 
-        let mut levels: CompletionLevels = CompletionLevels::prepare(tree, self.codex.get_ls())
+        let mut levels: CompletionLevels = CompletionLevels::prepare(tree, self.engine.get_ls())
             .await
             .unwrap();
         levels.num_comps = self.num_comps;
         levels.retries = self.retries;
         levels.fallback = self.fallback;
 
-        levels.tree_complete(self.codex.clone()).await;
+        levels.tree_complete(self.engine.clone()).await;
 
         let root = levels.levels[0].nodes.remove(0);
 
         // score the code at the root
         let mut handles: Vec<JoinHandle<Completion>> = vec![];
         for code in root.completed {
-            let ls = self.codex.get_ls();
+            let ls = self.engine.get_ls();
             handles.push(tokio::task::spawn(async move {
                 let (_, score) = ls
                     .check_complete(&code, &code)
@@ -285,7 +291,7 @@ impl MainCtx {
     /// without any transformation, other than adding "_hole_" to each unknwon type
     async fn simple_strategy(self) -> Vec<Completion> {
         let printed = self
-            .codex
+            .engine
             .get_ls()
             .pretty_print(&self.file_contents, "_hole_")
             .await
@@ -295,9 +301,9 @@ impl MainCtx {
 
         let query = CompletionQuery::new(printed, self.num_comps, self.retries, self.fallback);
 
-        let candidates = match self.codex.complete(query.clone()).await {
+        let candidates = match self.engine.complete(query.clone()).await {
             Ok(r) => r,
-            Err(CodexError::RateLimit(r)) if !r.is_empty() => {
+            Err(CompletionError::RateLimit(r)) if !r.is_empty() => {
                 eprintln!(
                     "Rate limited, but got {} canditate completions before.",
                     r.len()
@@ -313,7 +319,7 @@ impl MainCtx {
         let comps: Vec<Completion> = self.type_check_candidates(candidates).await;
 
         // cache the type-checked completions if we have a cache
-        if let Some(mut cache) = self.codex.get_cache().await {
+        if let Some(mut cache) = self.engine.get_cache().await {
             // we want to get all the completions that are typechecked
             // except the one that fallbacked (if there is any)
             let comps_no_fallback = comps

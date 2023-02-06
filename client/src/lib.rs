@@ -1,6 +1,6 @@
 pub mod cache;
-pub mod codex;
 pub mod langserver;
+pub mod completion;
 pub mod tree;
 
 /// macro for debug printing, only prints if #cfg(debug_assertions) is true

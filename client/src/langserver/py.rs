@@ -11,6 +11,8 @@ pub struct PyServer {
     socket: SocketAbstraction,
 }
 
+// NOTE: this is commented out because it's WIP. sorry for the mess!
+
 #[async_trait]
 impl LangServer for PyServer {
     async fn make(_path: &str) -> Result<Self, LangServerError> {
@@ -126,7 +128,11 @@ impl LangServer for PyServer {
         todo!()
     }
 
-    async fn usages(&self, outer_block: &str, inner_block: &str) -> Result<String, LangServerError> {
+    async fn usages(
+        &self,
+        outer_block: &str,
+        inner_block: &str,
+    ) -> Result<String, LangServerError> {
         todo!()
     }
 

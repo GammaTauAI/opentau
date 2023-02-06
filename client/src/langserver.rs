@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
@@ -71,7 +73,7 @@ pub trait LangServer {
     async fn type_check(&self, code: &str) -> Result<bool, LangServerError>;
 }
 
-pub type ArcLangServer = std::sync::Arc<dyn LangServer + Send + Sync>;
+pub type ArcLangServer = Arc<dyn LangServer + Send + Sync>;
 
 /// Request to the language server, with a given command and text
 /// in the format of {cmd: "the-cmd", text: "the-text"}

@@ -8,6 +8,8 @@ use crate::{
     langserver::{ArcLangServer, LangServer, LangServerError},
 };
 
+use super::{CompletionError, Completion, CompletionEngine, CompletionQuery};
+
 mod rl {
     use dashmap::DashMap;
     use governor::{
@@ -180,50 +182,22 @@ impl CodexClientBuilder {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CompletionQuery {
-    pub input: String,
-    pub num_comps: usize,
-    pub retries: usize,
-    pub fallback: bool,
-}
-
-impl CompletionQuery {
-    pub fn new(input: String, num_comps: usize, retries: usize, fallback: bool) -> Self {
-        Self {
-            input,
-            num_comps,
-            retries,
-            fallback,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct Completion {
-    pub code: String,
-    pub score: i64,
-    pub fallbacked: bool, // is this completion from fallback?
-}
-
 const INSTRUCTIONS: &str = "Substitute the identifier _hole_ with the correct type.";
 
-impl CodexClient {
+#[async_trait::async_trait]
+impl CompletionEngine for CodexClient {
     /// Completes the given input code using the codex API. The given input code has to be pretty
     /// printed such that unknown types are represented by "_hole_".
     /// num_comps is the number of completions to return per request.
     /// retries is the number of requests to make to codex, which creates duplicates, so we filter
     /// them out.
     /// fallback is whether to fallback to "any" if we don't get any completions.
-    pub async fn complete(
-        &self,
-        mut query: CompletionQuery,
-    ) -> Result<Vec<Completion>, CodexError> {
+    async fn complete(&self, mut query: CompletionQuery) -> Result<Vec<Completion>, CompletionError> {
         // we filter incomplete completions
         // scored vec: implemented scoring, sort resulting vec by score,
         //             and fall back to all "any" in worst case (if enabled)
         let filtered_completions: Arc<Mutex<Vec<(String, i64)>>> = Arc::new(Mutex::new(Vec::new()));
-        let mut handles: Vec<JoinHandle<Result<(), CodexError>>> = Vec::new();
+        let mut handles: Vec<JoinHandle<Result<(), CompletionError>>> = Vec::new();
 
         // check cache first, if the cache is set
         // NOTE: we need to query a list of comps with the same (input, num_comps, retries) tuple
@@ -250,7 +224,7 @@ impl CodexClient {
         for handle in handles {
             let res = handle.await.unwrap();
             if let Err(e) = res {
-                if let CodexError::ErrorResponse(EditRespError::RateLimited { message: msg }) = &e {
+                if let CompletionError::ErrorResponse(EditRespError::RateLimited { message: msg }) = &e {
                     println!("Rate limited by codex. {}", msg);
                     rate_limit = true;
                 } else {
@@ -287,12 +261,12 @@ impl CodexClient {
 
         if rate_limit {
             // if we rate limit, we still want to return the completions we have (may not have any)
-            return Err(CodexError::RateLimit(final_completions));
+            return Err(CompletionError::RateLimit(final_completions));
         }
 
         // if we have no completions, we return an error
         if final_completions.is_empty() {
-            return Err(CodexError::CodexCouldNotComplete);
+            return Err(CompletionError::CodexCouldNotComplete);
         }
 
         // print out scores
@@ -305,12 +279,28 @@ impl CodexClient {
         Ok(final_completions)
     }
 
+    /// Gets the language server object from the codex client
+    fn get_ls(&self) -> Arc<dyn LangServer + Send + Sync> {
+        self.lang_server.clone()
+    }
+
+    /// Gets a mutex guard to the cache from the codex client, if a cache is being used
+    async fn get_cache(&self) -> Option<tokio::sync::MutexGuard<Cache>> {
+        if let Some(cache) = &self.cache {
+            Some(cache.lock().await)
+        } else {
+            None
+        }
+    }
+}
+
+impl CodexClient {
     /// Spawns a task that sends the completion requests to codex
     fn spawn_comp_req(
         &self,
         query: &CompletionQuery,
         filtered_completions: Arc<Mutex<Vec<(String, i64)>>>,
-    ) -> JoinHandle<Result<(), CodexError>> {
+    ) -> JoinHandle<Result<(), CompletionError>> {
         let lang_client = self.lang_server.clone();
         let input = query.input.to_string();
         let client = self.client.clone(); // NOTE: reqwest uses Arc internally
@@ -341,7 +331,7 @@ impl CodexClient {
             let body = res.text().await?;
             let choices: Vec<EditRespChoice> = match serde_json::from_str::<EditResp>(&body)? {
                 EditResp::Choices { choices } => choices,
-                EditResp::Error { error } => return Err(CodexError::ErrorResponse(error)),
+                EditResp::Error { error } => return Err(CompletionError::ErrorResponse(error)),
             };
 
             println!("Got {} responses from codex", choices.len());
@@ -383,20 +373,6 @@ impl CodexClient {
 
             Ok(())
         })
-    }
-
-    /// Gets the language server object from the codex client
-    pub fn get_ls(&self) -> Arc<dyn LangServer + Send + Sync> {
-        self.lang_server.clone()
-    }
-
-    /// Gets a mutex guard to the cache from the codex client, if a cache is being used
-    pub async fn get_cache(&self) -> Option<tokio::sync::MutexGuard<Cache>> {
-        if let Some(cache) = &self.cache {
-            Some(cache.lock().await)
-        } else {
-            None
-        }
     }
 }
 
@@ -440,49 +416,3 @@ impl std::fmt::Display for EditRespError {
         }
     }
 }
-
-#[derive(Debug)]
-pub enum CodexError {
-    ErrorResponse(EditRespError),
-    CodexCouldNotComplete,
-    // where the Vec<String> is the list of completions we got before the rate limit
-    RateLimit(Vec<Completion>),
-    LangServer(LangServerError),
-    Reqwest(reqwest::Error),
-    Serde(serde_json::Error),
-}
-
-impl From<LangServerError> for CodexError {
-    fn from(e: LangServerError) -> Self {
-        CodexError::LangServer(e)
-    }
-}
-
-impl From<reqwest::Error> for CodexError {
-    fn from(e: reqwest::Error) -> Self {
-        CodexError::Reqwest(e)
-    }
-}
-
-impl From<serde_json::Error> for CodexError {
-    fn from(e: serde_json::Error) -> Self {
-        CodexError::Serde(e)
-    }
-}
-
-impl std::fmt::Display for CodexError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CodexError::LangServer(e) => write!(f, "Language client error: {}", e),
-            CodexError::Reqwest(e) => write!(f, "Reqwest error: {}", e),
-            CodexError::Serde(e) => write!(f, "Serde error: {}", e),
-            CodexError::ErrorResponse(s) => write!(f, "Codex error response: {}", s),
-            CodexError::CodexCouldNotComplete => write!(f, "Codex could not complete"),
-            CodexError::RateLimit(completions) => {
-                write!(f, "Codex rate limit. Got {} completions", completions.len())
-            }
-        }
-    }
-}
-
-impl std::error::Error for CodexError {}

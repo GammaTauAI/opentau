@@ -8,7 +8,10 @@ use serde::{Deserialize, Serialize};
 use tokio::task::JoinHandle;
 
 use crate::{
-    codex::{CodexClient, CodexError, Completion, CompletionQuery},
+    completion::codex::CodexClient,
+    completion::{
+        ArcCompletionEngine, Completion, CompletionEngine, CompletionError, CompletionQuery,
+    },
     debug,
     langserver::{ArcLangServer, LangServerError},
 };
@@ -32,7 +35,7 @@ pub trait TreeCompletion {
         Self: Sized;
 
     /// Completes the code block tree, mutating the tree in place.
-    async fn tree_complete(&mut self, codex: CodexClient);
+    async fn tree_complete(&mut self, codex: ArcCompletionEngine);
 }
 
 /// tree compeltion algo (naive and inefficient way, with only one single completion per code-block):
@@ -130,15 +133,18 @@ impl TreeCompletion for NaiveCompletionLevels {
     }
 
     /// Completes the code block tree, mutating the tree in place.
-    async fn tree_complete(&mut self, codex: CodexClient) {
-        async fn retry_query_until_ok(codex: &CodexClient, q: CompletionQuery) -> Completion {
-            let mut res = codex.complete(q.clone()).await;
+    async fn tree_complete(&mut self, engine: ArcCompletionEngine) {
+        async fn retry_query_until_ok(
+            engine: &ArcCompletionEngine,
+            q: CompletionQuery,
+        ) -> Completion {
+            let mut res = engine.complete(q.clone()).await;
             let mut retries = 0;
             while res.is_err() {
                 retries += 1;
                 let mut q = q.clone();
                 q.num_comps = 1 + retries;
-                res = codex.complete(q).await;
+                res = engine.complete(q).await;
             }
             res.unwrap().remove(0)
         }
@@ -156,7 +162,7 @@ impl TreeCompletion for NaiveCompletionLevels {
             for (i, node) in nodes.iter().enumerate() {
                 let node = node.clone();
                 let prev_level = prev_level.clone();
-                let codex = codex.clone();
+                let engine = engine.clone();
                 lookup.insert(node.name.clone(), i);
                 // we concurrently complete the code blocks at the level.
                 handles.push(tokio::task::spawn(async move {
@@ -173,7 +179,7 @@ impl TreeCompletion for NaiveCompletionLevels {
                                 )
                             });
                             debug!("before weave:\n{}", code);
-                            code = codex
+                            code = engine
                                 .get_ls()
                                 // we take the min because at level 0 we have the root node
                                 // and we want to weave at nettle_level 0
@@ -185,7 +191,7 @@ impl TreeCompletion for NaiveCompletionLevels {
                     }
                     match level.cmp(&0) {
                         Ordering::Greater => {
-                            let ls = codex.get_ls();
+                            let ls = engine.get_ls();
                             let stubbed = ls.stub(&code).await.unwrap();
                             let mut printed = ls.pretty_print(&stubbed, "_hole_").await.unwrap();
 
@@ -196,7 +202,7 @@ impl TreeCompletion for NaiveCompletionLevels {
 
                             let q = CompletionQuery::new(printed, 1, 1, false);
                             debug!("query: {}", q.input);
-                            let comp = retry_query_until_ok(&codex, q).await;
+                            let comp = retry_query_until_ok(&engine, q).await;
                             debug!("level comp: \n{}", comp.code);
                             let rewoven = ls.weave(&code, &comp.code, 0).await.unwrap();
                             (node.name, rewoven)
@@ -324,16 +330,16 @@ impl TreeCompletion for CompletionLevels {
     }
 
     /// Completes the code block tree, mutating the tree in place.
-    async fn tree_complete(&mut self, codex: CodexClient) {
+    async fn tree_complete(&mut self, engine: ArcCompletionEngine) {
         async fn retry_query_until_ok(
-            codex: &CodexClient,
+            engine: &ArcCompletionEngine,
             q: CompletionQuery,
         ) -> Option<Vec<Completion>> {
-            let mut res = codex.complete(q.clone()).await;
+            let mut res = engine.complete(q.clone()).await;
             let mut retries = 0;
             while res.is_err() {
                 // if it's a rate limit, print out to stderr
-                if let CodexError::RateLimit(r) = res.unwrap_err() {
+                if let CompletionError::RateLimit(r) = res.unwrap_err() {
                     eprintln!(
                         "Rate limited, but got {} canditate completions before.",
                         r.len()
@@ -344,7 +350,7 @@ impl TreeCompletion for CompletionLevels {
                 }
                 retries += 1;
                 let q = q.clone();
-                res = codex.complete(q).await;
+                res = engine.complete(q).await;
             }
             Some(res.unwrap())
         }
@@ -364,7 +370,7 @@ impl TreeCompletion for CompletionLevels {
                 let num_comps = self.num_comps;
                 let retries = self.retries;
                 let fallback = self.fallback;
-                let codex = codex.clone();
+                let engine = engine.clone();
                 lookup.insert(node.name.clone(), i);
                 // we concurrently complete the code blocks at the level.
                 handles.push(tokio::task::spawn(async move {
@@ -385,7 +391,7 @@ impl TreeCompletion for CompletionLevels {
                             let mut new_prompts = vec![];
                             for parent_code in prompts.iter() {
                                 for child_code in child.completed.iter() {
-                                    let comp = codex
+                                    let comp = engine
                                         .get_ls()
                                         // we take the min because at level 0 we have the root node
                                         // and we want to weave at nettle_level 0
@@ -405,7 +411,7 @@ impl TreeCompletion for CompletionLevels {
                     debug!("number of level prompts: {}", prompts.len());
                     match level.cmp(&0) {
                         Ordering::Greater => {
-                            let ls = codex.get_ls();
+                            let ls = engine.get_ls();
                             let mut new_comps = HashSet::new(); // we don't care about duplicates
                             for prompt in prompts.iter() {
                                 let stubbed = ls.stub(prompt).await.unwrap();
@@ -420,7 +426,7 @@ impl TreeCompletion for CompletionLevels {
                                 let q = CompletionQuery::new(printed, num_comps, retries, fallback);
 
                                 debug!("query: {}", q.input);
-                                let comps = retry_query_until_ok(&codex, q).await;
+                                let comps = retry_query_until_ok(&engine, q).await;
                                 match comps {
                                     Some(comps) => {
                                         for comp in comps {

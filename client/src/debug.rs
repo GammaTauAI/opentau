@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use codex_types::{
-    codex::CodexClientBuilder,
+    completion::{codex::CodexClientBuilder, CompletionEngine},
     langserver::{ts::TsServer, LangServer},
     tree::{CompletionLevels, NaiveCompletionLevels, TreeCompletion},
 };
@@ -66,7 +66,7 @@ async fn main() {
         comps.num_comps = 3;
         // comps.fallback = true;
         println!("tree: {:#?}", comps);
-        comps.tree_complete(codex).await;
+        comps.tree_complete(Arc::new(codex)).await;
         println!("root comps:\n");
         for (i, comp) in comps.levels[0].nodes[0].completed.iter().enumerate() {
             println!("{}:\n{}", i, comp);
