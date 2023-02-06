@@ -3,7 +3,7 @@ use std::sync::Arc;
 use codex_types::{
     completion::{codex::CodexClientBuilder, CompletionEngine},
     langserver::{ts::TsServer, LangServer},
-    tree::{CompletionLevels, NaiveCompletionLevels, TreeCompletion},
+    tree::{CompletionLevels, TreeCompletion},
 };
 
 #[tokio::main]
@@ -65,11 +65,11 @@ async fn main() {
         comps.retries = 1;
         comps.num_comps = 3;
         // comps.fallback = true;
-        println!("tree: {:#?}", comps);
+        println!("tree: {comps:#?}");
         comps.tree_complete(Arc::new(codex)).await;
         println!("root comps:\n");
         for (i, comp) in comps.levels[0].nodes[0].completed.iter().enumerate() {
-            println!("{}:\n{}", i, comp);
+            println!("{i}:\n{comp}");
         }
     }
 

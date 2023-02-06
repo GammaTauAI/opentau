@@ -100,10 +100,10 @@ impl From<serde_json::Error> for CompletionError {
 impl std::fmt::Display for CompletionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CompletionError::LangServer(e) => write!(f, "Language client error: {}", e),
-            CompletionError::Reqwest(e) => write!(f, "Reqwest error: {}", e),
-            CompletionError::Serde(e) => write!(f, "Serde error: {}", e),
-            CompletionError::ErrorResponse(s) => write!(f, "Codex error response: {}", s),
+            CompletionError::LangServer(e) => write!(f, "Language client error: {e}"),
+            CompletionError::Reqwest(e) => write!(f, "Reqwest error: {e}"),
+            CompletionError::Serde(e) => write!(f, "Serde error: {e}"),
+            CompletionError::ErrorResponse(s) => write!(f, "Codex error response: {s}"),
             CompletionError::CodexCouldNotComplete => write!(f, "Codex could not complete"),
             CompletionError::RateLimit(completions) => {
                 write!(f, "Codex rate limit. Got {} completions", completions.len())

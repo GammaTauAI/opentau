@@ -1,4 +1,4 @@
-use std::process::Stdio;
+
 
 use async_trait::async_trait;
 
@@ -55,7 +55,7 @@ impl LangServer for PyServer {
         todo!()
     }
 
-    async fn pretty_print(&self, code: &str, type_name: &str) -> Result<String, LangServerError> {
+    async fn pretty_print(&self, _code: &str, _type_name: &str) -> Result<String, LangServerError> {
         // let req = LSPrintReq {
         // cmd: "print".to_string(),
         // text: base64::encode(code),
@@ -70,7 +70,7 @@ impl LangServer for PyServer {
         todo!()
     }
 
-    async fn to_tree(&self, code: &str) -> Result<CodeBlockTree, LangServerError> {
+    async fn to_tree(&self, _code: &str) -> Result<CodeBlockTree, LangServerError> {
         // let req = LSReq {
         // cmd: "tree".to_string(),
         // text: base64::encode(code),
@@ -121,22 +121,22 @@ impl LangServer for PyServer {
 
     async fn weave(
         &self,
-        original: &str,
-        nettle: &str,
-        level: usize,
+        _original: &str,
+        _nettle: &str,
+        _level: usize,
     ) -> Result<String, LangServerError> {
         todo!()
     }
 
     async fn usages(
         &self,
-        outer_block: &str,
-        inner_block: &str,
+        _outer_block: &str,
+        _inner_block: &str,
     ) -> Result<String, LangServerError> {
         todo!()
     }
 
-    async fn type_check(&self, code: &str) -> Result<bool, LangServerError> {
+    async fn type_check(&self, _code: &str) -> Result<bool, LangServerError> {
         // let tmp_dir = std::env::temp_dir();
         // let tmp_file = tmp_dir.join(format!("codex-{}.py", std::process::id()));
         // tokio::fs::write(&tmp_file, code).await?;

@@ -20,7 +20,7 @@ impl LangServer for TsServer {
     async fn make(server_path: &str) -> Result<Self, LangServerError> {
         let pid = std::process::id();
         let tmp_dir = std::env::temp_dir();
-        let tmp_socket_file = tmp_dir.join(format!("codex-{}.sock", pid));
+        let tmp_socket_file = tmp_dir.join(format!("codex-{pid}.sock"));
         debug!("tmp_socket_file: {:?}", tmp_socket_file);
 
         let mut process = match tokio::process::Command::new("npm")

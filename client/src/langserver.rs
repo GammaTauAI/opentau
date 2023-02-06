@@ -141,7 +141,7 @@ impl From<std::io::Error> for LangServerError {
 impl std::fmt::Display for LangServerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LangServerError::LC(s) => write!(f, "Language client error: {}", s),
+            LangServerError::LC(s) => write!(f, "Language client error: {s}"),
             LangServerError::ProcessSpawn => write!(f, "could not spawn language server"),
             LangServerError::SocketConnect => write!(f, "Socket connection error"),
             LangServerError::SocketIO => write!(f, "Socket IO error"),

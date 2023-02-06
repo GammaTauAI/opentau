@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use tokio::task::JoinHandle;
 
 use crate::{
-    completion::codex::CodexClient,
     completion::{
         ArcCompletionEngine, Completion, CompletionEngine, CompletionError, CompletionQuery,
     },

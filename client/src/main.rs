@@ -3,7 +3,7 @@ use std::sync::Arc;
 use codex_types::{
     cache::Cache,
     completion::{
-        codex::{CodexClient, CodexClientBuilder},
+        codex::{CodexClientBuilder},
         ArcCompletionEngine, CompletionEngine,
     },
     completion::{Completion, CompletionError, CompletionQuery},
@@ -131,7 +131,7 @@ async fn main() {
     let cache: Option<Arc<Mutex<Cache>>> = args.cache.map(|u| {
         Arc::new(Mutex::new(Cache::new(&u, args.stop_at).unwrap_or_else(
             |e| {
-                eprintln!("Failed to connect to redis: {}", e);
+                eprintln!("Failed to connect to redis: {e}");
                 std::process::exit(1);
             },
         )))
@@ -311,7 +311,7 @@ impl MainCtx {
                 r
             }
             Err(e) => {
-                eprintln!("Fatal error: {}", e);
+                eprintln!("Fatal error: {e}");
                 std::process::exit(1);
             }
         };

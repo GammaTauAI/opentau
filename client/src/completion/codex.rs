@@ -1,11 +1,11 @@
-use std::{collections::HashSet, sync::Arc};
+use std::{sync::Arc};
 
 use serde::{Deserialize, Serialize};
 use tokio::{sync::Mutex, task::JoinHandle};
 
 use crate::{
     cache::Cache,
-    langserver::{ArcLangServer, LangServer, LangServerError},
+    langserver::{ArcLangServer, LangServer},
 };
 
 use super::{CompletionError, Completion, CompletionEngine, CompletionQuery};
@@ -225,10 +225,10 @@ impl CompletionEngine for CodexClient {
             let res = handle.await.unwrap();
             if let Err(e) = res {
                 if let CompletionError::ErrorResponse(EditRespError::RateLimited { message: msg }) = &e {
-                    println!("Rate limited by codex. {}", msg);
+                    println!("Rate limited by codex. {msg}");
                     rate_limit = true;
                 } else {
-                    println!("Error in completion thread: {:?}", e);
+                    println!("Error in completion thread: {e:?}");
                 }
             }
         }
@@ -272,7 +272,7 @@ impl CompletionEngine for CodexClient {
         // print out scores
         print!("Scores: ");
         for (_, score) in filtered_completions.lock().await.iter() {
-            print!("{}, ", score);
+            print!("{score}, ");
         }
         println!();
 
@@ -340,7 +340,7 @@ impl CodexClient {
                 let text = match comp {
                     EditRespChoice::Text { text } => text,
                     EditRespChoice::Error { error: e } => {
-                        println!("Got error from codex: {}", e);
+                        println!("Got error from codex: {e}");
                         continue;
                     }
                 };
@@ -359,7 +359,7 @@ impl CodexClient {
                     .check_complete(&input, &text)
                     .await
                     .unwrap_or_else(|e| {
-                        println!("Error checking completion: {}", e);
+                        println!("Error checking completion: {e}");
                         (false, 0) // if there is an error, we assume it is not complete
                     });
                 // we don't want completions with higher type score than the max
@@ -411,8 +411,8 @@ pub enum EditRespError {
 impl std::fmt::Display for EditRespError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            EditRespError::InvalidEdit { message } => write!(f, "Invalid edit: {}", message),
-            EditRespError::RateLimited { message } => write!(f, "Rate limited: {}", message),
+            EditRespError::InvalidEdit { message } => write!(f, "Invalid edit: {message}"),
+            EditRespError::RateLimited { message } => write!(f, "Rate limited: {message}"),
         }
     }
 }
