@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use codex_types::{
+use opentau::{
     cache::Cache,
     completion::{
         codex::{CodexClientBuilder},

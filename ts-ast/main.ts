@@ -251,7 +251,7 @@ var unixServer = net.createServer(function (client) {
     try {
       req = JSON.parse(data.toString());
       decodedText = Buffer.from(req.text, "base64").toString("utf8");
-    } catch (e) {
+    } catch (e: any) {
       client.write(JSON.stringify({ type: "error", message: e.message }));
       return;
     }
@@ -303,7 +303,7 @@ var unixServer = net.createServer(function (client) {
         }
       }
       // yeah, pretty bad to catch all, but we want this to work no matter what.
-    } catch (e) {
+    } catch (e: any) {
       client.write(
         JSON.stringify({
           type: "error",

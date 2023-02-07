@@ -3,11 +3,11 @@ use std::process::Stdio;
 use async_trait::async_trait;
 use tokio::io::AsyncBufReadExt;
 
-use crate::{debug, tree::CodeBlockTree};
+use crate::{debug, impl_langserver_commands, tree::CodeBlockTree};
 
 use super::{
     abstraction::SocketAbstraction, LSCheckReq, LSPrintReq, LSReq, LSUsagesReq, LSWeaveReq,
-    LangServer, LangServerError,
+    LangServer, LangServerCommands, LangServerError,
 };
 
 #[derive(Debug)]
@@ -62,104 +62,6 @@ impl LangServer for TsServer {
         Ok(Self { socket })
     }
 
-    async fn pretty_print(&self, code: &str, type_name: &str) -> Result<String, LangServerError> {
-        let req = LSPrintReq {
-            cmd: "print".to_string(),
-            text: base64::encode(code),
-            type_name: type_name.to_string(),
-        };
-
-        let resp = self.socket.send_req(&req).await?;
-        // decode the response
-        let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
-
-        Ok(String::from_utf8(resp).unwrap())
-    }
-
-    async fn to_tree(&self, code: &str) -> Result<CodeBlockTree, LangServerError> {
-        let req = LSReq {
-            cmd: "tree".to_string(),
-            text: base64::encode(code),
-        };
-
-        let resp = self.socket.send_req(&req).await?;
-
-        // decode the response
-        let tree = base64::decode(resp["text"].as_str().unwrap()).unwrap();
-
-        Ok(serde_json::from_slice(&tree).unwrap())
-    }
-
-    async fn stub(&self, code: &str) -> Result<String, LangServerError> {
-        let req = LSReq {
-            cmd: "stub".to_string(),
-            text: base64::encode(code),
-        };
-
-        let resp = self.socket.send_req(&req).await?;
-        // decode the response
-        let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
-
-        Ok(String::from_utf8(resp).unwrap())
-    }
-
-    async fn check_complete(
-        &self,
-        original: &str,
-        completed: &str,
-    ) -> Result<(bool, i64), LangServerError> {
-        // encode original and completed into json: {original: "", completed: ""}
-        let req = LSCheckReq {
-            cmd: "check".to_string(),
-            text: base64::encode(completed),
-            original: base64::encode(original),
-        };
-
-        let resp = self.socket.send_req(&req).await?;
-        Ok((
-            resp["text"].as_bool().unwrap(),
-            resp["score"].as_i64().unwrap(),
-        ))
-    }
-
-    async fn weave(
-        &self,
-        original: &str,
-        nettle: &str,
-        level: usize,
-    ) -> Result<String, LangServerError> {
-        let req = LSWeaveReq {
-            cmd: "weave".to_string(),
-            text: base64::encode(original),
-            nettle: base64::encode(nettle),
-            level,
-        };
-
-        let resp = self.socket.send_req(&req).await?;
-        // decode the response
-        let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
-
-        Ok(String::from_utf8(resp).unwrap())
-    }
-
-    async fn usages(
-        &self,
-        outer_block: &str,
-        inner_block: &str,
-    ) -> Result<String, LangServerError> {
-        let req = LSUsagesReq {
-            cmd: "usages".to_string(),
-            text: base64::encode(outer_block),
-            inner_block: base64::encode(inner_block),
-        };
-
-        let resp = self.socket.send_req(&req).await?;
-        // decode the response
-        let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
-
-        Ok(String::from_utf8(resp).unwrap())
-    }
-
     async fn type_check(&self, code: &str) -> Result<bool, LangServerError> {
         // get a temp file (overwrite if exists)
         let tmp_dir = std::env::temp_dir();
@@ -191,3 +93,6 @@ impl LangServer for TsServer {
         Ok(status.success())
     }
 }
+
+// implement the LangServerCommands trait
+impl_langserver_commands!(TsServer);

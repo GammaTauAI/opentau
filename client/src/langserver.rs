@@ -8,14 +8,8 @@ mod abstraction; // the socket abstraction
 pub mod py; // the python server
 pub mod ts; // the typescript server
 
-/// This is the trait that defines operations on the language server.
 #[async_trait]
-pub trait LangServer {
-    /// create a new server socket connection, given a path to the language server executable
-    async fn make(path: &str) -> Result<Self, LangServerError>
-    where
-        Self: std::marker::Sized;
-
+pub trait LangServerCommands {
     /// pretty print the given code, making all missing types the given type token
     async fn pretty_print(&self, code: &str, type_name: &str) -> Result<String, LangServerError>;
 
@@ -67,6 +61,15 @@ pub trait LangServer {
     /// ```
     async fn usages(&self, outer_block: &str, inner_block: &str)
         -> Result<String, LangServerError>;
+}
+
+/// This is the trait that defines operations on the language server.
+#[async_trait]
+pub trait LangServer: LangServerCommands {
+    /// create a new server socket connection, given a path to the language server executable
+    async fn make(path: &str) -> Result<Self, LangServerError>
+    where
+        Self: std::marker::Sized;
 
     /// type checks the given code. returns true if it type checks, false otherwise.
     /// may return an error.
@@ -150,3 +153,120 @@ impl std::fmt::Display for LangServerError {
 }
 
 impl std::error::Error for LangServerError {}
+
+/// Implements the LangServerCommands trait for a given language server.
+#[macro_export]
+macro_rules! impl_langserver_commands {
+    ($name:ident) => {
+        #[async_trait::async_trait]
+        impl $crate::langserver::LangServerCommands for $name {
+            async fn pretty_print(
+                &self,
+                code: &str,
+                type_name: &str,
+            ) -> Result<String, $crate::langserver::LangServerError> {
+                let req = $crate::langserver::LSPrintReq {
+                    cmd: "print".to_string(),
+                    text: base64::encode(code),
+                    type_name: type_name.to_string(),
+                };
+
+                let resp = self.socket.send_req(&req).await?;
+                // decode the response
+                let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
+
+                Ok(String::from_utf8(resp).unwrap())
+            }
+
+            async fn to_tree(
+                &self,
+                code: &str,
+            ) -> Result<$crate::tree::CodeBlockTree, $crate::langserver::LangServerError> {
+                let req = $crate::langserver::LSReq {
+                    cmd: "tree".to_string(),
+                    text: base64::encode(code),
+                };
+
+                let resp = self.socket.send_req(&req).await?;
+
+                // decode the response
+                let tree = base64::decode(resp["text"].as_str().unwrap()).unwrap();
+
+                Ok(serde_json::from_slice(&tree).unwrap())
+            }
+
+            async fn stub(
+                &self,
+                code: &str,
+            ) -> Result<String, $crate::langserver::LangServerError> {
+                let req = $crate::langserver::LSReq {
+                    cmd: "stub".to_string(),
+                    text: base64::encode(code),
+                };
+
+                let resp = self.socket.send_req(&req).await?;
+                // decode the response
+                let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
+
+                Ok(String::from_utf8(resp).unwrap())
+            }
+
+            async fn check_complete(
+                &self,
+                original: &str,
+                completed: &str,
+            ) -> Result<(bool, i64), $crate::langserver::LangServerError> {
+                // encode original and completed into json: {original: "", completed: ""}
+                let req = $crate::langserver::LSCheckReq {
+                    cmd: "check".to_string(),
+                    text: base64::encode(completed),
+                    original: base64::encode(original),
+                };
+
+                let resp = self.socket.send_req(&req).await?;
+                Ok((
+                    resp["text"].as_bool().unwrap(),
+                    resp["score"].as_i64().unwrap(),
+                ))
+            }
+
+            async fn weave(
+                &self,
+                original: &str,
+                nettle: &str,
+                level: usize,
+            ) -> Result<String, $crate::langserver::LangServerError> {
+                let req = $crate::langserver::LSWeaveReq {
+                    cmd: "weave".to_string(),
+                    text: base64::encode(original),
+                    nettle: base64::encode(nettle),
+                    level,
+                };
+
+                let resp = self.socket.send_req(&req).await?;
+                // decode the response
+                let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
+
+                Ok(String::from_utf8(resp).unwrap())
+            }
+
+            async fn usages(
+                &self,
+                outer_block: &str,
+                inner_block: &str,
+            ) -> Result<String, $crate::langserver::LangServerError> {
+                let req = $crate::langserver::LSUsagesReq {
+                    cmd: "usages".to_string(),
+                    text: base64::encode(outer_block),
+                    inner_block: base64::encode(inner_block),
+                };
+
+                let resp = self.socket.send_req(&req).await?;
+                // decode the response
+                let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
+
+                Ok(String::from_utf8(resp).unwrap())
+            }
+        }
+    };
+}

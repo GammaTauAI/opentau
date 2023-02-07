@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use codex_types::{
+use opentau::{
     completion::{codex::CodexClientBuilder, CompletionEngine},
     langserver::{ts::TsServer, LangServer},
     tree::{CompletionLevels, TreeCompletion},
