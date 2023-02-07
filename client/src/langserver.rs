@@ -155,6 +155,9 @@ impl std::fmt::Display for LangServerError {
 impl std::error::Error for LangServerError {}
 
 /// Implements the LangServerCommands trait for a given language server.
+///
+/// # IMPORTANT
+/// The language server must have a `socket` field of type `SocketAbstraction`.
 #[macro_export]
 macro_rules! impl_langserver_commands {
     ($name:ident) => {
