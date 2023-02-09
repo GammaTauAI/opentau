@@ -5,8 +5,10 @@ However, current approaches often struggle with inferring descriptive types in c
 especially when inferring function signatures.
 [In our dataset](https://github.com/GammaTauAI/opentau-test), we found that TypeScript's inference procedure was only able to correctly type-infer 59% of the given files.
 Furthermore, we found that the quality of the type annotations was low, as the types were too permissive (e.g `any`), possibly leading to an increased number of dynamic type errors.
-This finding makes the built-in procedure ineffective in practice. In this report, we show an effective use of large natural language models to aid these type inference procedures.
-Our approach utilizes static insertion of type holes for generating a prompt to be edited or infilled by a language model.
+This finding makes the built-in procedure ineffective in practice.
+
+In this project, we make effective use of large natural language models to aid these type inference procedures.
+Our approach utilizes static insertion of type holes for generating a prompt to be then edited or infilled by a language model.
 Our project mainly uses Codex's _code-davinci-edit_ model for TypeScript type inference,
 but our design is general enough to be applied to other language models and
 programming languages. We have designed our system to be modular and extensible,
@@ -16,10 +18,13 @@ with Python type inference in the near future.
 Across our dataset, we were able to type-infer 91% of the files with descriptive, high quality type annotations,
 which is a significant improvement over 59% using TypeScript's built-in inference procedure.
 
+An extensive report of our findings and implementation is included, and
+can be built by running `make build-report` in the root directory.
+
 ## Requirements
 
 - `rust`
-- Incoder model requirements:
+- Incoder model requirements (optional):
 
   - `torch`
   - `tokenizers>=0.12`
@@ -31,6 +36,7 @@ which is a significant improvement over 59% using TypeScript's built-in inferenc
 - Python inference requirements (Work in progress):
   - `mypy` | `pyright` for static type checking
   - `redbaron` for AST parsing with comments
+- `pandoc` ONLY for building the report
 
 ## Installation
 

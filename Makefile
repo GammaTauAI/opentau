@@ -14,3 +14,7 @@ clean:
 	rm -f ./out/client; \
 	rm -f ./out/client-debug; \
 	rm -rf ./ts-ast/node_modules; \
+
+
+build-report:
+	pandoc -f markdown+pipe_tables ./final_report.md -o final.pdf
