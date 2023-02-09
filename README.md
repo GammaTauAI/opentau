@@ -15,6 +15,7 @@ programming languages. We have designed our system to be modular and extensible,
 including a language server protocol for the implementation of additional programming languages.
 We have also explored other language models such as Facebook's _InCoder_ model, and we plan to experiment
 with Python type inference in the near future.
+
 Across our dataset, we were able to type-infer 91% of the files with descriptive, high quality type annotations,
 which is a significant improvement over 59% using TypeScript's built-in inference procedure.
 
