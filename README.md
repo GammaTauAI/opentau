@@ -4,8 +4,7 @@ Type inference for gradually-typed languages such as TypeScript and Python has b
 However, current approaches often struggle with inferring descriptive types in cases in which user-defined type annotations are absent,
 especially when inferring function signatures.
 [In our dataset](https://github.com/GammaTauAI/opentau-test), we found that TypeScript's inference procedure was only able to correctly type-infer 59% of the given files.
-Additionally, most of the inferred types were too permissive, leading to an increased number of dynamic type errors.
-Furthermore, we found that the quality of the type annotations was low, as the types were too permissive, possibly leading to an increased number of dynamic type errors.
+Furthermore, we found that the quality of the type annotations was low, as the types were too permissive (e.g `any`), possibly leading to an increased number of dynamic type errors.
 This finding makes the built-in procedure ineffective in practice. In this report, we show an effective use of large natural language models to aid these type inference procedures.
 Our approach utilizes static insertion of type holes for generating a prompt to be edited or infilled by a language model.
 Our project mainly uses Codex's _code-davinci-edit_ model for TypeScript type inference,
