@@ -1,12 +1,26 @@
 # OpenTau: Using OpenAI Codex for Gradual Type Inference
 
-- Current implementation is focused on TypeScript
-  - Python implementation comes next
+Type inference for gradually-typed languages such as TypeScript and Python has become increasingly prevalent in the field of programming languages.
+However, current approaches often struggle with inferring descriptive types in cases in which user-defined type annotations are absent,
+especially when inferring function signatures.
+[In our dataset](https://github.com/GammaTauAI/opentau-test), we found that TypeScript's inference procedure was only able to correctly type-infer 59% of the given files.
+Furthermore, we found that the quality of the type annotations was low, as the types were too permissive, possibly leading to an increased number of dynamic type errors.
+This finding makes the built-in procedure ineffective in practice. In this report, we show an effective use of large natural language models to aid these type inference procedures.
+Our approach utilizes static insertion of type holes for generating a prompt to be edited or infilled by a language model.
+Our project mainly uses Codex's _code-davinci-edit_ model for TypeScript type inference,
+but our design is general enough to be applied to other language models and
+programming languages. We have designed our system to be modular and extensible,
+including a language server protocol for the implementation of additional programming languages.
+We have also explored other language models such as Facebook's _InCoder_ model, and we plan to experiment
+with Python type inference in the near future.
+Across our dataset, we were able to type-infer 91% of the files with descriptive, high quality type annotations,
+which is a significant improvement over 59% using TypeScript's built-in inference procedure.
 
 ## Requirements
 
 - `rust`
 - Incoder model requirements:
+
   - `torch`
   - `tokenizers>=0.12`
   - `transformers`
@@ -14,10 +28,9 @@
 - TypeScript inference requirements:
   - `ts-node`
   - `tsc`
-- Python inference requirements:
+- Python inference requirements (Work in progress):
   - `mypy` | `pyright` for static type checking
   - `redbaron` for AST parsing with comments
-
 
 ## Installation
 
