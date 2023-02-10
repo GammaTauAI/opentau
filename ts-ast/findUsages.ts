@@ -39,7 +39,7 @@ export const findUsages = (
     // checks if the parent of this id is some expression that
     // we want to recursively traverse. this is for finding the
     // original statement
-    const isCandidateExpr = (e: ts.Identifier): boolean => {
+    const isCandidateExpr = (e: ts.Node): boolean => {
       return (
         ts.isCallLikeExpression(e.parent) ||
         ts.isBinaryExpression(e.parent) ||
@@ -56,7 +56,7 @@ export const findUsages = (
         if (!isDecl(node)) {
           // go up the tree until we find a statement
           var stmt = node.parent;
-          while (stmt && stmt.parent && isCandidateExpr(node)) {
+          while (stmt && stmt.parent && isCandidateExpr(stmt)) {
             stmt = stmt.parent;
           }
 
