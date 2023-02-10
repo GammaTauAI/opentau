@@ -36,22 +36,27 @@ export const findUsages = (
       );
     };
 
+    // checks if the parent of this id is some expression that
+    // we want to recursively traverse. this is for finding the
+    // original statement
+    const isCandidateExpr = (e: ts.Identifier): boolean => {
+      return (
+        ts.isCallLikeExpression(e.parent) ||
+        ts.isBinaryExpression(e.parent) ||
+        ts.isPropertyAccessExpression(e.parent) ||
+        ts.isElementAccessExpression(e.parent) ||
+        ts.isPrefixUnaryExpression(e.parent) ||
+        ts.isPostfixUnaryExpression(e.parent) ||
+        ts.isNewExpression(e.parent)
+      );
+    };
+
     const inner = (node: ts.Node): void => {
       if (ts.isIdentifier(node) && node.text === ident?.text) {
         if (!isDecl(node)) {
           // go up the tree until we find a statement
           var stmt = node.parent;
-          while (
-            stmt &&
-            stmt.parent &&
-            (ts.isCallLikeExpression(stmt.parent) ||
-              ts.isBinaryExpression(stmt.parent) ||
-              ts.isPropertyAccessExpression(stmt.parent) ||
-              ts.isElementAccessExpression(stmt.parent) ||
-              ts.isPrefixUnaryExpression(stmt.parent) ||
-              ts.isPostfixUnaryExpression(stmt.parent) ||
-              ts.isNewExpression(stmt.parent))
-          ) {
+          while (stmt && stmt.parent && isCandidateExpr(node)) {
             stmt = stmt.parent;
           }
 

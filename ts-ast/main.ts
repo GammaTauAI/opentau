@@ -6,6 +6,7 @@ import { stubSource } from "./stubPrinter";
 import { checkCompleted } from "./check";
 import { weavePrograms } from "./weave";
 import { findUsages } from "./findUsages";
+import assert from "assert";
 
 // the global printer object!
 export const codePrinter = ts.createPrinter({
@@ -251,7 +252,8 @@ var unixServer = net.createServer(function (client) {
     try {
       req = JSON.parse(data.toString());
       decodedText = Buffer.from(req.text, "base64").toString("utf8");
-    } catch (e: any) {
+    } catch (e) {
+      assert(e instanceof Error);
       client.write(JSON.stringify({ type: "error", message: e.message }));
       return;
     }
@@ -303,7 +305,8 @@ var unixServer = net.createServer(function (client) {
         }
       }
       // yeah, pretty bad to catch all, but we want this to work no matter what.
-    } catch (e: any) {
+    } catch (e) {
+      assert(e instanceof Error);
       client.write(
         JSON.stringify({
           type: "error",
