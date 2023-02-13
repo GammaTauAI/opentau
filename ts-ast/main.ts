@@ -6,6 +6,7 @@ import { stubSource } from "./stubPrinter";
 import { checkCompleted } from "./check";
 import { weavePrograms } from "./weave";
 import { findUsages } from "./findUsages";
+import { objectInfo } from "./objectInfo";
 import assert from "assert";
 
 // the global printer object!
@@ -243,6 +244,23 @@ const handleUsages = (decodedText: string, req: any): string => {
   });
 };
 
+const handleObjectInfo = (decodedText: string): string => {
+  // create the source file
+  const sourceFile = ts.createSourceFile(
+    "bleh.ts", // name does not matter until we save, which we don't from here
+    decodedText,
+    ts.ScriptTarget.Latest,
+    true, // for setParentNodes
+    ts.ScriptKind.TS
+  );
+  const res = objectInfo(sourceFile);
+  const base64 = Buffer.from(JSON.stringify(res)).toString("base64");
+  return JSON.stringify({
+    type: "objectInfoResponse",
+    text: base64,
+  });
+};
+
 var unixServer = net.createServer(function (client) {
   client.on("data", function (data) {
     // try to parse the data as a json object
@@ -293,6 +311,11 @@ var unixServer = net.createServer(function (client) {
         // req: {cmd: "usages", text: "outer block", innerBlock: "inner block"}
         case "usages": {
           client.write(handleUsages(decodedText, req));
+          break;
+        }
+        // generate the object info map for the given file contents
+        case "objectInfo": {
+          client.write(handleObjectInfo(decodedText));
           break;
         }
         default: {

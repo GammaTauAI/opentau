@@ -3,7 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use crate::tree::CodeBlockTree;
+use crate::{tree::CodeBlockTree, typedef_gen::ObjectInfoMap};
 mod abstraction; // the socket abstraction
 pub mod py; // the python server
 pub mod ts; // the typescript server
@@ -61,6 +61,10 @@ pub trait LangServerCommands {
     /// ```
     async fn usages(&self, outer_block: &str, inner_block: &str)
         -> Result<String, LangServerError>;
+
+    /// Produces the object information map for the given code.
+    /// The input should be the full code of the file.
+    async fn object_info(&self, code: &str) -> Result<ObjectInfoMap, LangServerError>;
 }
 
 /// This is the trait that defines operations on the language server.
@@ -269,6 +273,23 @@ macro_rules! impl_langserver_commands {
                 let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
 
                 Ok(String::from_utf8(resp).unwrap())
+            }
+
+            async fn object_info(
+                &self,
+                code: &str,
+            ) -> Result<$crate::typedef_gen::ObjectInfoMap, $crate::langserver::LangServerError>
+            {
+                let req = $crate::langserver::LSReq {
+                    cmd: "objectInfo".to_string(),
+                    text: base64::encode(code),
+                };
+
+                let resp = self.socket.send_req(&req).await?;
+                // decode the response
+                let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
+
+                Ok(serde_json::from_slice(&resp).unwrap())
             }
         }
     };

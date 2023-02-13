@@ -1,7 +1,8 @@
 pub mod cache;
-pub mod langserver;
 pub mod completion;
+pub mod langserver;
 pub mod tree;
+pub mod typedef_gen;
 
 /// macro for debug printing, only prints if #cfg(debug_assertions) is true
 #[macro_export]

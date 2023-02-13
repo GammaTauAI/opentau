@@ -57,21 +57,21 @@ async fn main() {
     // }
 
     // testing out "tree v2"
-    {
-        let tree = codex.get_ls().to_tree(&input).await.unwrap();
-        let mut comps: CompletionLevels = CompletionLevels::prepare(tree, codex.get_ls())
-            .await
-            .unwrap();
-        comps.retries = 1;
-        comps.num_comps = 3;
-        // comps.fallback = true;
-        println!("tree: {comps:#?}");
-        comps.tree_complete(Arc::new(codex)).await;
-        println!("root comps:\n");
-        for (i, comp) in comps.levels[0].nodes[0].completed.iter().enumerate() {
-            println!("{i}:\n{comp}");
-        }
-    }
+    // {
+    // let tree = codex.get_ls().to_tree(&input).await.unwrap();
+    // let mut comps: CompletionLevels = CompletionLevels::prepare(tree, codex.get_ls())
+    // .await
+    // .unwrap();
+    // comps.retries = 1;
+    // comps.num_comps = 3;
+    // // comps.fallback = true;
+    // println!("tree: {comps:#?}");
+    // comps.tree_complete(Arc::new(codex)).await;
+    // println!("root comps:\n");
+    // for (i, comp) in comps.levels[0].nodes[0].completed.iter().enumerate() {
+    // println!("{i}:\n{comp}");
+    // }
+    // }
 
     // testing out "stub"
     // {
@@ -84,4 +84,10 @@ async fn main() {
     // .unwrap();
     // println!("stub: {}", stub);
     // }
+
+    // testing out "object_info"
+    {
+        let object_info = codex.get_ls().object_info(&input).await.unwrap();
+        println!("object_info: {object_info:#?}");
+    }
 }
