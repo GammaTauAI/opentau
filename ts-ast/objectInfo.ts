@@ -10,10 +10,47 @@ function isDeclaration(node: ts.Node): node is ts.NamedDeclaration {
   );
 }
 
+// for all identifiers, we need to find all identifiers with the same
+// name. then, we check for the scope that is the closest to the
+// target scope.
+const resolveIdentifier = (
+  scopedIdentifiers: [string, number[]][],
+  myName: string,
+  scope: number[]
+): ts.Identifier | undefined => {
+  for (const [name, scopePath] of scopedIdentifiers) {
+    // skip if the name doesn't match
+    if (name !== myName) {
+      continue;
+    }
+
+    // skip scopePaths that are larger than the target scope
+    if (scopePath.length > scope.length) {
+      continue;
+    }
+
+    // check if the scopePath is a prefix of the target scope
+    let isPrefix = true;
+    for (let i = 0; i < scopePath.length; i++) {
+      if (scopePath[i] !== scope[i]) {
+        isPrefix = false;
+        break;
+      }
+    }
+
+    // if it is a prefix, we need to update the identifier
+    if (isPrefix && scopePath.length !== 0) {
+      return ts.createIdentifier(`${name}$${scopePath.join("_")}`);
+    }
+  }
+};
+
 // Transformer that alpha-renames all identifiers in a source file.
 // If we have a NamedDeclaration, we need to update the name in the symbol table.
 // If we have an Identifier, we need to update the text of the node, with the
 // one from the symbol table.
+//
+// TODO: worry about namespaces
 const alphaRenameTransformer: ts.TransformerFactory<ts.SourceFile> = (
   context
 ) => {
@@ -38,7 +75,12 @@ const alphaRenameTransformer: ts.TransformerFactory<ts.SourceFile> = (
           }
         }
 
-        if (ts.isFunctionLike(node) && node.parameters) {
+        if (
+          ts.isFunctionLike(node) &&
+          // we don't want to update the parameters of constructors
+          !ts.isConstructorDeclaration(node) &&
+          node.parameters
+        ) {
           // when updating parameters of functions, we anticipate a new scope
           localScope = [...localScope, counter];
           for (const param of node.parameters) {
@@ -87,33 +129,13 @@ const alphaRenameTransformer: ts.TransformerFactory<ts.SourceFile> = (
             node.parent.name === node
           )
         ) {
-          // for all identifiers, we need to find all identifiers with the same
-          // name. then, we check for the scope that is the closest to the
-          // target scope.
-          for (const [name, scopePath] of scopedIdentifiers) {
-            // skip if the name doesn't match
-            if (name !== node.text) {
-              continue;
-            }
-
-            // skip scopePaths that are larger than the target scope
-            if (scopePath.length > localScope.length) {
-              continue;
-            }
-
-            // check if the scopePath is a prefix of the target scope
-            let isPrefix = true;
-            for (let i = 0; i < scopePath.length; i++) {
-              if (scopePath[i] !== localScope[i]) {
-                isPrefix = false;
-                break;
-              }
-            }
-
-            // if it is a prefix, we need to update the identifier
-            if (isPrefix) {
-              return ts.createIdentifier(`${name}$${scopePath.join("_")}`);
-            }
+          const resolved = resolveIdentifier(
+            scopedIdentifiers,
+            node.text,
+            localScope
+          );
+          if (resolved) {
+            return resolved;
           }
         }
 
