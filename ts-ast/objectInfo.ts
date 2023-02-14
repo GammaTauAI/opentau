@@ -25,9 +25,26 @@ const alphaRenameTransformer: ts.TransformerFactory<ts.SourceFile> = (
     let counter = 0;
     const makeDeclarationVisitor = (scope: number[]) => {
       const visit: ts.Visitor = (node) => {
+        // the localScope is a temporary variable that we use to update the
+        // scope path for only this scope, and not the children scopes.
+        let localScope = [...scope];
+
         if (isDeclaration(node)) {
+          // we could either have a variable declaration or a function declaration,
+          // which also has parameters. we need to update the symbol table for
+          // both of these cases.
           if (node.name && ts.isIdentifier(node.name)) {
-            scopedIdentifiers.push([node.name.text, scope]);
+            scopedIdentifiers.push([node.name.text, localScope]);
+          }
+        }
+
+        if (ts.isFunctionLike(node) && node.parameters) {
+          // when updating parameters of functions, we anticipate a new scope
+          localScope = [...localScope, counter];
+          for (const param of node.parameters) {
+            if (param.name && ts.isIdentifier(param.name)) {
+              scopedIdentifiers.push([param.name.text, localScope]);
+            }
           }
         }
 
@@ -48,31 +65,46 @@ const alphaRenameTransformer: ts.TransformerFactory<ts.SourceFile> = (
     // this way, we go from most precise to least precise scope
     scopedIdentifiers.sort((a, b) => b[1].length - a[1].length);
 
-    console.error(scopedIdentifiers);
-
     // we reset this counter for the next pass, to match the scope path
     counter = 0;
     const makeIdentifierVisitor = (scope: number[]) => {
       const visit: ts.Visitor = (node) => {
-        if (ts.isIdentifier(node)) {
+        // the localScope is a temporary variable that we use to update the
+        // scope path for only this scope, and not the children scopes.
+        let localScope = [...scope];
+
+        // for parameters, we anticipate a new scope
+        if (node.parent && ts.isParameter(node.parent)) {
+          localScope = [...localScope, counter];
+        }
+
+        if (
+          ts.isIdentifier(node) &&
+          // we don't want to rename property access expressions
+          !(
+            node.parent &&
+            ts.isPropertyAccessExpression(node.parent) &&
+            node.parent.name === node
+          )
+        ) {
           // for all identifiers, we need to find all identifiers with the same
           // name. then, we check for the scope that is the closest to the
-          // current scope.
+          // target scope.
           for (const [name, scopePath] of scopedIdentifiers) {
             // skip if the name doesn't match
             if (name !== node.text) {
               continue;
             }
 
-            // skip scopePaths that are larger than the current scope
-            if (scopePath.length > scope.length) {
+            // skip scopePaths that are larger than the target scope
+            if (scopePath.length > localScope.length) {
               continue;
             }
 
-            // check if the scopePath is a prefix of the current scope
+            // check if the scopePath is a prefix of the target scope
             let isPrefix = true;
             for (let i = 0; i < scopePath.length; i++) {
-              if (scopePath[i] !== scope[i]) {
+              if (scopePath[i] !== localScope[i]) {
                 isPrefix = false;
                 break;
               }
