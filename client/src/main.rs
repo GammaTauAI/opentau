@@ -2,10 +2,7 @@ use std::sync::Arc;
 
 use opentau::{
     cache::Cache,
-    completion::{
-        codex::{CodexClientBuilder},
-        ArcCompletionEngine, CompletionEngine,
-    },
+    completion::{codex::CodexClientBuilder, ArcCompletionEngine, CompletionEngine},
     completion::{Completion, CompletionError, CompletionQuery},
     debug,
     langserver::{py::PyServer, ts::TsServer, LangServer},
@@ -82,6 +79,10 @@ struct Args {
     /// The maximum type-quality score for a completion to be valid (lower means better quality)
     #[clap(long, short, value_parser, default_value_t = 9999999)]
     max_type_quality: i64,
+
+    /// Disables type-checking and just outputs all candidates
+    #[clap(long, value_parser, default_value_t = false)]
+    disable_type_check: bool,
 }
 
 impl Args {
@@ -163,6 +164,7 @@ async fn main() {
         retries: args.retries,
         fallback: args.fallback,
         stop_at: args.stop_at,
+        disable_type_check: args.disable_type_check,
     };
 
     // the typechecked and completed code(s). here if we get errors we exit with 1
@@ -208,6 +210,7 @@ struct MainCtx {
     retries: usize,
     fallback: bool,
     stop_at: usize,
+    disable_type_check: bool,
 }
 
 impl MainCtx {
@@ -218,7 +221,12 @@ impl MainCtx {
         for (i, candidate) in candidates.into_iter().enumerate() {
             debug!("candidate {}:\n{}", i, candidate.code);
             let lang_client = self.engine.get_ls();
+            let disable_type_check = self.disable_type_check;
             handles.push(tokio::task::spawn(async move {
+                if disable_type_check {
+                    return Some(candidate);
+                }
+
                 let type_checks = lang_client.type_check(&candidate.code).await.unwrap();
                 if type_checks {
                     Some(candidate)
@@ -239,7 +247,10 @@ impl MainCtx {
 
         comps
     }
+
     /// Runs the tree completion strategy. Documentation on the strategy is in the `tree.rs` file.
+    ///
+    /// TODO: somehow add caching to this strategy, maybe go up the tree?
     async fn tree_strategy(&self) -> Vec<Completion> {
         let tree = self
             .engine
