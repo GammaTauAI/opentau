@@ -10,6 +10,19 @@ function isDeclaration(node: ts.Node): node is ts.NamedDeclaration {
   );
 }
 
+const recurseCheckNode = (
+  node: ts.Node,
+  fn: (node: ts.Node) => boolean
+): boolean => {
+  if (fn(node)) {
+    return true;
+  }
+  if (node.parent) {
+    return recurseCheckNode(node.parent, fn);
+  }
+  return false;
+};
+
 // for all identifiers, we need to find all identifiers with the same
 // name. then, we check for the scope that is the closest to the
 // target scope.
@@ -45,6 +58,42 @@ const resolveIdentifier = (
   }
 };
 
+const addABPIdentifiers = (
+  pattern: ts.ArrayBindingPattern,
+  list: [string, number[]][],
+  scope: number[]
+) => {
+  for (const element of pattern.elements) {
+    if (ts.isBindingElement(element)) {
+      if (ts.isIdentifier(element.name)) {
+        list.push([element.name.text, scope]);
+      } else if (ts.isArrayBindingPattern(element.name)) {
+        addABPIdentifiers(element.name, list, scope);
+      } else if (ts.isObjectBindingPattern(element.name)) {
+        addOBPIdentifiers(element.name, list, scope);
+      }
+    }
+  }
+};
+
+const addOBPIdentifiers = (
+  pattern: ts.ObjectBindingPattern,
+  list: [string, number[]][],
+  scope: number[]
+) => {
+  for (const element of pattern.elements) {
+    if (ts.isBindingElement(element)) {
+      if (ts.isIdentifier(element.name)) {
+        list.push([element.name.text, scope]);
+      } else if (ts.isObjectBindingPattern(element.name)) {
+        addOBPIdentifiers(element.name, list, scope);
+      } else if (ts.isArrayBindingPattern(element.name)) {
+        addABPIdentifiers(element.name, list, scope);
+      }
+    }
+  }
+};
+
 // Transformer that alpha-renames all identifiers in a source file.
 // If we have a NamedDeclaration, we need to update the name in the symbol table.
 // If we have an Identifier, we need to update the text of the node, with the
@@ -66,12 +115,22 @@ const alphaRenameTransformer: ts.TransformerFactory<ts.SourceFile> = (
         // scope path for only this scope, and not the children scopes.
         let localScope = [...scope];
 
+        const addIdentifier = (ident: ts.Node, scope: number[]) => {
+          if (ts.isIdentifier(ident)) {
+            scopedIdentifiers.push([ident.text, scope]);
+          } else if (ts.isObjectBindingPattern(ident)) {
+            addOBPIdentifiers(ident, scopedIdentifiers, scope);
+          } else if (ts.isArrayBindingPattern(ident)) {
+            addABPIdentifiers(ident, scopedIdentifiers, scope);
+          }
+        };
+
         if (isDeclaration(node)) {
           // we could either have a variable declaration or a function declaration,
           // which also has parameters. we need to update the symbol table for
           // both of these cases.
-          if (node.name && ts.isIdentifier(node.name)) {
-            scopedIdentifiers.push([node.name.text, localScope]);
+          if (node.name) {
+            addIdentifier(node.name, localScope);
           }
         }
 
@@ -84,9 +143,10 @@ const alphaRenameTransformer: ts.TransformerFactory<ts.SourceFile> = (
           // when updating parameters of functions, we anticipate a new scope
           localScope = [...localScope, counter];
           for (const param of node.parameters) {
-            if (param.name && ts.isIdentifier(param.name)) {
-              scopedIdentifiers.push([param.name.text, localScope]);
+            if (!param.name) {
+              continue;
             }
+            addIdentifier(param.name, localScope);
           }
         }
 
@@ -106,6 +166,7 @@ const alphaRenameTransformer: ts.TransformerFactory<ts.SourceFile> = (
     // sort the identifier list by the length of the scope path, descending
     // this way, we go from most precise to least precise scope
     scopedIdentifiers.sort((a, b) => b[1].length - a[1].length);
+    console.error(scopedIdentifiers);
 
     // we reset this counter for the next pass, to match the scope path
     counter = 0;
@@ -115,8 +176,10 @@ const alphaRenameTransformer: ts.TransformerFactory<ts.SourceFile> = (
         // scope path for only this scope, and not the children scopes.
         let localScope = [...scope];
 
-        // for parameters, we anticipate a new scope
-        if (node.parent && ts.isParameter(node.parent)) {
+        // for parameters, we anticipate a new scope.
+        // also we need to recursively into the parents until we find the parameter
+        // because we may have binding patterns.
+        if (recurseCheckNode(node, ts.isParameter)) {
           localScope = [...localScope, counter];
         }
 
