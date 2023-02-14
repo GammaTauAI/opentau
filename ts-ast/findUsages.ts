@@ -1,17 +1,6 @@
 import ts from "typescript";
 import { codePrinter } from "./main";
 
-// womp womp, typescript has no way to check if a node is a NamedDeclaration
-function isNamedDeclaration(node: ts.Node): node is ts.NamedDeclaration {
-  return (
-    ts.isVariableDeclaration(node) ||
-    ts.isFunctionDeclaration(node) ||
-    ts.isMethodDeclaration(node) ||
-    ts.isPropertyDeclaration(node) ||
-    ts.isClassDeclaration(node)
-  );
-}
-
 export const findUsages = (
   outerBlock: ts.SourceFile,
   innerBlock: ts.SourceFile
