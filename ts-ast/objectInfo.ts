@@ -239,16 +239,7 @@ type FuncInfo = {
 
 type ObjectInfoMap = { [name: string]: FuncInfo };
 
-export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
-  // TODO: remove test code
-
-  // function f(obj) {
-  //   obj.a;
-  //   obj.b;
-  //   obj.m();
-  //   obj.d.a;
-  // }
-
+const exampleObjectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
   let transformed = ts.transform(sourceFile, [alphaRenameTransformer])
     .transformed[0];
   let printed = codePrinter.printFile(transformed);
@@ -284,6 +275,72 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
 
   const objectInfoMap: ObjectInfoMap = {};
   objectInfoMap["f"] = funcinfo;
+
+  return objectInfoMap;
+};
+
+// simple object info function. this is just a placeholder for now.
+export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
+  let transformed = ts.transform(sourceFile, [alphaRenameTransformer])
+    .transformed[0];
+
+  // TODO: delete
+  let printed = codePrinter.printFile(transformed);
+  console.error(printed);
+
+  const objectInfoMap: ObjectInfoMap = {};
+
+  const visitor = (node: ts.Node): void => {
+    if (ts.isFunctionDeclaration(node) && node.name) {
+      const funcInfo: FuncInfo = {
+        params: {},
+        ret: null,
+      };
+
+      const params = new Set<string>();
+      for (const param of node.parameters) {
+        // TODO: handle more complex cases
+        if (ts.isIdentifier(param.name)) {
+          params.add(param.name.text);
+        }
+      }
+
+      visitFunc(node, params, funcInfo);
+      objectInfoMap[node.name.text] = funcInfo;
+    }
+    ts.forEachChild(node, visitor);
+  };
+
+  const visitFunc = (
+    node: ts.Node,
+    params: Set<string>,
+    funcInfo: FuncInfo
+  ): void => {
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      params.has(node.expression.text)
+    ) {
+      const param = node.expression.text;
+      const field = node.name.text;
+
+      if (!funcInfo.params[param]) {
+        funcInfo.params[param] = [];
+      }
+
+      // TODO: do more complex analysis here
+      // it could either be a method, or another object.
+      // we need to recur on the node to figure out which it is.
+      funcInfo.params[param]!.push({
+        type: "field",
+        id: field,
+      });
+    } else {
+      ts.forEachChild(node, (child) => visitFunc(child, params, funcInfo));
+    }
+  };
+
+  ts.forEachChild(transformed, visitor);
 
   return objectInfoMap;
 };
