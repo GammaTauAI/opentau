@@ -10,6 +10,15 @@ function isDeclaration(node: ts.Node): node is ts.NamedDeclaration {
   );
 }
 
+const isScopedBlock = (node: ts.Node): boolean => {
+  return (
+    ts.isBlock(node) ||
+    ts.isForStatement(node) ||
+    ts.isForOfStatement(node) ||
+    ts.isForInStatement(node)
+  );
+};
+
 const recurseCheckNode = (
   node: ts.Node,
   fn: (node: ts.Node) => boolean
@@ -152,7 +161,7 @@ const alphaRenameTransformer: ts.TransformerFactory<ts.SourceFile> = (
 
         let nextVisitor = visit;
         // next, we want to create a new scope for any block
-        if (ts.isBlock(node)) {
+        if (isScopedBlock(node)) {
           nextVisitor = makeDeclarationVisitor([...scope, counter++]);
         }
 
@@ -203,7 +212,7 @@ const alphaRenameTransformer: ts.TransformerFactory<ts.SourceFile> = (
         }
 
         let nextVisitor = visit;
-        if (ts.isBlock(node)) {
+        if (isScopedBlock(node)) {
           // create a new map for the new scope
           nextVisitor = makeIdentifierVisitor([...scope, counter++]);
         }
