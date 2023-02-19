@@ -331,10 +331,18 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
       // TODO: do more complex analysis here
       // it could either be a method, or another object.
       // we need to recur on the node to figure out which it is.
-      funcInfo.params[param]!.push({
-        type: "field",
-        id: field,
-      });
+
+      // push if it doesn't exist
+      if (
+        !funcInfo.params[param]!.some(
+          (fieldInfo) => fieldInfo.type === "field" && fieldInfo.id === field
+        )
+      ) {
+        funcInfo.params[param]!.push({
+          type: "field",
+          id: field,
+        });
+      }
     } else {
       ts.forEachChild(node, (child) => visitFunc(child, params, funcInfo));
     }
