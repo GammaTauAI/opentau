@@ -289,6 +289,7 @@ macro_rules! impl_langserver_commands {
                 // decode the response
                 let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
 
+                println!("resp: {}", String::from_utf8(resp.clone()).unwrap());
                 Ok(serde_json::from_slice(&resp).unwrap())
             }
         }

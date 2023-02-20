@@ -10,6 +10,16 @@ function isDeclaration(node: ts.Node): node is ts.NamedDeclaration {
   );
 }
 
+// the normal getChildren() function is broken an crashes at CallExpressions...
+// i cannot believe i actually have to do this.
+const getChildrenFixed = (node: ts.Node): ts.Node[] => {
+  const children: ts.Node[] = [];
+  node.forEachChild((child) => {
+    children.push(child);
+  });
+  return children;
+};
+
 const isScopedBlock = (node: ts.Node): boolean => {
   return (
     ts.isBlock(node) ||
@@ -226,57 +236,122 @@ const alphaRenameTransformer: ts.TransformerFactory<ts.SourceFile> = (
 };
 
 // NOTE: These types come from typedef_gen.rs
-type FieldInfo =
-  | { type: string; id: string }
-  | { type: string; id: string; fields: FieldInfo[] };
+type FieldInfoCall = {
+  type: "call";
+  id: string;
+};
+type FieldInfoField = {
+  type: "field";
+  id: string;
+};
+type FieldInfoObject = {
+  type: "object";
+  id: string;
+  fields: Set<FieldInfo>;
+};
+type FieldInfo = FieldInfoCall | FieldInfoField | FieldInfoObject;
 
-type ParamsType = { [name: string]: FieldInfo[] | null };
+const isField = (info: FieldInfo): info is FieldInfoField =>
+  info.type === "field";
+
+const isCall = (info: FieldInfo): info is FieldInfoCall => info.type === "call";
+
+const isObject = (info: FieldInfo): info is FieldInfoObject =>
+  info.type === "object";
+
+type ParamsType = { [name: string]: Set<FieldInfo> };
 
 type FuncInfo = {
   params: ParamsType;
-  ret: FieldInfo[] | null;
+  ret: Set<FieldInfo> | null;
 };
 
 type ObjectInfoMap = { [name: string]: FuncInfo };
 
-const exampleObjectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
-  let transformed = ts.transform(sourceFile, [alphaRenameTransformer])
-    .transformed[0];
-  let printed = codePrinter.printFile(transformed);
-  console.error(printed);
+// merges ObjectInfoMap objects together
+// for example:
+// Object {
+//      id: "d",
+//      fields: {
+//          Field {
+//              id: "e",
+//          },
+//      },
+//  },
+//  Object {
+//      id: "d",
+//      fields: {
+//          Field {
+//              id: "m",
+//          },
+//      },
+//  },
+//
+// Becomes:
+// Object {
+//     id: "d",
+//     fields: {
+//        Field {
+//            id: "e",
+//        },
+//        Field {
+//            id: "m",
+//        },
+//     },
+// },
+const mergeObjectInfo = (objectInfoMap: ObjectInfoMap): ObjectInfoMap => {
+  const mergedObjectInfoMap: ObjectInfoMap = {};
 
-  const obj_a = {
-    type: "field",
-    id: "a",
+  const mergeFieldInfos = (fieldInfos: Set<FieldInfo>): Set<FieldInfo> => {
+    const mergedFieldInfos: Set<FieldInfo> = new Set();
+
+    for (const fieldInfo of fieldInfos) {
+      if (isField(fieldInfo)) {
+        mergedFieldInfos.add(fieldInfo);
+      } else if (isObject(fieldInfo)) {
+        let found = false;
+        for (const info of mergedFieldInfos) {
+          if (isObject(info) && info.id === fieldInfo.id) {
+            found = true;
+            info.fields = new Set([
+              ...info.fields,
+              ...mergeFieldInfos(fieldInfo.fields),
+            ]);
+          }
+        }
+        if (!found) {
+          mergedFieldInfos.add(fieldInfo);
+        }
+      } else if (isCall(fieldInfo)) {
+        mergedFieldInfos.add(fieldInfo);
+      }
+    }
+
+    return mergedFieldInfos;
   };
-  const obj_b = {
-    type: "field",
-    id: "b",
-  };
 
-  const obj_m_call = {
-    type: "call",
-    id: "m",
-  };
+  for (const [id, funcInfo] of Object.entries(objectInfoMap)) {
+    const newFuncInfo: FuncInfo = {
+      params: {},
+      ret: null,
+    };
 
-  const obj_d_a = {
-    type: "object",
-    id: "d",
-    fields: [obj_a],
-  };
+    for (const [paramName, paramFieldInfos] of Object.entries(
+      funcInfo.params
+    )) {
+      if (paramFieldInfos) {
+        newFuncInfo.params[paramName] = mergeFieldInfos(paramFieldInfos);
+      }
+    }
 
-  const params: ParamsType = {};
-  params["obj"] = [obj_a, obj_b, obj_m_call, obj_d_a];
+    if (funcInfo.ret) {
+      newFuncInfo.ret = mergeFieldInfos(funcInfo.ret);
+    }
 
-  const funcinfo = {
-    params: params,
-    ret: null,
-  };
+    mergedObjectInfoMap[id] = newFuncInfo;
+  }
 
-  const objectInfoMap: ObjectInfoMap = {};
-  objectInfoMap["f"] = funcinfo;
-
-  return objectInfoMap;
+  return mergedObjectInfoMap;
 };
 
 // simple object info function. this is just a placeholder for now.
@@ -305,7 +380,7 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
         }
       }
 
-      visitFunc(node, params, funcInfo);
+      visitFunc(node, params, null, funcInfo);
       objectInfoMap[node.name.text] = funcInfo;
     }
     ts.forEachChild(node, visitor);
@@ -314,9 +389,59 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
   const visitFunc = (
     node: ts.Node,
     params: Set<string>,
+    to_be_patched: FieldInfo | null,
     funcInfo: FuncInfo
   ): void => {
+    console.error(ts.SyntaxKind[node.kind]);
+    console.error(
+      codePrinter.printNode(ts.EmitHint.Unspecified, node, sourceFile)
+    );
     if (
+      ts.isPropertyAccessExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression)
+    ) {
+      console.error("property access expression, patch", to_be_patched);
+
+      // we need to create a new object
+      // we either have to_be_patched == null or to_be_patched.type == something.
+      // if it's null, we create a field.
+      // if it's not null, we take that object and make it the child of the new object.
+      if (to_be_patched === null) {
+        to_be_patched = {
+          type: "field",
+          id: node.name.text,
+        };
+      } else {
+        to_be_patched = {
+          type: "object",
+          id: node.name.text,
+          fields: new Set([to_be_patched]),
+        };
+      }
+    } else if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      ts.isIdentifier(node.expression.expression) &&
+      params.has(node.expression.expression.text)
+    ) {
+      const param = node.expression.expression.text;
+      const field = node.expression.name.text;
+
+      if (!funcInfo.params[param]) {
+        funcInfo.params[param] = new Set();
+      }
+
+      // if we have already have this field as a Field, we remove it.
+      // Call is more precise than Field.
+      funcInfo.params[param] = new Set(
+        [...funcInfo.params[param]!].filter((setField) => setField.id !== field)
+      );
+
+      funcInfo.params[param]!.add({
+        type: "call",
+        id: field,
+      });
+    } else if (
       ts.isPropertyAccessExpression(node) &&
       ts.isIdentifier(node.expression) &&
       params.has(node.expression.text)
@@ -325,30 +450,40 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
       const field = node.name.text;
 
       if (!funcInfo.params[param]) {
-        funcInfo.params[param] = [];
+        funcInfo.params[param] = new Set();
       }
 
-      // TODO: do more complex analysis here
-      // it could either be a method, or another object.
-      // we need to recur on the node to figure out which it is.
+      // if we need to patch, we make this an object and add the patch.
+      if (to_be_patched !== null) {
+        console.error("patching", to_be_patched);
+        // merge in the two trees
+        funcInfo.params[param]!.add({
+          type: "object",
+          id: field,
+          fields: new Set([to_be_patched]),
+        });
 
-      // push if it doesn't exist
-      if (
-        !funcInfo.params[param]!.some(
-          (fieldInfo) => fieldInfo.type === "field" && fieldInfo.id === field
+        // we don't need to patch anymore
+        to_be_patched = null;
+      } else if (
+        // push if it doesn't exist
+        // NOTE: if we have already have this field as a Call, we leave it as a Call.
+        ![...funcInfo.params[param]!].some(
+          (fieldInfo) => fieldInfo.id === field
         )
       ) {
-        funcInfo.params[param]!.push({
+        funcInfo.params[param]!.add({
           type: "field",
           id: field,
         });
       }
-    } else {
-      ts.forEachChild(node, (child) => visitFunc(child, params, funcInfo));
     }
+    ts.forEachChild(node, (child) =>
+      visitFunc(child, params, to_be_patched, funcInfo)
+    );
   };
 
   ts.forEachChild(transformed, visitor);
 
-  return objectInfoMap;
+  return mergeObjectInfo(objectInfoMap);
 };

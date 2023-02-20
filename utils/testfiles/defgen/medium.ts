@@ -10,6 +10,9 @@ function f(obj) {
 
   console.log(obj.d.e);
 
+  obj.d.e.f;
+
+  obj.c();
   obj.d.m();
 }
 

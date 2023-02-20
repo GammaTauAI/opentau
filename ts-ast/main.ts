@@ -254,7 +254,11 @@ const handleObjectInfo = (decodedText: string): string => {
     ts.ScriptKind.TS
   );
   const res = objectInfo(sourceFile);
-  const base64 = Buffer.from(JSON.stringify(res)).toString("base64");
+  const base64 = Buffer.from(
+    JSON.stringify(res, (_key, value) =>
+      value instanceof Set ? [...value] : value
+    )
+  ).toString("base64");
   return JSON.stringify({
     type: "objectInfoResponse",
     text: base64,

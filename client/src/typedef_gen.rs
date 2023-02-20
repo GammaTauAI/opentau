@@ -1,8 +1,8 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum ObjectFieldInfo {
     /// Just a normal field
@@ -12,21 +12,20 @@ pub enum ObjectFieldInfo {
     /// A field that is an object
     Object {
         id: String,
-        fields: Vec<ObjectFieldInfo>,
+        fields: BTreeSet<ObjectFieldInfo>,
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct ObjectFuncInfo {
-    /// The parameters of the function. Maps [name] -> [Option<Vec<FieldInfo>>]
-    /// It will only be Some if the parameter is an object, and the Vec<FieldInfo>
-    /// is the fields of the object.
-    pub params: HashMap<String, Option<Vec<ObjectFieldInfo>>>,
-    /// The return info of the function. If it is an object, it will be Some(Vec<FieldInfo>)
-    /// where the Vec<FieldInfo> is the fields of the object.
+    /// The parameters of the function. Maps [name] -> [Set<FieldInfo>].
+    /// The parameters in the set are only objects, no primitive parameters.
+    pub params: BTreeMap<String, BTreeSet<ObjectFieldInfo>>,
+    /// The return info of the function. 
+    /// where the Set<FieldInfo> is the fields of the object.
     /// If this is None, it means that either the function does not return anything,
     /// or it returns a non-object type.
-    pub ret: Option<Vec<ObjectFieldInfo>>,
+    pub ret: Option<BTreeSet<ObjectFieldInfo>>,
 }
 
 /// Represents the object info map for a given file
@@ -35,4 +34,4 @@ pub struct ObjectFuncInfo {
 /// are scoped inside other functions, where the first part is the name of the
 /// parent function, and the second part is the name of the child function.
 /// The value is the object information related to the function.
-pub type ObjectInfoMap = HashMap<String, ObjectFuncInfo>;
+pub type ObjectInfoMap = BTreeMap<String, ObjectFuncInfo>;
