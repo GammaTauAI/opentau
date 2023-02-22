@@ -185,7 +185,7 @@ const alphaRenameTransformer: ts.TransformerFactory<ts.SourceFile> = (
     // sort the identifier list by the length of the scope path, descending
     // this way, we go from most precise to least precise scope
     scopedIdentifiers.sort((a, b) => b[1].length - a[1].length);
-    console.error(scopedIdentifiers);
+    // console.error(scopedIdentifiers);
 
     // we reset this counter for the next pass, to match the scope path
     counter = 0;
@@ -306,7 +306,7 @@ const mergeObjectInfo = (objectInfoMap: ObjectInfoMap): ObjectInfoMap => {
     const mergedFieldInfos: Set<FieldInfo> = new Set();
 
     for (const fieldInfo of fieldInfos) {
-      if (isField(fieldInfo)) {
+      if (isField(fieldInfo) || isCall(fieldInfo)) {
         mergedFieldInfos.add(fieldInfo);
       } else if (isObject(fieldInfo)) {
         let found = false;
@@ -319,11 +319,10 @@ const mergeObjectInfo = (objectInfoMap: ObjectInfoMap): ObjectInfoMap => {
             ]);
           }
         }
+
         if (!found) {
           mergedFieldInfos.add(fieldInfo);
         }
-      } else if (isCall(fieldInfo)) {
-        mergedFieldInfos.add(fieldInfo);
       }
     }
 
@@ -359,10 +358,6 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
   let transformed = ts.transform(sourceFile, [alphaRenameTransformer])
     .transformed[0];
 
-  // TODO: delete
-  let printed = codePrinter.printFile(transformed);
-  console.error(printed);
-
   const objectInfoMap: ObjectInfoMap = {};
 
   const visitor = (node: ts.Node): void => {
@@ -392,15 +387,27 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
     to_be_patched: FieldInfo | null,
     funcInfo: FuncInfo
   ): void => {
-    console.error(ts.SyntaxKind[node.kind]);
-    console.error(
-      codePrinter.printNode(ts.EmitHint.Unspecified, node, sourceFile)
-    );
+    // console.error(ts.SyntaxKind[node.kind]);
+    // console.error(
+      // codePrinter.printNode(ts.EmitHint.Unspecified, node, sourceFile)
+    // );
     if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      ts.isPropertyAccessExpression(node.expression.expression)
+    ) {
+      // console.error("call property access expression, patch", to_be_patched);
+      if (to_be_patched === null) {
+        to_be_patched = {
+          type: "call",
+          id: node.expression.name.text,
+        };
+      }
+    } else if (
       ts.isPropertyAccessExpression(node) &&
       ts.isPropertyAccessExpression(node.expression)
     ) {
-      console.error("property access expression, patch", to_be_patched);
+      // console.error("property access expression, patch", to_be_patched);
 
       // we need to create a new object
       // we either have to_be_patched == null or to_be_patched.type == something.
@@ -411,7 +418,12 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
           type: "field",
           id: node.name.text,
         };
-      } else {
+      } else if (
+        // if we have a to_be_patched that is a call, and
+        // has the same name, we skip it.
+        to_be_patched.type !== "call" &&
+        to_be_patched.id !== node.name.text
+      ) {
         to_be_patched = {
           type: "object",
           id: node.name.text,
@@ -455,8 +467,6 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
 
       // if we need to patch, we make this an object and add the patch.
       if (to_be_patched !== null) {
-        console.error("patching", to_be_patched);
-        // merge in the two trees
         funcInfo.params[param]!.add({
           type: "object",
           id: field,
