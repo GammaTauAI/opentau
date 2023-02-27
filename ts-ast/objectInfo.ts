@@ -380,34 +380,14 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
   let transformed = ts.transform(sourceFile, [alphaRenameTransformer])
     .transformed[0];
 
+  console.error(codePrinter.printFile(transformed));
+
   const objectInfoMap: ObjectInfoMap = {};
-
-  const visitor = (node: ts.Node): void => {
-    if (ts.isFunctionDeclaration(node) && node.name) {
-      const funcInfo: FuncInfo = {
-        params: {},
-        ret: null,
-      };
-
-      const params = new Set<string>();
-      for (const param of node.parameters) {
-        // TODO: handle more complex cases
-        if (ts.isIdentifier(param.name)) {
-          params.add(param.name.text);
-        }
-      }
-
-      visitFunc(node, params, null, funcInfo);
-      objectInfoMap[node.name.text] = funcInfo;
-    }
-    ts.forEachChild(node, visitor);
-  };
 
   const visitFunc = (
     node: ts.Node,
-    params: Set<string>,
-    to_be_patched: FieldInfo | null,
-    funcInfo: FuncInfo
+    paramMap: Map<string, Set<FieldInfo>>,
+    to_be_patched: FieldInfo | null
   ): void => {
     // console.error(ts.SyntaxKind[node.kind]);
     // console.error(
@@ -456,40 +436,33 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
       ts.isCallExpression(node) &&
       ts.isPropertyAccessExpression(node.expression) &&
       ts.isIdentifier(node.expression.expression) &&
-      params.has(node.expression.expression.text)
+      paramMap.has(node.expression.expression.text)
     ) {
       const param = node.expression.expression.text;
       const field = node.expression.name.text;
 
-      if (!funcInfo.params[param]) {
-        funcInfo.params[param] = new Set();
-      }
-
       // if we have already have this field as a Field, we remove it.
       // Call is more precise than Field.
-      funcInfo.params[param] = new Set(
-        [...funcInfo.params[param]!].filter((setField) => setField.id !== field)
-      );
+      paramMap.get(param)!.delete({
+        type: "field",
+        id: field,
+      });
 
-      funcInfo.params[param]!.add({
+      paramMap.get(param)!.add({
         type: "call",
         id: field,
       });
     } else if (
       ts.isPropertyAccessExpression(node) &&
       ts.isIdentifier(node.expression) &&
-      params.has(node.expression.text)
+      paramMap.has(node.expression.text)
     ) {
-      const param = node.expression.text;
       const field = node.name.text;
-
-      if (!funcInfo.params[param]) {
-        funcInfo.params[param] = new Set();
-      }
+      const param = node.expression.text;
 
       // if we need to patch, we make this an object and add the patch.
       if (to_be_patched !== null) {
-        funcInfo.params[param]!.add({
+        paramMap.get(param)!.add({
           type: "object",
           id: field,
           fields: new Set([to_be_patched]),
@@ -500,19 +473,42 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
       } else if (
         // push if it doesn't exist
         // NOTE: if we have already have this field as a Call, we leave it as a Call.
-        ![...funcInfo.params[param]!].some(
-          (fieldInfo) => fieldInfo.id === field
-        )
+        ![...paramMap.get(param)!].some((fieldInfo) => fieldInfo.id === field)
       ) {
-        funcInfo.params[param]!.add({
+        paramMap.get(param)!.add({
           type: "field",
           id: field,
         });
       }
     }
-    ts.forEachChild(node, (child) =>
-      visitFunc(child, params, to_be_patched, funcInfo)
-    );
+    ts.forEachChild(node, (child) => visitFunc(child, paramMap, to_be_patched));
+  };
+
+  const visitor = (node: ts.Node): void => {
+    if (ts.isFunctionDeclaration(node) && node.name) {
+      const paramMap = new Map<string, Set<FieldInfo>>();
+      for (const param of node.parameters) {
+        // TODO: handle more complex cases
+        if (ts.isIdentifier(param.name)) {
+          paramMap.set(param.name.text, new Set());
+        }
+      }
+
+      visitFunc(node, paramMap, null);
+      const params: ParamsType = {};
+      for (const param of node.parameters) {
+        // TODO: handle more complex cases
+        if (ts.isIdentifier(param.name)) {
+          params[param.name.text] = paramMap.get(param.name.text)!;
+        }
+      }
+      const funcInfo: FuncInfo = {
+        params: params,
+        ret: null,
+      };
+      objectInfoMap[node.name.text] = funcInfo;
+      ts.forEachChild(node, visitor);
+    }
   };
 
   ts.forEachChild(transformed, visitor);
