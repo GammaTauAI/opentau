@@ -1,3 +1,4 @@
+import assert from "assert";
 import ts from "typescript";
 import { codePrinter } from "./main";
 
@@ -313,19 +314,31 @@ const mergeObjectInfo = (objectInfoMap: ObjectInfoMap): ObjectInfoMap => {
         for (const info of mergedFieldInfos) {
           if (isObject(info) && info.id === fieldInfo.id) {
             found = true;
-            info.fields = new Set([
-              ...info.fields,
+            const newFields: Set<FieldInfo> = new Set();
+            for (const merged of [
               ...mergeFieldInfos(fieldInfo.fields),
-            ]);
-            // de-duplicate fields with the same name as object fields
-            for (const field of info.fields) {
-              if (
-                isField(field) &&
-                [...info.fields].some((f) => f.id === field.id && isObject(f))
+              ...info.fields,
+            ]) {
+              if (isObject(merged)) {
+                for (const info of newFields) {
+                  if (isField(info) && info.id === merged.id) {
+                    newFields.delete(info);
+                  }
+                }
+                newFields.add(merged);
+              } else if (
+                !(
+                  isField(merged) &&
+                  [...info.fields].some((f) => f.id === merged.id)
+                )
               ) {
-                info.fields.delete(field);
+                newFields.add(merged);
               }
             }
+            info.fields = newFields;
+          } else if (isField(info) && info.id === fieldInfo.id) {
+            // de-duplicate fields with the same name as the object
+            mergedFieldInfos.delete(info);
           }
         }
 
