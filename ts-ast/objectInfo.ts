@@ -317,6 +317,15 @@ const mergeObjectInfo = (objectInfoMap: ObjectInfoMap): ObjectInfoMap => {
               ...info.fields,
               ...mergeFieldInfos(fieldInfo.fields),
             ]);
+            // de-duplicate fields with the same name as object fields
+            for (const field of info.fields) {
+              if (
+                isField(field) &&
+                [...info.fields].some((f) => f.id === field.id && isObject(f))
+              ) {
+                info.fields.delete(field);
+              }
+            }
           }
         }
 
@@ -389,7 +398,7 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
   ): void => {
     // console.error(ts.SyntaxKind[node.kind]);
     // console.error(
-      // codePrinter.printNode(ts.EmitHint.Unspecified, node, sourceFile)
+    // codePrinter.printNode(ts.EmitHint.Unspecified, node, sourceFile)
     // );
     if (
       ts.isCallExpression(node) &&
