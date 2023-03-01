@@ -5,7 +5,7 @@ use opentau::{
     completion::{codex::CodexClientBuilder, ArcCompletionEngine, CompletionEngine},
     completion::{Completion, CompletionError, CompletionQuery},
     debug,
-    langserver::{py::PyServer, ts::TsServer, LangServer},
+    langserver::{py::PyServer, ts::TsServer, ArcLangServer, LangServer},
     tree::{CompletionLevels, TreeCompletion},
 };
 use tokio::{sync::Mutex, task::JoinHandle};
@@ -49,7 +49,11 @@ struct Args {
     #[clap(long, value_parser, default_value_t = false)]
     fallback: bool,
 
-    /// The url of the codex endpoint
+    /// Which engine to use. Either: {"codex", "incoder"}
+    #[clap(short, long, value_parser, default_value = "codex")]
+    engine: String,
+
+    /// The url of the completion engine endpoint (if the engine is online)
     #[clap(
         short,
         long,
@@ -86,7 +90,7 @@ struct Args {
 }
 
 impl Args {
-    async fn lang_client(&self) -> Arc<dyn LangServer + Send + Sync> {
+    async fn lang_client(&self) -> ArcLangServer {
         fn get_path(folder: String) -> String {
             std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                 .parent()
@@ -119,6 +123,42 @@ impl Args {
             }
         }
     }
+
+    fn completion_engine(
+        &self,
+        ls: ArcLangServer,
+        cache: Option<Arc<Mutex<Cache>>>,
+    ) -> ArcCompletionEngine {
+        match self.engine.as_str() {
+            "codex" => {
+                let tokens = self
+                    .tokens
+                    .split(',')
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>();
+
+                let mut codex = CodexClientBuilder::new(tokens, ls);
+                codex
+                    .endpoint(self.endpoint.clone())
+                    .temperature(self.temp)
+                    .max_type_score(self.max_type_quality)
+                    .rate_limit(!self.disable_rate_limit);
+
+                if let Some(cache) = cache {
+                    codex.cache(cache);
+                }
+
+                Arc::new(codex.build())
+            }
+            "incoder" => {
+                todo!("Implement incoder")
+            }
+            _ => {
+                eprintln!("Unknown engine, {}", self.engine);
+                std::process::exit(1);
+            }
+        }
+    }
 }
 
 #[tokio::main]
@@ -129,8 +169,8 @@ async fn main() {
 
     let file_contents = tokio::fs::read_to_string(&args.file).await.unwrap();
 
-    let cache: Option<Arc<Mutex<Cache>>> = args.cache.map(|u| {
-        Arc::new(Mutex::new(Cache::new(&u, args.stop_at).unwrap_or_else(
+    let cache: Option<Arc<Mutex<Cache>>> = args.cache.as_ref().map(|u| {
+        Arc::new(Mutex::new(Cache::new(u, args.stop_at).unwrap_or_else(
             |e| {
                 eprintln!("Failed to connect to redis: {e}");
                 std::process::exit(1);
@@ -138,28 +178,9 @@ async fn main() {
         )))
     });
 
-    let tokens = args
-        .tokens
-        .split(',')
-        .map(|s| s.to_string())
-        .collect::<Vec<_>>();
-
-    let mut codex = CodexClientBuilder::new(tokens, lang_client);
-    codex
-        .endpoint(args.endpoint)
-        .temperature(args.temp)
-        .max_type_score(args.max_type_quality)
-        .rate_limit(!args.disable_rate_limit);
-
-    if let Some(cache) = cache {
-        codex.cache(cache);
-    }
-
-    let codex = codex.build();
-
     let ctx = MainCtx {
         file_contents,
-        engine: Arc::new(codex), // TODO: add option for different engines
+        engine: args.completion_engine(lang_client, cache),
         num_comps: args.n,
         retries: args.retries,
         fallback: args.fallback,
