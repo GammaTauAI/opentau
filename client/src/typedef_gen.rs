@@ -7,8 +7,9 @@ use serde::{Deserialize, Serialize};
 pub enum ObjectFieldInfo {
     /// Just a normal field
     Field { id: String },
-    /// A call to some method/function
-    Call { id: String },
+    /// A call to some method/function. The args are the parameters of the call,
+    /// where it will be a Some only if the parameter is an object.
+    Call { id: String, args: Vec<Option<String>> },
     /// A field that is an object
     Object {
         id: String,

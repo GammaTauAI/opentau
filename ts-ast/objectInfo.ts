@@ -240,6 +240,7 @@ const alphaRenameTransformer: ts.TransformerFactory<ts.SourceFile> = (
 type FieldInfoCall = {
   type: "call";
   id: string;
+  args: (string | null)[];
 };
 type FieldInfoField = {
   type: "field";
@@ -261,6 +262,8 @@ const isObject = (info: FieldInfo): info is FieldInfoObject =>
   info.type === "object";
 
 type ParamsType = { [name: string]: Set<FieldInfo> };
+
+type SignleParamType = { name: string; infos: Set<FieldInfo> };
 
 type FuncInfo = {
   params: ParamsType;
@@ -386,13 +389,18 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
 
   const visitFunc = (
     node: ts.Node,
-    paramMap: Map<string, Set<FieldInfo>>,
+    paramMap: Map<string, SignleParamType>,
     to_be_patched: FieldInfo | null
   ): void => {
-    // console.error(ts.SyntaxKind[node.kind]);
-    // console.error(
-    // codePrinter.printNode(ts.EmitHint.Unspecified, node, sourceFile)
-    // );
+    const getArgForCall = (node: ts.Node): string | null => {
+      if (ts.isIdentifier(node)) {
+        const param = paramMap.get(node.text);
+        return param ? param.name : null;
+      } else {
+        return null;
+      }
+    };
+
     if (
       ts.isCallExpression(node) &&
       ts.isPropertyAccessExpression(node.expression) &&
@@ -403,6 +411,7 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
         to_be_patched = {
           type: "call",
           id: node.expression.name.text,
+          args: node.arguments.map(getArgForCall),
         };
       }
     } else if (
@@ -443,14 +452,15 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
 
       // if we have already have this field as a Field, we remove it.
       // Call is more precise than Field.
-      paramMap.get(param)!.delete({
+      paramMap.get(param)!.infos.delete({
         type: "field",
         id: field,
       });
 
-      paramMap.get(param)!.add({
+      paramMap.get(param)!.infos.add({
         type: "call",
         id: field,
+        args: node.arguments.map(getArgForCall),
       });
     } else if (
       ts.isPropertyAccessExpression(node) &&
@@ -462,7 +472,7 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
 
       // if we need to patch, we make this an object and add the patch.
       if (to_be_patched !== null) {
-        paramMap.get(param)!.add({
+        paramMap.get(param)!.infos.add({
           type: "object",
           id: field,
           fields: new Set([to_be_patched]),
@@ -473,9 +483,11 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
       } else if (
         // push if it doesn't exist
         // NOTE: if we have already have this field as a Call, we leave it as a Call.
-        ![...paramMap.get(param)!].some((fieldInfo) => fieldInfo.id === field)
+        ![...paramMap.get(param)!.infos].some(
+          (fieldInfo) => fieldInfo.id === field
+        )
       ) {
-        paramMap.get(param)!.add({
+        paramMap.get(param)!.infos.add({
           type: "field",
           id: field,
         });
@@ -486,11 +498,14 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
 
   const visitor = (node: ts.Node): void => {
     if (ts.isFunctionDeclaration(node) && node.name) {
-      const paramMap = new Map<string, Set<FieldInfo>>();
+      const paramMap = new Map<string, SignleParamType>();
       for (const param of node.parameters) {
         // TODO: handle more complex cases
         if (ts.isIdentifier(param.name)) {
-          paramMap.set(param.name.text, new Set());
+          paramMap.set(param.name.text, {
+            infos: new Set(),
+            name: param.name.text,
+          });
         }
       }
 
@@ -499,7 +514,7 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
       for (const param of node.parameters) {
         // TODO: handle more complex cases
         if (ts.isIdentifier(param.name)) {
-          params[param.name.text] = paramMap.get(param.name.text)!;
+          params[param.name.text] = paramMap.get(param.name.text)!.infos;
         }
       }
       const funcInfo: FuncInfo = {

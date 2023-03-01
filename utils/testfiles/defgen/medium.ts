@@ -12,8 +12,8 @@ function f(obj) {
 
   obj.d.e.f;
 
-  obj.c();
-  obj.d.m();
+  obj.c(5);
+  obj.d.m(obj, 2);
 }
 
 // tests destructuring via object literals
