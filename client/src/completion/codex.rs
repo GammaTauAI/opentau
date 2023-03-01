@@ -1,4 +1,4 @@
-use std::{sync::Arc};
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use tokio::{sync::Mutex, task::JoinHandle};
@@ -8,7 +8,7 @@ use crate::{
     langserver::{ArcLangServer, LangServer},
 };
 
-use super::{CompletionError, Completion, CompletionEngine, CompletionQuery};
+use super::{Completion, CompletionEngine, CompletionError, CompletionQuery};
 
 mod rl {
     use dashmap::DashMap;
@@ -192,7 +192,10 @@ impl CompletionEngine for CodexClient {
     /// retries is the number of requests to make to codex, which creates duplicates, so we filter
     /// them out.
     /// fallback is whether to fallback to "any" if we don't get any completions.
-    async fn complete(&self, mut query: CompletionQuery) -> Result<Vec<Completion>, CompletionError> {
+    async fn complete(
+        &self,
+        mut query: CompletionQuery,
+    ) -> Result<Vec<Completion>, CompletionError> {
         // we filter incomplete completions
         // scored vec: implemented scoring, sort resulting vec by score,
         //             and fall back to all "any" in worst case (if enabled)
@@ -224,7 +227,9 @@ impl CompletionEngine for CodexClient {
         for handle in handles {
             let res = handle.await.unwrap();
             if let Err(e) = res {
-                if let CompletionError::ErrorResponse(EditRespError::RateLimited { message: msg }) = &e {
+                if let CompletionError::ErrorResponse(EditRespError::RateLimited { message: msg }) =
+                    &e
+                {
                     println!("Rate limited by codex. {msg}");
                     rate_limit = true;
                 } else {
@@ -270,9 +275,13 @@ impl CompletionEngine for CodexClient {
         }
 
         // print out scores
-        print!("Scores: ");
-        for (_, score) in filtered_completions.lock().await.iter() {
-            print!("{score}, ");
+        print!("Score(s): ");
+        let lock = filtered_completions.lock().await;
+        for (i, (_, score)) in lock.iter().enumerate() {
+            print!("{score}");
+            if i != lock.len() - 1 {
+                print!(", ");
+            }
         }
         println!();
 
@@ -329,9 +338,14 @@ impl CodexClient {
                 )));
             let res = req.send().await?;
             let body = res.text().await?;
-            let choices: Vec<EditRespChoice> = match serde_json::from_str::<EditResp>(&body)? {
-                EditResp::Choices { choices } => choices,
-                EditResp::Error { error } => return Err(CompletionError::ErrorResponse(error)),
+            let choices: Vec<EditRespChoice> = match serde_json::from_str::<EditResp>(&body) {
+                Ok(EditResp::Choices { choices }) => choices,
+                Ok(EditResp::Error { error }) => return Err(CompletionError::ErrorResponse(error)),
+                Err(e) => {
+                    eprintln!("Error parsing response from codex: {e}");
+                    eprintln!("Response: {body}");
+                    return Err(CompletionError::CodexCouldNotComplete);
+                }
             };
 
             println!("Got {} responses from codex", choices.len());

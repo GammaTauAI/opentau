@@ -263,7 +263,9 @@ const isObject = (info: FieldInfo): info is FieldInfoObject =>
 
 type ParamsType = { [name: string]: Set<FieldInfo> };
 
-type SignleParamType = { name: string; infos: Set<FieldInfo> };
+// this is just a tuple of (name, Set<FieldInfo>), for analysis purposes,
+// does not get used in the final output
+type SingleParamType = { name: string; infos: Set<FieldInfo> };
 
 type FuncInfo = {
   params: ParamsType;
@@ -389,7 +391,7 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
 
   const visitFunc = (
     node: ts.Node,
-    paramMap: Map<string, SignleParamType>,
+    paramMap: Map<string, SingleParamType>,
     to_be_patched: FieldInfo | null
   ): void => {
     const getArgForCall = (node: ts.Node): string | null => {
@@ -498,7 +500,7 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
 
   const visitor = (node: ts.Node): void => {
     if (ts.isFunctionDeclaration(node) && node.name) {
-      const paramMap = new Map<string, SignleParamType>();
+      const paramMap = new Map<string, SingleParamType>();
       for (const param of node.parameters) {
         // TODO: handle more complex cases
         if (ts.isIdentifier(param.name)) {

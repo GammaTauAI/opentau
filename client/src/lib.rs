@@ -1,4 +1,5 @@
 pub mod cache;
+pub mod main_strategies;
 pub mod completion;
 pub mod langserver;
 pub mod tree;

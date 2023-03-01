@@ -2,26 +2,26 @@ use std::sync::Arc;
 
 use opentau::{
     cache::Cache,
-    completion::{codex::CodexClientBuilder, ArcCompletionEngine, CompletionEngine},
-    completion::{Completion, CompletionError, CompletionQuery},
-    debug,
+    completion::Completion,
+    completion::{codex::CodexClientBuilder, ArcCompletionEngine},
     langserver::{py::PyServer, ts::TsServer, ArcLangServer, LangServer},
-    tree::{CompletionLevels, TreeCompletion},
+    main_strategies::{MainCtx, MainStrategy, SimpleStrategy, TreeStrategy},
 };
-use tokio::{sync::Mutex, task::JoinHandle};
+use tokio::sync::Mutex;
 
 use clap::Parser;
 
-/// Program that uses OpenAI Codex for Gradual Type Inference
+/// OpenTau, a program that uses Natural Language Models for Code to 
+/// type-infer and generate types for gradually typed languages.
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
-    /// Codex tokens to use, separated by commas
+    /// The API token for an online completion engine. Not required if using a local engine.
     #[clap(short, long, value_parser)]
-    tokens: String,
+    tokens: Option<String>,
 
     /// The target language.
-    /// Either `ts` or `py`
+    /// Either {"ts", "py"}.
     #[clap(short, long, value_parser, default_value = "ts")]
     lang: String,
 
@@ -41,7 +41,7 @@ struct Args {
     #[clap(short, long, value_parser, default_value = "3")]
     n: usize,
 
-    /// The number of request to send to Codex
+    /// The number of request to send to the completion engine
     #[clap(short, long, value_parser, default_value = "1")]
     retries: usize,
 
@@ -54,13 +54,8 @@ struct Args {
     engine: String,
 
     /// The url of the completion engine endpoint (if the engine is online)
-    #[clap(
-        short,
-        long,
-        value_parser,
-        default_value = "https://api.openai.com/v1/edits"
-    )]
-    endpoint: String,
+    #[clap(short, long, value_parser)]
+    endpoint: Option<String>,
 
     /// The temperature to use for the completion
     #[clap(long, value_parser, default_value_t = 1.0)]
@@ -90,7 +85,7 @@ struct Args {
 }
 
 impl Args {
-    async fn lang_client(&self) -> ArcLangServer {
+    async fn lang_client_factory(&self) -> ArcLangServer {
         fn get_path(folder: String) -> String {
             std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                 .parent()
@@ -124,22 +119,33 @@ impl Args {
         }
     }
 
-    fn completion_engine(
+    fn completion_engine_factory(
         &self,
         ls: ArcLangServer,
         cache: Option<Arc<Mutex<Cache>>>,
     ) -> ArcCompletionEngine {
         match self.engine.as_str() {
             "codex" => {
+                if self.tokens.is_none() {}
                 let tokens = self
                     .tokens
+                    .as_ref()
+                    .unwrap_or_else(|| {
+                        eprintln!("Codex tokens are required");
+                        std::process::exit(1);
+                    })
                     .split(',')
                     .map(|s| s.to_string())
                     .collect::<Vec<_>>();
 
                 let mut codex = CodexClientBuilder::new(tokens, ls);
                 codex
-                    .endpoint(self.endpoint.clone())
+                    .endpoint(
+                        self.endpoint
+                            .as_deref()
+                            .unwrap_or("https://api.openai.com/v1/edits")
+                            .to_string(),
+                    )
                     .temperature(self.temp)
                     .max_type_score(self.max_type_quality)
                     .rate_limit(!self.disable_rate_limit);
@@ -159,13 +165,25 @@ impl Args {
             }
         }
     }
+
+    fn stategy_factory(&self) -> Box<dyn MainStrategy> {
+        match self.strategy.as_str() {
+            "simple" => Box::new(SimpleStrategy {}),
+            "tree" => Box::new(TreeStrategy {}),
+            _ => {
+                eprintln!("Unknown strategy, {}", self.strategy);
+                std::process::exit(1);
+            }
+        }
+    }
 }
 
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
 
-    let lang_client = args.lang_client().await;
+    let lang_client = args.lang_client_factory().await;
+    let strategy = args.stategy_factory();
 
     let file_contents = tokio::fs::read_to_string(&args.file).await.unwrap();
 
@@ -180,7 +198,7 @@ async fn main() {
 
     let ctx = MainCtx {
         file_contents,
-        engine: args.completion_engine(lang_client, cache),
+        engine: args.completion_engine_factory(lang_client, cache),
         num_comps: args.n,
         retries: args.retries,
         fallback: args.fallback,
@@ -189,14 +207,7 @@ async fn main() {
     };
 
     // the typechecked and completed code(s). here if we get errors we exit with 1
-    let good_ones: Vec<Completion> = match args.strategy.as_str() {
-        "simple" => ctx.simple_strategy().await,
-        "tree" => ctx.tree_strategy().await,
-        _ => {
-            eprintln!("Unknown strategy, {}", args.strategy);
-            std::process::exit(1);
-        }
-    };
+    let good_ones: Vec<Completion> = strategy.run(ctx).await;
 
     if good_ones.is_empty() {
         eprintln!("No completions type checked");
@@ -219,154 +230,5 @@ async fn main() {
             args.output, i, comp.score, fallback, args.lang
         );
         tokio::fs::write(&output_path, comp.code).await.unwrap();
-    }
-}
-
-/// The context for the program.
-/// Splits into different strategies.
-struct MainCtx {
-    engine: ArcCompletionEngine,
-    file_contents: String,
-    num_comps: usize,
-    retries: usize,
-    fallback: bool,
-    stop_at: usize,
-    disable_type_check: bool,
-}
-
-impl MainCtx {
-    /// Returns the subset of completions that type check from the given set of completions
-    async fn type_check_candidates(&self, candidates: Vec<Completion>) -> Vec<Completion> {
-        let mut comps: Vec<Completion> = vec![];
-        let mut handles: Vec<JoinHandle<Option<Completion>>> = vec![];
-        for (i, candidate) in candidates.into_iter().enumerate() {
-            debug!("candidate {}:\n{}", i, candidate.code);
-            let lang_client = self.engine.get_ls();
-            let disable_type_check = self.disable_type_check;
-            handles.push(tokio::task::spawn(async move {
-                if disable_type_check {
-                    return Some(candidate);
-                }
-
-                let type_checks = lang_client.type_check(&candidate.code).await.unwrap();
-                if type_checks {
-                    Some(candidate)
-                } else {
-                    None
-                }
-            }));
-        }
-
-        for handle in handles {
-            if let Some(comp) = handle.await.unwrap() {
-                comps.push(comp);
-            }
-            if comps.len() >= self.stop_at {
-                break;
-            }
-        }
-
-        comps
-    }
-
-    /// Runs the tree completion strategy. Documentation on the strategy is in the `tree.rs` file.
-    ///
-    /// TODO: somehow add caching to this strategy, maybe go up the tree?
-    async fn tree_strategy(&self) -> Vec<Completion> {
-        let tree = self
-            .engine
-            .get_ls()
-            .to_tree(&self.file_contents)
-            .await
-            .unwrap();
-
-        let mut levels: CompletionLevels = CompletionLevels::prepare(tree, self.engine.get_ls())
-            .await
-            .unwrap();
-        levels.num_comps = self.num_comps;
-        levels.retries = self.retries;
-        levels.fallback = self.fallback;
-
-        levels.tree_complete(self.engine.clone()).await;
-
-        let root = levels.levels[0].nodes.remove(0);
-
-        // score the code at the root
-        let mut handles: Vec<JoinHandle<Completion>> = vec![];
-        for code in root.completed {
-            let ls = self.engine.get_ls();
-            handles.push(tokio::task::spawn(async move {
-                let (_, score) = ls
-                    .check_complete(&code, &code)
-                    .await
-                    .unwrap_or((false, 9999999999999));
-                Completion {
-                    code,
-                    score,
-                    fallbacked: false,
-                }
-            }));
-        }
-        let mut candidates = vec![];
-        for handle in handles {
-            let comp = handle.await.unwrap();
-            candidates.push(comp);
-        }
-
-        // sort by lowest score first
-        candidates.sort_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
-
-        self.type_check_candidates(candidates).await
-    }
-
-    /// Runs the simple completion strategy, which just runs the completion on the given file
-    /// without any transformation, other than adding "_hole_" to each unknwon type
-    async fn simple_strategy(self) -> Vec<Completion> {
-        let printed = self
-            .engine
-            .get_ls()
-            .pretty_print(&self.file_contents, "_hole_")
-            .await
-            .unwrap();
-
-        debug!("pretty:\n{}", printed);
-
-        let query = CompletionQuery::new(printed, self.num_comps, self.retries, self.fallback);
-
-        let candidates = match self.engine.complete(query.clone()).await {
-            Ok(r) => r,
-            Err(CompletionError::RateLimit(r)) if !r.is_empty() => {
-                eprintln!(
-                    "Rate limited, but got {} canditate completions before.",
-                    r.len()
-                );
-                r
-            }
-            Err(e) => {
-                eprintln!("Fatal error: {e}");
-                std::process::exit(1);
-            }
-        };
-
-        let comps: Vec<Completion> = self.type_check_candidates(candidates).await;
-
-        // cache the type-checked completions if we have a cache
-        if let Some(mut cache) = self.engine.get_cache().await {
-            // we want to get all the completions that are typechecked
-            // except the one that fallbacked (if there is any)
-            let comps_no_fallback = comps
-                .iter()
-                .filter(|c| !c.fallbacked)
-                .map(|c| c.code.clone())
-                .collect::<Vec<String>>();
-
-            if !comps_no_fallback.is_empty() {
-                cache
-                    .store(&query, &comps_no_fallback)
-                    .expect("failed to store in cache");
-            }
-        }
-
-        comps
     }
 }
