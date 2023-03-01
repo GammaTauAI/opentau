@@ -9,7 +9,9 @@ pub enum ObjectFieldInfo {
     Field { id: String },
     /// A call to some method/function. The args are the parameters of the call,
     /// where it will be a Some only if the parameter is an object.
-    Call { id: String, args: Vec<Option<String>> },
+    /// The inner vec is the path to the object. For example,
+    /// f(obj) is just [obj], but f(obj.a.b) is [obj, a, b].
+    Call { id: String, args: Vec<Option<Vec<String>>> },
     /// A field that is an object
     Object {
         id: String,

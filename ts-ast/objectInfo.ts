@@ -240,7 +240,7 @@ const alphaRenameTransformer: ts.TransformerFactory<ts.SourceFile> = (
 type FieldInfoCall = {
   type: "call";
   id: string;
-  args: (string | null)[];
+  args: (string[] | null)[];
 };
 type FieldInfoField = {
   type: "field";
@@ -394,13 +394,17 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
     paramMap: Map<string, SingleParamType>,
     to_be_patched: FieldInfo | null
   ): void => {
-    const getArgForCall = (node: ts.Node): string | null => {
+    const getArgForCall = (node: ts.Node): string[] | null => {
       if (ts.isIdentifier(node)) {
         const param = paramMap.get(node.text);
-        return param ? param.name : null;
-      } else {
-        return null;
+        return param ? [param.name] : null;
+      } else if (ts.isPropertyAccessExpression(node)) {
+        const left = getArgForCall(node.expression);
+        if (left) {
+          return [...left, node.name.text];
+        }
       }
+      return null;
     };
 
     if (
