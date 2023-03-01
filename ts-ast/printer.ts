@@ -1,47 +1,5 @@
 import ts from "typescript";
-import { codePrinter } from "./main";
-
-export const createFakeType = (id: string): ts.TypeReferenceNode => {
-  return ts.createTypeReferenceNode(ts.createIdentifier(id), undefined);
-};
-
-export const typeTraversal = (
-  child: ts.Node,
-  func: (
-    ty: ts.TypeNode | undefined,
-    inner_child: ts.Node
-  ) => ts.TypeNode | undefined
-) => {
-  if (child.kind === ts.SyntaxKind.FunctionDeclaration) {
-    const functionDeclaration = child as ts.FunctionDeclaration;
-    functionDeclaration.type = func(functionDeclaration.type, child);
-    functionDeclaration.parameters.forEach((parameter) => {
-      parameter.type = func(parameter.type, parameter);
-    });
-  }
-
-  if (child.kind === ts.SyntaxKind.MethodDeclaration) {
-    const methodDeclaration = child as ts.MethodDeclaration;
-    methodDeclaration.type = func(methodDeclaration.type, child);
-    methodDeclaration.parameters.forEach((parameter) => {
-      parameter.type = func(parameter.type, parameter);
-    });
-  }
-
-  if (child.kind === ts.SyntaxKind.PropertyDeclaration) {
-    const propertyDeclaration = child as ts.PropertyDeclaration;
-    propertyDeclaration.type = func(propertyDeclaration.type, child);
-  }
-
-  if (child.kind === ts.SyntaxKind.VariableStatement) {
-    const variableStatement = child as ts.VariableStatement;
-    variableStatement.declarationList.declarations.forEach((declaration) => {
-      declaration.type = func(declaration.type, declaration);
-    });
-  }
-
-  child.forEachChild((c) => typeTraversal(c, func));
-};
+import { codePrinter, createFakeType, typeTraversal } from "./utils";
 
 export const printSource = (
   sourceFile: ts.SourceFile,

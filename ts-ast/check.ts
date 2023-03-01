@@ -1,6 +1,6 @@
 import ts from "typescript";
-import { typeTraversal, createFakeType } from "./printer";
-import { codePrinter } from "./main";
+import { typeTraversal, createFakeType } from "./utils";
+import { codePrinter } from "./utils";
 
 const count_nodes = (child: ts.Node): number => {
   let count = 1;

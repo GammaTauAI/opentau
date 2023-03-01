@@ -1,5 +1,5 @@
 import ts from "typescript";
-import { codePrinter } from "./main";
+import { codePrinter } from "./utils";
 
 type CodeBlockTree = {
   name: string; // NOTE: this is symgen'd

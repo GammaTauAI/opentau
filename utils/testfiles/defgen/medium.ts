@@ -12,7 +12,7 @@ function f(obj) {
 
   obj.d.e.f;
 
-  obj.c(5);
+  obj.c(1, obj.d.e, 3);
   obj.d.m(obj, 2);
 }
 

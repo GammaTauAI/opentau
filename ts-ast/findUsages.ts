@@ -1,5 +1,5 @@
 import ts from "typescript";
-import { codePrinter } from "./main";
+import { codePrinter } from "./utils";
 
 export const findUsages = (
   outerBlock: ts.SourceFile,
