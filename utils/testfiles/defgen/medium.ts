@@ -21,6 +21,7 @@ function g(obj) {
   // how do we capture this?
   const { a, b } = obj;
   console.log(a + b);
+  console.log(a.k, b.l);
 }
 
 // tests destructuring via let
@@ -39,4 +40,14 @@ function h(obj) {
 // }
 function g2({ o1, o2 }) {
   console.log(o1.a + o2.b);
+}
+
+
+// dedup test
+function k(obj) {
+  console.log(obj.j);
+  console.log(obj.j);
+  console.log(obj.j.k);
+  console.log(obj.j.k);
+  console.log(obj.j.k.l);
 }
