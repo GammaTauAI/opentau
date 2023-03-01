@@ -6,6 +6,9 @@ use opentau::{
     tree::{CompletionLevels, TreeCompletion},
 };
 
+// this is a debug binary to test some opentau functionality
+// sorry for the mess!
+
 #[tokio::main]
 async fn main() {
     // get auth token from env
@@ -15,11 +18,11 @@ async fn main() {
     let filename = std::env::args().nth(1).expect("no filename given");
     let input = std::fs::read_to_string(filename).expect("could not read file");
 
-    // resolve path ../ts-ast, this is temporary of course!
+    // resolve path ../ts-compiler, this is temporary of course!
     let client_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap()
-        .join("ts-ast")
+        .join("ts-compiler")
         .to_str()
         .unwrap()
         .to_string();

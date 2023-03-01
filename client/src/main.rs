@@ -97,7 +97,7 @@ impl Args {
         }
         match self.lang.as_str() {
             "ts" => {
-                let path = get_path("ts-ast".to_string());
+                let path = get_path("ts-compiler".to_string());
                 Arc::new(
                     TsServer::make(&path)
                         .await
