@@ -1,5 +1,10 @@
 import ts from "typescript";
 
+// unions two sets into a new set
+export const setUnion = <T>(a: Set<T>, b: Set<T>): Set<T> => {
+  return new Set([...a, ...b]);
+};
+
 // prints to console.error, omit parent property
 export const printNodeToStderr = (node: ts.Node) => {
   console.error(JSON.stringify(node, (key, value) => {

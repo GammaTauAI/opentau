@@ -1,7 +1,7 @@
 import assert from "assert";
 import ts, { isVariableDeclaration } from "typescript";
 import { alphaRenameTransformer } from "./aRename";
-import { codePrinter, printNodeToStderr } from "./utils";
+import { codePrinter, printNodeToStderr, setUnion } from "./utils";
 
 // NOTE: These types come from typedef_gen.rs
 type FieldInfoCall = {
@@ -83,10 +83,9 @@ const normalizeObjectInfo = (objectInfoMap: ObjectInfoMap): ObjectInfoMap => {
           if (isObject(info) && info.id === fieldInfo.id) {
             found = true;
             const newFields: Set<FieldInfo> = new Set();
-            for (const merged of [
-              ...normFieldInfos(fieldInfo.fields),
-              ...info.fields,
-            ]) {
+            for (const merged of normFieldInfos(
+              setUnion(info.fields, fieldInfo.fields)
+            )) {
               if (isObject(merged)) {
                 for (const info of newFields) {
                   if (isField(info) && info.id === merged.id) {
@@ -256,7 +255,22 @@ const resolveVarDecl = (
     const path = getObjectPath(initializer, paramMap);
     if (path) {
       if (ts.isIdentifier(node.name)) {
-        // TODO
+        let left = paramMap.get(path[0]);
+        let right = paramMap.get(path[1]);
+        while (left && path.length > 1) {
+          if (!right) {
+            right = {
+              name: path[1],
+              infos: new Set(),
+              from: left,
+            };
+          }
+
+          left = right;
+          path.shift();
+          right = paramMap.get(path[1]);
+        }
+        paramMap.set(node.name.text, left!);
       } else if (ts.isObjectBindingPattern(node.name)) {
         // TODO
       }
