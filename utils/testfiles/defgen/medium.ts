@@ -28,7 +28,7 @@ function g(obj) {
 function h(obj) {
   let a = obj.a;
   let b = obj.b;
-  console.log(a + b);
+  console.log(a.c + b.d);
 }
 
 // tests object parameter destructuring with inner function

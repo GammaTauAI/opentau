@@ -42,14 +42,12 @@ const addOBPIdentifiers = (
   scope: number[]
 ) => {
   for (const element of pattern.elements) {
-    if (ts.isBindingElement(element)) {
-      if (ts.isIdentifier(element.name)) {
-        list.push([element.name.text, scope]);
-      } else if (ts.isObjectBindingPattern(element.name)) {
-        addOBPIdentifiers(element.name, list, scope);
-      } else if (ts.isArrayBindingPattern(element.name)) {
-        addABPIdentifiers(element.name, list, scope);
-      }
+    if (element.propertyName && ts.isIdentifier(element.name)) {
+      list.push([element.name.text, scope]);
+    } else if (ts.isObjectBindingPattern(element.name)) {
+      addOBPIdentifiers(element.name, list, scope);
+    } else if (ts.isArrayBindingPattern(element.name)) {
+      addABPIdentifiers(element.name, list, scope);
     }
   }
 };
@@ -195,9 +193,17 @@ export const alphaRenameTransformer: ts.TransformerFactory<ts.SourceFile> = (
           ts.isIdentifier(node) &&
           // we don't want to rename property access expressions
           !(
+            (
+              node.parent &&
+              ts.isPropertyAccessExpression(node.parent) &&
+              node.parent.name === node
+            )
+            // we don't want to rename OBPs either
+          ) &&
+          !(
             node.parent &&
-            ts.isPropertyAccessExpression(node.parent) &&
-            node.parent.name === node
+            ts.isBindingElement(node.parent) &&
+            node.parent.propertyName === node
           )
         ) {
           const resolved = resolveIdentifier(

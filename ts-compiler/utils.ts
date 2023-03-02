@@ -1,11 +1,31 @@
 import ts from "typescript";
 
+// prints to console.error, omit parent property
+export const printNodeToStderr = (node: ts.Node) => {
+  console.error(JSON.stringify(node, (key, value) => {
+    if (key === "parent") {
+      return undefined;
+    }
+    return value;
+  }, 2));
+};
+
 // the global printer object!
 export const codePrinter = ts.createPrinter({
   newLine: ts.NewLineKind.LineFeed,
   removeComments: false,
   omitTrailingSemicolon: false,
 });
+
+// checks if the given node is an assignment expression (the one with the = sign)
+export const isAssignmentExpression = (
+  node: ts.Node
+): node is ts.AssignmentExpression<ts.EqualsToken> => {
+  return (
+    ts.isBinaryExpression(node) &&
+    node.operatorToken.kind === ts.SyntaxKind.EqualsToken
+  );
+};
 
 // the normal getChildren() function is broken an crashes at CallExpressions...
 // i cannot believe i actually have to do this.

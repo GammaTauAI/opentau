@@ -2,27 +2,27 @@
 function h(obj) {
   const {
     a,
-    b,
+    b_prop: b_init,
     c: { d },
     e: [f, g],
     h: {
       i: { j },
     },
   } = obj;
-  console.log(a + b + d + f + g + j);
+  console.log(a + b_init + d + f + g + j);
 }
 
 // tests object parameter destructuring with inner function
 function g2({
   a,
-  b,
+  b_prop: b_init,
   c: { d },
   e: [f, g],
   h: {
     i: { j },
   },
 }) {
-  console.log(a + b + d + f + g + j);
+  console.log(a + b_init + d + f + g + j);
 }
 
 // NOW WITH LISTS

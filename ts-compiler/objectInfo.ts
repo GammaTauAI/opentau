@@ -1,7 +1,7 @@
-import ts from "typescript";
+import assert from "assert";
+import ts, { isVariableDeclaration } from "typescript";
 import { alphaRenameTransformer } from "./aRename";
-import { codePrinter } from "./utils";
-
+import { codePrinter, printNodeToStderr } from "./utils";
 
 // NOTE: These types come from typedef_gen.rs
 type FieldInfoCall = {
@@ -30,10 +30,6 @@ const isObject = (info: FieldInfo): info is FieldInfoObject =>
 
 type ParamsType = { [name: string]: Set<FieldInfo> };
 
-// this is just a tuple of (name, Set<FieldInfo>), for analysis purposes,
-// does not get used in the final output
-type SingleParamType = { name: string; infos: Set<FieldInfo> };
-
 type FuncInfo = {
   params: ParamsType;
   ret: Set<FieldInfo> | null;
@@ -41,7 +37,7 @@ type FuncInfo = {
 
 type ObjectInfoMap = { [name: string]: FuncInfo };
 
-// merges ObjectInfoMap objects together
+// merges ObjectInfoMap objects together and normalizes them
 // for example:
 // Object {
 //      id: "d",
@@ -72,23 +68,23 @@ type ObjectInfoMap = { [name: string]: FuncInfo };
 //        },
 //     },
 // },
-const mergeObjectInfo = (objectInfoMap: ObjectInfoMap): ObjectInfoMap => {
-  const mergedObjectInfoMap: ObjectInfoMap = {};
+const normalizeObjectInfo = (objectInfoMap: ObjectInfoMap): ObjectInfoMap => {
+  const normObjectInfoMap: ObjectInfoMap = {};
 
-  const mergeFieldInfos = (fieldInfos: Set<FieldInfo>): Set<FieldInfo> => {
-    const mergedFieldInfos: Set<FieldInfo> = new Set();
+  const normFieldInfos = (fieldInfos: Set<FieldInfo>): Set<FieldInfo> => {
+    const normedFieldInfos: Set<FieldInfo> = new Set();
 
     for (const fieldInfo of fieldInfos) {
       if (isField(fieldInfo) || isCall(fieldInfo)) {
-        mergedFieldInfos.add(fieldInfo);
+        normedFieldInfos.add(fieldInfo);
       } else if (isObject(fieldInfo)) {
         let found = false;
-        for (const info of mergedFieldInfos) {
+        for (const info of normedFieldInfos) {
           if (isObject(info) && info.id === fieldInfo.id) {
             found = true;
             const newFields: Set<FieldInfo> = new Set();
             for (const merged of [
-              ...mergeFieldInfos(fieldInfo.fields),
+              ...normFieldInfos(fieldInfo.fields),
               ...info.fields,
             ]) {
               if (isObject(merged)) {
@@ -110,17 +106,17 @@ const mergeObjectInfo = (objectInfoMap: ObjectInfoMap): ObjectInfoMap => {
             info.fields = newFields;
           } else if (isField(info) && info.id === fieldInfo.id) {
             // de-duplicate fields with the same name as the object
-            mergedFieldInfos.delete(info);
+            normedFieldInfos.delete(info);
           }
         }
 
         if (!found) {
-          mergedFieldInfos.add(fieldInfo);
+          normedFieldInfos.add(fieldInfo);
         }
       }
     }
 
-    return mergedFieldInfos;
+    return normedFieldInfos;
   };
 
   for (const [id, funcInfo] of Object.entries(objectInfoMap)) {
@@ -132,19 +128,140 @@ const mergeObjectInfo = (objectInfoMap: ObjectInfoMap): ObjectInfoMap => {
     for (const [paramName, paramFieldInfos] of Object.entries(
       funcInfo.params
     )) {
-      if (paramFieldInfos) {
-        newFuncInfo.params[paramName] = mergeFieldInfos(paramFieldInfos);
+      if (paramFieldInfos.size > 0) {
+        newFuncInfo.params[paramName] = normFieldInfos(paramFieldInfos);
       }
     }
 
     if (funcInfo.ret) {
-      newFuncInfo.ret = mergeFieldInfos(funcInfo.ret);
+      newFuncInfo.ret = normFieldInfos(funcInfo.ret);
     }
 
-    mergedObjectInfoMap[id] = newFuncInfo;
+    normObjectInfoMap[id] = newFuncInfo;
   }
 
-  return mergedObjectInfoMap;
+  return normObjectInfoMap;
+};
+
+// this type is for analysis purposes, does not get used in the final output.
+// the "from" field is used when resolving the path of a param that has been
+// destructured via object pattern binding or let aliasing
+type SingleParamType = {
+  name: string;
+  infos: Set<FieldInfo>;
+  from: SingleParamType | null;
+};
+
+// converts a SingleParamType to a FieldInfo. if it has no fields, it is
+// converted to a FieldInfoField, otherwise it is converted to a FieldInfoObject
+const singleParamToObject = (singleParam: SingleParamType): FieldInfo => {
+  if (singleParam.infos.size === 0) {
+    return {
+      type: "field",
+      id: singleParam.name,
+    };
+  } else {
+    return {
+      type: "object",
+      id: singleParam.name,
+      fields: singleParam.infos,
+    };
+  }
+};
+
+// gets the fieldinfo with the given name from the given set of field infos
+const getFieldInfo = (
+  fieldInfos: Set<FieldInfo>,
+  name: string,
+  kind: "field" | "call" | "object" | null
+): FieldInfo | null => {
+  for (const fieldInfo of fieldInfos) {
+    if (fieldInfo.id === name && (kind === null || fieldInfo.type === kind)) {
+      return fieldInfo;
+    }
+  }
+  return null;
+};
+
+const getObjectPath = (
+  node: ts.Node,
+  paramMap: Map<string, SingleParamType>
+): string[] | null => {
+  if (ts.isIdentifier(node)) {
+    const param = paramMap.get(node.text);
+    return param ? [param.name] : null;
+  } else if (ts.isPropertyAccessExpression(node)) {
+    const left = getObjectPath(node.expression, paramMap);
+    if (left) {
+      return [...left, node.name.text];
+    }
+  }
+  return null;
+};
+
+// helper function for resolveVarDecl
+// resolves the object binding pattern
+const resolveOBP = (
+  pattern: ts.ObjectBindingPattern,
+  param: SingleParamType,
+  paramMap: Map<string, SingleParamType>
+): void => {
+  for (const element of pattern.elements) {
+    const bindParam: SingleParamType = {
+      name: "",
+      infos: new Set(),
+      from: param,
+    };
+    if (
+      element.propertyName &&
+      ts.isIdentifier(element.propertyName) &&
+      ts.isIdentifier(element.name)
+    ) {
+      bindParam.name = element.propertyName.text;
+      paramMap.set(element.name.text, bindParam);
+    } else if (ts.isIdentifier(element.name)) {
+      bindParam.name = element.name.text;
+      paramMap.set(element.name.text, bindParam);
+    } else if (
+      ts.isObjectBindingPattern(element.name) &&
+      element.propertyName &&
+      ts.isIdentifier(element.propertyName)
+    ) {
+      bindParam.name = element.propertyName.text;
+      paramMap.set(element.propertyName.text, bindParam);
+      resolveOBP(element.name, bindParam, paramMap);
+    }
+  }
+};
+
+// resolves the variable declaration. assumes that the variable declaration
+// initializer is defined. the resolution is done by following the from links
+// and is stored in the paramMap
+const resolveVarDecl = (
+  node: ts.VariableDeclaration,
+  paramMap: Map<string, SingleParamType>
+): void => {
+  assert(node.initializer);
+  const initializer = node.initializer;
+  if (ts.isIdentifier(initializer)) {
+    const param = paramMap.get(initializer.text);
+    if (param) {
+      if (ts.isIdentifier(node.name)) {
+        paramMap.set(node.name.text, param);
+      } else if (ts.isObjectBindingPattern(node.name)) {
+        resolveOBP(node.name, param, paramMap);
+      }
+    }
+  } else if (ts.isPropertyAccessExpression(initializer)) {
+    const path = getObjectPath(initializer, paramMap);
+    if (path) {
+      if (ts.isIdentifier(node.name)) {
+        // TODO
+      } else if (ts.isObjectBindingPattern(node.name)) {
+        // TODO
+      }
+    }
+  }
 };
 
 // simple object info function. this is just a placeholder for now.
@@ -161,20 +278,11 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
     paramMap: Map<string, SingleParamType>,
     to_be_patched: FieldInfo | null
   ): void => {
-    const getArgForCall = (node: ts.Node): string[] | null => {
-      if (ts.isIdentifier(node)) {
-        const param = paramMap.get(node.text);
-        return param ? [param.name] : null;
-      } else if (ts.isPropertyAccessExpression(node)) {
-        const left = getArgForCall(node.expression);
-        if (left) {
-          return [...left, node.name.text];
-        }
-      }
-      return null;
-    };
-
-    if (
+    if (isVariableDeclaration(node) && node.initializer) {
+      // if we have a vardecl, we may be aliasing an object
+      // we need to check if the initializer is an object
+      resolveVarDecl(node, paramMap);
+    } else if (
       ts.isCallExpression(node) &&
       ts.isPropertyAccessExpression(node.expression) &&
       ts.isPropertyAccessExpression(node.expression.expression)
@@ -184,7 +292,7 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
         to_be_patched = {
           type: "call",
           id: node.expression.name.text,
-          args: node.arguments.map(getArgForCall),
+          args: node.arguments.map((arg) => getObjectPath(arg, paramMap)),
         };
       }
     } else if (
@@ -233,7 +341,7 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
       paramMap.get(param)!.infos.add({
         type: "call",
         id: field,
-        args: node.arguments.map(getArgForCall),
+        args: node.arguments.map((arg) => getObjectPath(arg, paramMap)),
       });
     } else if (
       ts.isPropertyAccessExpression(node) &&
@@ -266,6 +374,8 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
         });
       }
     }
+
+    // recurse
     ts.forEachChild(node, (child) => visitFunc(child, paramMap, to_be_patched));
   };
 
@@ -278,18 +388,30 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
           paramMap.set(param.name.text, {
             infos: new Set(),
             name: param.name.text,
+            from: null,
           });
         }
       }
 
       visitFunc(node, paramMap, null);
       const params: ParamsType = {};
-      for (const param of node.parameters) {
-        // TODO: handle more complex cases
-        if (ts.isIdentifier(param.name)) {
-          params[param.name.text] = paramMap.get(param.name.text)!.infos;
+      console.error(paramMap);
+      // NOTE: a map in typescript iterates in insertion order,
+      // so this is safe.
+      for (let paramInfo of paramMap.values()) {
+        if (paramInfo.from === null) {
+          // original param, we simply add it.
+          params[paramInfo.name] = paramInfo.infos;
+        } else {
+          // this paramInfo is linked to another paramInfo.
+          // we need to merge the infos.
+          while (paramInfo.from !== null) {
+            paramInfo.from.infos.add(singleParamToObject(paramInfo));
+            paramInfo = paramInfo.from;
+          }
         }
       }
+
       const funcInfo: FuncInfo = {
         params: params,
         ret: null,
@@ -301,5 +423,5 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
 
   ts.forEachChild(transformed, visitor);
 
-  return mergeObjectInfo(objectInfoMap);
+  return normalizeObjectInfo(objectInfoMap);
 };
