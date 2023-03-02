@@ -96,7 +96,7 @@ const normalizeObjectInfo = (objectInfoMap: ObjectInfoMap): ObjectInfoMap => {
               } else if (
                 !(
                   isField(merged) &&
-                  [...info.fields].some((f) => f.id === merged.id)
+                  [...newFields].some((f) => f.id === merged.id)
                 )
               ) {
                 newFields.add(merged);
@@ -199,6 +199,32 @@ const getObjectPath = (
 };
 
 // helper function for resolveVarDecl
+// resolves a property access expression, linking params together
+// assumes that the given path has at least one element
+const resolvePropertyAccess = (
+  path: string[],
+  paramMap: Map<string, SingleParamType>
+): SingleParamType => {
+  assert(path.length > 0);
+  let left = paramMap.get(path[0]);
+  let right = paramMap.get(path[1]);
+  while (left && path.length > 1) {
+    if (!right) {
+      right = {
+        name: path[1],
+        infos: new Set(),
+        from: left,
+      };
+    }
+
+    left = right;
+    path.shift();
+    right = paramMap.get(path[1]);
+  }
+  return left!;
+};
+
+// helper function for resolveVarDecl
 // resolves the object binding pattern
 const resolveOBP = (
   pattern: ts.ObjectBindingPattern,
@@ -255,24 +281,9 @@ const resolveVarDecl = (
     const path = getObjectPath(initializer, paramMap);
     if (path) {
       if (ts.isIdentifier(node.name)) {
-        let left = paramMap.get(path[0]);
-        let right = paramMap.get(path[1]);
-        while (left && path.length > 1) {
-          if (!right) {
-            right = {
-              name: path[1],
-              infos: new Set(),
-              from: left,
-            };
-          }
-
-          left = right;
-          path.shift();
-          right = paramMap.get(path[1]);
-        }
-        paramMap.set(node.name.text, left!);
+        paramMap.set(node.name.text, resolvePropertyAccess(path, paramMap));
       } else if (ts.isObjectBindingPattern(node.name)) {
-        // TODO
+        resolveOBP(node.name, resolvePropertyAccess(path, paramMap), paramMap);
       }
     }
   }
@@ -397,7 +408,7 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
     if (ts.isFunctionDeclaration(node) && node.name) {
       const paramMap = new Map<string, SingleParamType>();
       for (const param of node.parameters) {
-        // TODO: handle more complex cases
+        // TODO: handle more complex cases (OBP or ABP(?))
         if (ts.isIdentifier(param.name)) {
           paramMap.set(param.name.text, {
             infos: new Set(),
@@ -430,9 +441,10 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
         params: params,
         ret: null,
       };
+
       objectInfoMap[node.name.text] = funcInfo;
-      ts.forEachChild(node, visitor);
     }
+    ts.forEachChild(node, visitor);
   };
 
   ts.forEachChild(transformed, visitor);
