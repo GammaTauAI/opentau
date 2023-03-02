@@ -26,9 +26,9 @@ function g(obj) {
 
 // tests destructuring via let
 function h(obj) {
-  let a = obj.a;
+  let a = obj.a.k.j;
   let b = obj.b;
-  console.log(a.c + b.d);
+  console.log(a.c.i + b.d);
 }
 
 // tests object parameter destructuring with inner function
@@ -50,4 +50,6 @@ function k(obj) {
   console.log(obj.j.k);
   console.log(obj.j.k);
   console.log(obj.j.k.l);
+  console.log(obj.j.k.f.e);
+  console.log(obj.j.g.f.e);
 }
