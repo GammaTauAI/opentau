@@ -30,7 +30,21 @@ export const checkCompleted = (
   completedChecker: ts.TypeChecker
 ): [boolean, number] => {
   let isCompleted = true;
-  let score = 0;
+  let rawScore = 0;
+
+  // this is the number of type nodes (only leaf nodes)
+  // encountered in the completed code. used for the final score
+  let numTypeNodes = 0;
+
+  // computes the final score. can't be higher than 1000, and can't be lower than 0.
+  const computeScore = (rawScore: number, numTypeNodes: number) =>
+    numTypeNodes === 0
+      ? 0
+      : Math.min(
+          Math.max(Math.round((rawScore / numTypeNodes) * 1000), 0),
+          1000
+        );
+
   // checks completed types and scores them
   completed.forEachChild((child) => {
     typeTraversal(child, (ty, _) => {
@@ -76,14 +90,17 @@ export const checkCompleted = (
           );
           if (printed === "any") {
             // console.log("got any");
-            score += 5;
+            rawScore += 0.5;
           }
+          numTypeNodes += 1;
         } else if (typeFlags & ts.TypeFlags.Unknown) {
           // console.log("got unknown");
-          score += 10;
+          rawScore += 1;
+          numTypeNodes += 1;
         } else if (typeFlags & ts.TypeFlags.Undefined) {
           // console.log("got undefined");
-          score += 2;
+          rawScore += 0.2;
+          numTypeNodes += 1;
         } else if (typeFlags & ts.TypeFlags.Object) {
           // we may have type arguments, so we need to check those
           const objType = tsType as ts.ObjectType;
@@ -96,16 +113,18 @@ export const checkCompleted = (
                 checkType(arg);
               });
             }
+            numTypeNodes += 1;
           } else if (objType.objectFlags & ts.ObjectFlags.Interface) {
             // get symbol, if it's Function, we need to give a bad score, as it is a catch all
             // interface for functions
-            const symbol = objType.getSymbol();
-            if (symbol) {
-              const name = symbol.getName();
+            const sym = objType.getSymbol();
+            if (sym) {
+              const name = sym.getName();
               if (name === "Function") {
-                score += 5;
+                rawScore += 0.5;
               }
             }
+            numTypeNodes += 1;
           } else if (objType.objectFlags & ts.ObjectFlags.Anonymous) {
             // console.log("got anonymous");
             // anonymous objects are usually functions, so we need to check return and argument types
@@ -132,6 +151,9 @@ export const checkCompleted = (
           unionType.types.forEach((arg) => {
             checkType(arg);
           });
+        } else {
+          // NOTE: in our abstract interpretation, this is considered a leaf node
+          numTypeNodes += 1;
         }
       };
 
@@ -143,7 +165,7 @@ export const checkCompleted = (
 
   // short circuit if not completed
   if (!isCompleted) {
-    return [false, score];
+    return [false, computeScore(rawScore, numTypeNodes)];
   }
 
   // now, strip types out of the original and completed
@@ -156,7 +178,7 @@ export const checkCompleted = (
 
   // short circuit if it added comments
   if (originalComments !== completedComments) {
-    return [false, score];
+    return [false, computeScore(rawScore, numTypeNodes)];
   }
 
   // now strip types
@@ -174,5 +196,8 @@ export const checkCompleted = (
   const originalCount = count_nodes(originalStripped);
   const completedCount = count_nodes(completedStripped);
 
-  return [originalCount === completedCount, score];
+  return [
+    originalCount === completedCount,
+    computeScore(rawScore, numTypeNodes),
+  ];
 };

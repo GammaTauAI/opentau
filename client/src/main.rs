@@ -76,8 +76,8 @@ struct Args {
     disable_rate_limit: bool,
 
     /// The maximum type-quality score for a completion to be valid (lower means better quality)
-    #[clap(long, short, value_parser, default_value_t = 9999999)]
-    max_type_quality: i64,
+    #[clap(long, short, value_parser, default_value_t = 1000)]
+    max_type_quality: u16,
 
     /// Disables type-checking and just outputs all candidates
     #[clap(long, value_parser, default_value_t = false)]
@@ -219,7 +219,7 @@ async fn main() {
         std::process::exit(1);
     }
 
-    println!("Number of type-checking completions: {}", good_ones.len());
+    println!("Number of good completions: {}", good_ones.len());
 
     // if the completed dir does not exist, create it
     let output_dir = std::path::Path::new(&args.output);

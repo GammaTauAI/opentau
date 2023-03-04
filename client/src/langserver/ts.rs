@@ -92,6 +92,10 @@ impl LangServer for TsServer {
         let status = process.wait().await?;
         Ok(status.success())
     }
+
+    fn any_type(&self) -> String {
+        "any".to_string()
+    }
 }
 
 // implement the LangServerCommands trait

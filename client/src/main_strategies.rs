@@ -98,7 +98,7 @@ impl MainStrategy for TreeStrategy {
                 let (_, score) = ls
                     .check_complete(&code, &code)
                     .await
-                    .unwrap_or((false, 9999999999999));
+                    .unwrap_or((false, 1000));
                 Completion {
                     code,
                     score,

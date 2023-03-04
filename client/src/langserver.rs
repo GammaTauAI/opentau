@@ -24,7 +24,7 @@ pub trait LangServerCommands {
         &self,
         original: &str,
         completed: &str,
-    ) -> Result<(bool, i64), LangServerError>;
+    ) -> Result<(bool, u16), LangServerError>;
 
     /// performs a type weaving operation on the given `original` code, such that the types of the
     /// `nettle` code are transplanted into the `original` code. The `level` parameter specifies the
@@ -104,6 +104,10 @@ pub trait LangServer: LangServerCommands {
     /// type checks the given code. returns true if it type checks, false otherwise.
     /// may return an error.
     async fn type_check(&self, code: &str) -> Result<bool, LangServerError>;
+
+    /// produces the Any type for the given language.
+    /// for example, in TypeScript, this would be `any`.
+    fn any_type(&self) -> String;
 }
 
 pub type ArcLangServer = Arc<dyn LangServer + Send + Sync>;
@@ -248,7 +252,7 @@ macro_rules! impl_langserver_commands {
                 &self,
                 original: &str,
                 completed: &str,
-            ) -> Result<(bool, i64), $crate::langserver::LangServerError> {
+            ) -> Result<(bool, u16), $crate::langserver::LangServerError> {
                 // encode original and completed into json: {original: "", completed: ""}
                 let req = $crate::langserver::LSCheckReq {
                     cmd: "check".to_string(),
@@ -259,7 +263,7 @@ macro_rules! impl_langserver_commands {
                 let resp = self.socket.send_req(&req).await?;
                 Ok((
                     resp["text"].as_bool().unwrap(),
-                    resp["score"].as_i64().unwrap(),
+                    resp["score"].as_u64().unwrap().try_into().unwrap(),
                 ))
             }
 

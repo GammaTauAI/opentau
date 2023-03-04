@@ -95,7 +95,7 @@ pub struct CodexClient {
     // the temperature to use for the completion
     pub temperature: f64,
     // the maxmimum type score
-    pub max_type_score: i64,
+    pub max_type_score: u16,
     // The cache to use for the completions
     cache: Option<Arc<Mutex<Cache>>>,
     // The rate limited token pool, that produces the token used for this client
@@ -109,7 +109,7 @@ pub struct CodexClientBuilder {
     pub lang_server: ArcLangServer,
     pub endpoint: Option<String>,
     pub temperature: Option<f64>,
-    pub max_type_score: Option<i64>,
+    pub max_type_score: Option<u16>,
     pub cache: Option<Arc<Mutex<Cache>>>,
     pub rate_limit: bool,
 }
@@ -153,7 +153,7 @@ impl CodexClientBuilder {
         self
     }
 
-    pub fn max_type_score(&mut self, max_type_score: i64) -> &mut Self {
+    pub fn max_type_score(&mut self, max_type_score: u16) -> &mut Self {
         self.max_type_score = Some(max_type_score);
         self
     }
@@ -166,7 +166,7 @@ impl CodexClientBuilder {
             .take()
             .unwrap_or_else(|| "https://api.openai.com/v1/edits".to_string());
         let temperature = self.temperature.take().unwrap_or(1.0);
-        let max_type_score = self.max_type_score.take().unwrap_or(999999999);
+        let max_type_score = self.max_type_score.take().unwrap_or(1000);
         let cache = self.cache.take();
         let rate_limiter =
             rl::RateLimitedTokenPool::new(self.tokens.drain(..).collect(), self.rate_limit);
@@ -182,6 +182,7 @@ impl CodexClientBuilder {
     }
 }
 
+const HOLE_IDENTIFIER: &str = "_hole_";
 const INSTRUCTIONS: &str = "Substitute the identifier _hole_ with the correct type.";
 
 #[async_trait::async_trait]
@@ -199,7 +200,7 @@ impl CompletionEngine for CodexClient {
         // we filter incomplete completions
         // scored vec: implemented scoring, sort resulting vec by score,
         //             and fall back to all "any" in worst case (if enabled)
-        let filtered_completions: Arc<Mutex<Vec<(String, i64)>>> = Arc::new(Mutex::new(Vec::new()));
+        let filtered_completions: Arc<Mutex<Vec<(String, u16)>>> = Arc::new(Mutex::new(Vec::new()));
         let mut handles: Vec<JoinHandle<Result<(), CompletionError>>> = Vec::new();
 
         // check cache first, if the cache is set
@@ -258,8 +259,10 @@ impl CompletionEngine for CodexClient {
         if query.fallback {
             // NOTE: we add the fallback despite the type score limit
             final_completions.push(Completion {
-                code: self.lang_server.pretty_print(&query.input, "any").await?,
-                score: 999999999,
+                code: query
+                    .input
+                    .replace(HOLE_IDENTIFIER, &self.lang_server.any_type()),
+                score: 1000,
                 fallbacked: true,
             });
         }
@@ -308,7 +311,7 @@ impl CodexClient {
     fn spawn_comp_req(
         &self,
         query: &CompletionQuery,
-        filtered_completions: Arc<Mutex<Vec<(String, i64)>>>,
+        filtered_completions: Arc<Mutex<Vec<(String, u16)>>>,
     ) -> JoinHandle<Result<(), CompletionError>> {
         // clones for the closure
 

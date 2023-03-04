@@ -56,6 +56,10 @@ impl LangServer for PyServer {
     async fn type_check(&self, code: &str) -> Result<bool, LangServerError> {
         todo!()
     }
+
+    fn any_type(&self) -> String {
+        "Any".to_string()
+    }
 }
 
 impl_langserver_commands!(PyServer);

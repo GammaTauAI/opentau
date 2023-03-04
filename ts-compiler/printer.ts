@@ -6,21 +6,11 @@ export const printSource = (
   typeName: string
 ): string => {
   // Update the source file statements
-
   sourceFile.forEachChild((child) => {
     typeTraversal(child, (ty, node) => {
       if (ty) {
-        if (ty.kind === ts.SyntaxKind.TypeReference) {
-          const typeReference = ty as ts.TypeReferenceNode;
-          if (
-            typeReference.typeName.getText(sourceFile) === "_hole_" &&
-            typeName != "_hole_"
-          ) {
-            return createFakeType(typeName);
-          }
-        } else {
-          return ty;
-        }
+        // we have a type already, we don't want to change it
+        return ty;
       } else {
         // the type is undefined, so we need to create a fake type
 
@@ -34,37 +24,39 @@ export const printSource = (
             (declaration.initializer.kind === ts.SyntaxKind.ArrowFunction ||
               declaration.initializer.kind === ts.SyntaxKind.FunctionExpression)
           ) {
-            // get the arguments
-            const arrowFunction = // same as function expression
+            const aFunc = // same as function expression
               declaration.initializer as ts.ArrowFunction;
-            const parameters = arrowFunction.parameters;
+
+            // get the arguments
+            const parameters = aFunc.parameters;
             const parameterTypes = parameters.map((p) => {
               const paramName = codePrinter.printNode(
                 ts.EmitHint.Unspecified,
                 p.name,
                 sourceFile
               );
-              const fakeType = codePrinter.printNode(
+              const paramType = codePrinter.printNode(
                 ts.EmitHint.Unspecified,
-                createFakeType(typeName),
+                p.type !== undefined ? p.type : createFakeType(typeName),
                 sourceFile
               );
-              return `${paramName}: ${fakeType}`;
+              return `${paramName}: ${paramType}`;
             });
             const parameterString = parameterTypes.join(", ");
-            const returnType = createFakeType(typeName);
             const returnTypeString = codePrinter.printNode(
               ts.EmitHint.Unspecified,
-              returnType,
+              aFunc.type !== undefined ? aFunc.type : createFakeType(typeName),
               sourceFile
             );
-            const fakeType = `(${parameterString}) => ${returnTypeString}`;
+            const fullType = `(${parameterString}) => ${returnTypeString}`;
             return ts.createTypeReferenceNode(
-              ts.createIdentifier(fakeType),
+              ts.createIdentifier(fullType),
               undefined
             );
           }
         }
+
+        // for any other kind of type, we just straight up create a fake type
         return createFakeType(typeName);
       }
     });

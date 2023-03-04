@@ -107,9 +107,12 @@ impl CompletionQueryBuilder {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Completion {
+    /// the completed code
     pub code: String,
-    pub score: i64,
-    pub fallbacked: bool, // is this completion from fallback?
+    /// heuristic score of the completion, [0, 1000], lower is better
+    pub score: u16,
+    /// is this completion from fallback?
+    pub fallbacked: bool,
 }
 
 // TODO: generalize this to all completion engines
