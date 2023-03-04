@@ -310,14 +310,20 @@ impl CodexClient {
         query: &CompletionQuery,
         filtered_completions: Arc<Mutex<Vec<(String, i64)>>>,
     ) -> JoinHandle<Result<(), CompletionError>> {
+        // clones for the closure
+
+        // from self:
         let lang_client = self.lang_server.clone();
-        let input = query.input.to_string();
         let client = self.client.clone(); // NOTE: reqwest uses Arc internally
         let endpoint = self.endpoint.clone();
         let temp = self.temperature;
-        let num_comps = query.num_comps;
         let rl = self.rate_limiter.clone();
         let max_type_score = self.max_type_score;
+
+        // from query:
+        let num_comps = query.num_comps;
+        let input = query.input.to_string();
+        let do_check_complete = query.do_check;
 
         tokio::spawn(async move {
             let token = rl.wait_token().await;
@@ -369,18 +375,20 @@ impl CodexClient {
                     continue;
                 }
 
-                let (mut is_complete, score) = lang_client
-                    .check_complete(&input, &text)
-                    .await
-                    .unwrap_or_else(|e| {
-                        println!("Error checking completion: {e}");
-                        (false, 0) // if there is an error, we assume it is not complete
-                    });
+                let (is_complete, score) = if do_check_complete {
+                    lang_client
+                        .check_complete(&input, &text)
+                        .await
+                        .unwrap_or_else(|e| {
+                            println!("Error checking completion: {e}");
+                            (false, 0) // if there is an error, we assume it is not complete
+                        })
+                } else {
+                    (true, 0)
+                };
+
                 // we don't want completions with higher type score than the max
-                if score > max_type_score {
-                    is_complete = false;
-                }
-                if is_complete {
+                if is_complete && score <= max_type_score {
                     filtered_completions.lock().await.push((text, score));
                 }
             }

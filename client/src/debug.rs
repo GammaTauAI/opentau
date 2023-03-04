@@ -3,7 +3,6 @@ use std::sync::Arc;
 use opentau::{
     completion::{codex::CodexClientBuilder, CompletionEngine},
     langserver::{ts::TsServer, LangServer},
-    tree::{CompletionLevels, TreeCompletion},
 };
 
 // this is a debug binary to test some opentau functionality

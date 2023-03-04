@@ -11,7 +11,7 @@ use tokio::sync::Mutex;
 
 use clap::Parser;
 
-/// OpenTau, a program that uses Natural Language Models for Code to 
+/// OpenTau, a program that uses Natural Language Models for Code to
 /// type-infer and generate types for gradually typed languages.
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -82,6 +82,10 @@ struct Args {
     /// Disables type-checking and just outputs all candidates
     #[clap(long, value_parser, default_value_t = false)]
     disable_type_check: bool,
+
+    /// Enables type definition generation
+    #[clap(long, value_parser, default_value_t = false)]
+    enable_defgen: bool,
 }
 
 impl Args {
@@ -204,6 +208,7 @@ async fn main() {
         fallback: args.fallback,
         stop_at: args.stop_at,
         disable_type_check: args.disable_type_check,
+        enable_defgen: args.enable_defgen,
     };
 
     // the typechecked and completed code(s). here if we get errors we exit with 1

@@ -1,8 +1,8 @@
 use crate::{
-    completion::{ArcCompletionEngine},
-    completion::{Completion, CompletionError, CompletionQuery},
+    completion::ArcCompletionEngine,
+    completion::{Completion, CompletionError, CompletionQuery, CompletionQueryBuilder},
     debug,
-    tree::{CompletionLevels, TreeCompletion},
+    tree::CompletionLevels,
 };
 use tokio::task::JoinHandle;
 
@@ -16,11 +16,13 @@ pub struct MainCtx {
     pub fallback: bool,
     pub stop_at: usize,
     pub disable_type_check: bool,
+    pub enable_defgen: bool,
 }
 
 impl MainCtx {
     /// Returns the subset of completions that type check from the given set of completions
     async fn type_check_candidates(&self, candidates: Vec<Completion>) -> Vec<Completion> {
+        println!(" --- Type Checking {} Candidates ---", candidates.len());
         let mut comps: Vec<Completion> = vec![];
         let mut handles: Vec<JoinHandle<Option<Completion>>> = vec![];
         for (i, candidate) in candidates.into_iter().enumerate() {
@@ -28,6 +30,8 @@ impl MainCtx {
             let lang_client = self.engine.get_ls();
             let disable_type_check = self.disable_type_check;
             handles.push(tokio::task::spawn(async move {
+                // this is kind of a hack, but it's the easiest way to get the
+                // `self.stop_at` to work well without code duplication
                 if disable_type_check {
                     return Some(candidate);
                 }
@@ -77,20 +81,18 @@ impl MainStrategy for TreeStrategy {
             .await
             .unwrap();
 
-        let mut levels: CompletionLevels = CompletionLevels::prepare(tree, context.engine.get_ls())
+        let levels = CompletionLevels::new(context.retries, context.num_comps, context.fallback)
+            .prepare(tree, context.engine.get_ls())
             .await
             .unwrap();
-        levels.num_comps = context.num_comps;
-        levels.retries = context.retries;
-        levels.fallback = context.fallback;
-
-        levels.tree_complete(context.engine.clone()).await;
-
-        let root = levels.levels[0].nodes.remove(0);
+        let completed = levels
+            .tree_complete(context.engine.clone())
+            .await
+            .disassemble();
 
         // score the code at the root
         let mut handles: Vec<JoinHandle<Completion>> = vec![];
-        for code in root.completed {
+        for code in completed {
             let ls = context.engine.get_ls();
             handles.push(tokio::task::spawn(async move {
                 let (_, score) = ls
@@ -131,12 +133,11 @@ impl MainStrategy for SimpleStrategy {
 
         debug!("pretty:\n{}", printed);
 
-        let query = CompletionQuery::new(
-            printed,
-            context.num_comps,
-            context.retries,
-            context.fallback,
-        );
+        let query = CompletionQueryBuilder::new(printed)
+            .num_comps(context.num_comps)
+            .retries(context.retries)
+            .fallback(context.fallback)
+            .build();
 
         let candidates = match context.engine.complete(query.clone()).await {
             Ok(r) => r,

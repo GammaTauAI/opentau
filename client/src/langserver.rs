@@ -63,8 +63,34 @@ pub trait LangServerCommands {
         -> Result<String, LangServerError>;
 
     /// Produces the object information map for the given code.
-    /// The input should be the full code of the file.
+    /// The input should be the full code of the file. The produced
+    /// identifiers in the map may be alpha-renamed, appended with `$[0-9]+`,
+    /// which can be removed to get the original identifier.
     async fn object_info(&self, code: &str) -> Result<ObjectInfoMap, LangServerError>;
+
+    /*
+    /// Generates type definition templates for the given code. The produced output is going
+    /// to be the given code with the templates added.
+    /// For example, if you have the following code (TypeScript in this case):
+    /// ```ts
+    /// function hello(obj) {
+    ///    return "hello " + obj.firstName + " " + obj.lastName + "!";
+    /// }
+    /// ```
+    ///
+    /// The output will be:
+    /// ```ts
+    /// interface _hole_ {
+    ///     firstName,
+    ///     lastName,
+    /// }
+    ///
+    /// function hello(obj) {
+    ///    return "hello " + obj.firstName + " " + obj.lastName + "!";
+    /// }
+    /// ```
+    async fn typedef_gen(&self, code: &str) -> Result<String, LangServerError>;
+    */
 }
 
 /// This is the trait that defines operations on the language server.

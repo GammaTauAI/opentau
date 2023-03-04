@@ -9,6 +9,7 @@ use tokio::task::JoinHandle;
 
 use crate::completion::{
     ArcCompletionEngine, Completion, CompletionEngine, CompletionError, CompletionQuery,
+    CompletionQueryBuilder,
 };
 use crate::{
     debug,
@@ -21,20 +22,6 @@ pub struct CodeBlockTree {
     pub name: String, // NOTE: this is a generated name, not the original name
     pub code: String,
     pub children: Vec<CodeBlockTree>,
-}
-
-#[async_trait::async_trait]
-pub trait TreeCompletion {
-    /// Returns a tree completion for the given codeblock tree
-    async fn prepare(
-        tree: CodeBlockTree,
-        langsever: ArcLangServer,
-    ) -> Result<Self, LangServerError>
-    where
-        Self: Sized;
-
-    /// Completes the code block tree, mutating the tree in place.
-    async fn tree_complete(&mut self, codex: ArcCompletionEngine);
 }
 
 /// tree compeltion algo v2 (more expensive but more accurate):
@@ -64,22 +51,39 @@ pub struct CompLevel {
     pub nodes: Vec<CompNode>,
 }
 
+pub struct NewState;
+pub struct PreparedState;
+pub struct CompletedState;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct CompletionLevels {
-    pub levels: Vec<CompLevel>,
+pub struct CompletionLevels<State = NewState> {
+    levels: Vec<CompLevel>,
     // we propagate these query params to the completion queries
-    pub retries: usize,
-    pub num_comps: usize,
-    pub fallback: bool,
+    retries: usize,
+    num_comps: usize,
+    fallback: bool,
+    state: std::marker::PhantomData<State>,
 }
 
-#[async_trait::async_trait]
-impl TreeCompletion for CompletionLevels {
-    /// Returns a tree completion for the given codeblock tree
-    async fn prepare(
+impl CompletionLevels<NewState> {
+    /// Creates a new completion levels, with the given number of retries, number of completions,
+    /// and whether to fallback to the `any` type.
+    pub fn new(retries: usize, num_comps: usize, fallback: bool) -> Self {
+        Self {
+            levels: vec![],
+            retries,
+            num_comps,
+            fallback,
+            state: std::marker::PhantomData,
+        }
+    }
+
+    /// Prepares the completion levels to be completed for the given codeblock tree
+    pub async fn prepare(
+        self,
         tree: CodeBlockTree,
         langsever: ArcLangServer,
-    ) -> Result<Self, LangServerError> {
+    ) -> Result<CompletionLevels<PreparedState>, LangServerError> {
         // dyanmic programming solution. took me a while to figure out how to do this.
 
         // here we have the levels of the tree
@@ -136,14 +140,20 @@ impl TreeCompletion for CompletionLevels {
         }
         Ok(CompletionLevels {
             levels,
-            retries: 1,
-            num_comps: 1,
-            fallback: false,
+            retries: self.retries,
+            num_comps: self.num_comps,
+            fallback: self.fallback,
+            state: std::marker::PhantomData,
         })
     }
+}
 
+impl CompletionLevels<PreparedState> {
     /// Completes the code block tree, mutating the tree in place.
-    async fn tree_complete(&mut self, engine: ArcCompletionEngine) {
+    pub async fn tree_complete(
+        mut self,
+        engine: ArcCompletionEngine,
+    ) -> CompletionLevels<CompletedState> {
         async fn retry_query_until_ok(
             engine: &ArcCompletionEngine,
             q: CompletionQuery,
@@ -173,8 +183,9 @@ impl TreeCompletion for CompletionLevels {
         let num_levels = self.levels.len();
         let mut prev_level: Arc<Option<Vec<CompNode>>> = Arc::new(None);
         for level in (0..num_levels).rev() {
-            debug!("level: {}", level);
+            println!(" --- Tree Level: {level} / {} ---", num_levels - 1);
             let nodes = &mut self.levels.get_mut(level).unwrap().nodes;
+            let num_nodes = nodes.len();
             let mut handles: Vec<JoinHandle<(String, Vec<String>)>> = vec![]; // node's (name, code)
             let mut lookup: HashMap<String, usize> = HashMap::new(); // node's name -> idx
             for (i, node) in nodes.iter().enumerate() {
@@ -236,7 +247,11 @@ impl TreeCompletion for CompletionLevels {
                                     printed = format!("{}\n{}", printed, node.usages);
                                 }
 
-                                let q = CompletionQuery::new(printed, num_comps, retries, fallback);
+                                let q = CompletionQueryBuilder::new(printed)
+                                    .num_comps(num_comps)
+                                    .retries(retries)
+                                    .fallback(fallback)
+                                    .build();
 
                                 debug!("query: {}", q.input);
                                 let comps = retry_query_until_ok(&engine, q).await;
@@ -265,13 +280,32 @@ impl TreeCompletion for CompletionLevels {
                     }
                 }));
             }
-            for handle in handles {
+            for (i, handle) in handles.into_iter().enumerate() {
                 let (name, comps) = handle.await.unwrap();
+                println!(
+                    " - Completed {name}, Progress: {}/{} Nodes At Level {level} - ",
+                    i + 1,
+                    num_nodes
+                );
                 let idx = lookup.get(&name).unwrap();
                 nodes.get_mut(*idx).unwrap().completed = comps;
             }
             debug!("setting prev_level");
             prev_level = Arc::new(Some(nodes.clone()));
         }
+
+        CompletionLevels {
+            levels: self.levels,
+            retries: self.retries,
+            num_comps: self.num_comps,
+            fallback: self.fallback,
+            state: std::marker::PhantomData,
+        }
+    }
+}
+
+impl CompletionLevels<CompletedState> {
+    pub fn disassemble(mut self) -> Vec<String> {
+        self.levels[0].nodes.remove(0).completed
     }
 }
