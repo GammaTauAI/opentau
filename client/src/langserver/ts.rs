@@ -3,12 +3,9 @@ use std::process::Stdio;
 use async_trait::async_trait;
 use tokio::io::AsyncBufReadExt;
 
-use crate::{debug, impl_langserver_commands, tree::CodeBlockTree};
+use crate::{debug, impl_langserver_commands};
 
-use super::{
-    abstraction::SocketAbstraction, LSCheckReq, LSPrintReq, LSReq, LSUsagesReq, LSWeaveReq,
-    LangServer, LangServerCommands, LangServerError,
-};
+use super::{abstraction::SocketAbstraction, LangServer, LangServerError};
 
 #[derive(Debug)]
 pub struct TsServer {
@@ -20,7 +17,7 @@ impl LangServer for TsServer {
     async fn make(server_path: &str) -> Result<Self, LangServerError> {
         let pid = std::process::id();
         let tmp_dir = std::env::temp_dir();
-        let tmp_socket_file = tmp_dir.join(format!("codex-{pid}.sock"));
+        let tmp_socket_file = tmp_dir.join(format!("opentau-ls-{pid}.sock"));
         debug!("tmp_socket_file: {:?}", tmp_socket_file);
 
         let mut process = match tokio::process::Command::new("npm")
@@ -65,12 +62,19 @@ impl LangServer for TsServer {
     async fn type_check(&self, code: &str) -> Result<bool, LangServerError> {
         // get a temp file (overwrite if exists)
         let tmp_dir = std::env::temp_dir();
+        let pid = std::process::id();
+        // make a tmp subfolder
+        let tmp_dir = tmp_dir.join(format!("type-check-{pid}"));
+        // create folder if it doesn't exist
+        if !tmp_dir.exists() {
+            let _ = tokio::fs::create_dir(&tmp_dir).await;
+        }
         // get a random number
         let rand = rand::random::<u64>();
-        let tmp_file = tmp_dir.join(format!("codex-{}-{}.ts", std::process::id(), rand));
+        let tmp_file = tmp_dir.join(format!("type-check-{rand}.ts"));
         tokio::fs::write(&tmp_file, code).await?;
 
-        // run: tsc --allowJs --checkJs --noEmit filename.ts
+        // runs: tsc --allowJs --checkJs --noEmit filename.ts
         let mut process = match tokio::process::Command::new("tsc")
             .args([
                 "--allowJs",
@@ -90,6 +94,20 @@ impl LangServer for TsServer {
 
         // check if the process exited with code 0
         let status = process.wait().await?;
+
+        // delete the tmp file
+        tokio::fs::remove_file(&tmp_file).await?;
+
+        // delete the tmp folder if empty
+        if tokio::fs::read_dir(&tmp_dir)
+            .await?
+            .next_entry()
+            .await?
+            .is_none()
+        {
+            tokio::fs::remove_dir(&tmp_dir).await?;
+        }
+
         Ok(status.success())
     }
 
