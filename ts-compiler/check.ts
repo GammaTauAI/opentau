@@ -63,11 +63,6 @@ export const checkCompleted = (
       }
 
       const tsType = completedChecker.getTypeFromTypeNode(ty);
-      // we have to rule out literals, because they are not "real" types and are prone to errors
-      if (tsType.isLiteral()) {
-        isCompleted = false;
-        return ty;
-      }
 
       // traverse all the types in the type, and find if we have any "unknown" types
 

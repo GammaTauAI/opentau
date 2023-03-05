@@ -7,12 +7,18 @@ export const setUnion = <T>(a: Set<T>, b: Set<T>): Set<T> => {
 
 // prints to console.error, omit parent property
 export const printNodeToStderr = (node: ts.Node) => {
-  console.error(JSON.stringify(node, (key, value) => {
-    if (key === "parent") {
-      return undefined;
-    }
-    return value;
-  }, 2));
+  console.error(
+    JSON.stringify(
+      node,
+      (key, value) => {
+        if (key === "parent") {
+          return undefined;
+        }
+        return value;
+      },
+      2
+    )
+  );
 };
 
 // the global printer object!
@@ -48,38 +54,35 @@ export const createFakeType = (id: string): ts.TypeReferenceNode => {
 
 export const typeTraversal = (
   child: ts.Node,
-  func: (
+  visitor: (
     ty: ts.TypeNode | undefined,
     inner_child: ts.Node
   ) => ts.TypeNode | undefined
 ) => {
-  if (child.kind === ts.SyntaxKind.FunctionDeclaration) {
-    const functionDeclaration = child as ts.FunctionDeclaration;
-    functionDeclaration.type = func(functionDeclaration.type, child);
-    functionDeclaration.parameters.forEach((parameter) => {
-      parameter.type = func(parameter.type, parameter);
+  if (ts.isFunctionDeclaration(child)) {
+    child.type = visitor(child.type, child); // NOTE: return type
+    child.parameters.forEach((parameter) => {
+      parameter.type = visitor(parameter.type, parameter);
     });
-  }
-
-  if (child.kind === ts.SyntaxKind.MethodDeclaration) {
-    const methodDeclaration = child as ts.MethodDeclaration;
-    methodDeclaration.type = func(methodDeclaration.type, child);
-    methodDeclaration.parameters.forEach((parameter) => {
-      parameter.type = func(parameter.type, parameter);
+  } else if (ts.isMethodDeclaration(child)) {
+    child.type = visitor(child.type, child);
+    child.parameters.forEach((parameter) => {
+      parameter.type = visitor(parameter.type, parameter);
     });
-  }
-
-  if (child.kind === ts.SyntaxKind.PropertyDeclaration) {
-    const propertyDeclaration = child as ts.PropertyDeclaration;
-    propertyDeclaration.type = func(propertyDeclaration.type, child);
-  }
-
-  if (child.kind === ts.SyntaxKind.VariableStatement) {
-    const variableStatement = child as ts.VariableStatement;
-    variableStatement.declarationList.declarations.forEach((declaration) => {
-      declaration.type = func(declaration.type, declaration);
+  } else if (ts.isPropertyDeclaration(child)) {
+    child.type = visitor(child.type, child);
+  } else if (ts.isVariableStatement(child)) {
+    child.declarationList.declarations.forEach((declaration) => {
+      declaration.type = visitor(declaration.type, declaration);
     });
+  } else if (ts.isPropertySignature(child)) {
+    child.type = visitor(child.type, child);
+  } else if (ts.isFunctionTypeNode(child)) {
+    child.parameters.forEach((parameter) => {
+      parameter.type = visitor(parameter.type, parameter);
+    });
+    child.type = visitor(child.type, child) ?? child.type;
   }
 
-  child.forEachChild((c) => typeTraversal(c, func));
+  child.forEachChild((c) => typeTraversal(c, visitor));
 };
