@@ -2,11 +2,11 @@ FULLPATH := $(shell pwd)
 
 all: build-release
 
-build-debug: clean
+build-debug:
 	cd ./ts-compiler/ && npm install && cd ../; \
 	cd ./client/ && cargo build && ln -s $(FULLPATH)/client/target/debug/main $(FULLPATH)/out/client-debug && cd ../;
 
-build-release: clean
+build-release:
 	cd ./ts-compiler/ && npm install && cd ../; \
 	cd ./client/ && cargo build --release && ln -s $(FULLPATH)/client/target/release/main $(FULLPATH)/out/client && cd ../;
 

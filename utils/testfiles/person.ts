@@ -43,12 +43,10 @@ class Person {
     };
   }
 
-  // function that returns hello with the name
   sayHello() {
     return "Hello " + this.name;
   }
 
-  // gets the house of the person
   getHouse() {
     return this.house;
   }

@@ -54,7 +54,7 @@ struct Args {
     engine: String,
 
     /// The url of the completion engine endpoint (if the engine is online)
-    #[clap(short, long, value_parser)]
+    #[clap(long, value_parser)]
     endpoint: Option<String>,
 
     /// The temperature to use for the completion

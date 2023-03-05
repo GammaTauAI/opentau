@@ -5,6 +5,7 @@ use tokio::{sync::Mutex, task::JoinHandle};
 
 use crate::{
     cache::Cache,
+    debug,
     langserver::{ArcLangServer, LangServer},
 };
 
@@ -391,6 +392,8 @@ impl CodexClient {
                 if problems.iter().all(|p| problem_whitelist.contains(p)) && score <= max_type_score
                 {
                     filtered_completions.lock().await.push((text, score));
+                } else {
+                    debug!("Filtered out completion (Problems: {problems:?}):\n{text}");
                 }
             }
 

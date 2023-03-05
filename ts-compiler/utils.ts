@@ -28,6 +28,16 @@ export const codePrinter = ts.createPrinter({
   omitTrailingSemicolon: false,
 });
 
+// checks if the given node is a vardecl-bound function
+export const isVarDeclBoundFunction = (node: ts.Node): boolean => {
+  return (
+    ts.isVariableDeclaration(node) &&
+    !!node.initializer && // huh? why do i have to do this coercion?
+    (node.initializer.kind === ts.SyntaxKind.ArrowFunction ||
+      node.initializer.kind === ts.SyntaxKind.FunctionExpression)
+  );
+};
+
 // checks if the given node is an assignment expression (the one with the = sign)
 export const isAssignmentExpression = (
   node: ts.Node
@@ -53,36 +63,45 @@ export const createFakeType = (id: string): ts.TypeReferenceNode => {
 };
 
 export const typeTraversal = (
-  child: ts.Node,
+  node: ts.Node,
   visitor: (
     ty: ts.TypeNode | undefined,
     inner_child: ts.Node
   ) => ts.TypeNode | undefined
 ) => {
-  if (ts.isFunctionDeclaration(child)) {
-    child.type = visitor(child.type, child); // NOTE: return type
-    child.parameters.forEach((parameter) => {
+  if (
+    ts.isFunctionDeclaration(node) ||
+    ts.isFunctionExpression(node) ||
+    ts.isArrowFunction(node)
+  ) {
+    node.type = visitor(node.type, node); // NOTE: return type
+    node.parameters.forEach((parameter) => {
       parameter.type = visitor(parameter.type, parameter);
     });
-  } else if (ts.isMethodDeclaration(child)) {
-    child.type = visitor(child.type, child);
-    child.parameters.forEach((parameter) => {
+  } else if (ts.isMethodDeclaration(node)) {
+    node.type = visitor(node.type, node);
+    node.parameters.forEach((parameter) => {
       parameter.type = visitor(parameter.type, parameter);
     });
-  } else if (ts.isPropertyDeclaration(child)) {
-    child.type = visitor(child.type, child);
-  } else if (ts.isVariableStatement(child)) {
-    child.declarationList.declarations.forEach((declaration) => {
+  } else if (ts.isPropertyDeclaration(node)) {
+    node.type = visitor(node.type, node);
+  } else if (ts.isVariableStatement(node)) {
+    node.declarationList.declarations.forEach((declaration) => {
       declaration.type = visitor(declaration.type, declaration);
     });
-  } else if (ts.isPropertySignature(child)) {
-    child.type = visitor(child.type, child);
-  } else if (ts.isFunctionTypeNode(child)) {
-    child.parameters.forEach((parameter) => {
+  } else if (ts.isPropertySignature(node)) {
+    node.type = visitor(node.type, node);
+  } else if (ts.isFunctionTypeNode(node)) {
+    node.parameters.forEach((parameter) => {
       parameter.type = visitor(parameter.type, parameter);
     });
-    child.type = visitor(child.type, child) ?? child.type;
+    node.type = visitor(node.type, node) ?? node.type;
+  } else if (ts.isConstructorDeclaration(node)) {
+    // no need for return type for constructors, why does typescript even declare it?
+    node.parameters.forEach((parameter) => {
+      parameter.type = visitor(parameter.type, parameter);
+    });
   }
 
-  child.forEachChild((c) => typeTraversal(c, visitor));
+  node.forEachChild((c) => typeTraversal(c, visitor));
 };

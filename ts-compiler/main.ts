@@ -167,7 +167,7 @@ const handleWeave = (decodedText: string, req: any): string => {
   const decodedNettle = Buffer.from(req.nettle, "base64").toString("utf8");
 
   if (req.level == undefined) {
-    console.error("level not specified, defaulting to 0");
+    console.error("Weaving level not specified, defaulting to 0");
     req.level = 0;
   }
 

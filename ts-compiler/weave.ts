@@ -1,5 +1,5 @@
 import ts from "typescript";
-import { codePrinter } from "./utils";
+import { codePrinter, isVarDeclBoundFunction } from "./utils";
 
 // for debugging
 const typeMapPrint = (
@@ -25,18 +25,21 @@ export const resolveType = (
 ): ts.TypeNode => {
   const type = typeChecker.getTypeAtLocation(node);
   const inferredTypeNode = typeChecker.typeToTypeNode(type);
+
   if (!inferredTypeNode) {
     // fallback to any...
     return ts.createTypeReferenceNode("any", []);
   }
+
   if (ts.isFunctionTypeNode(inferredTypeNode)) {
-    if (ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node)) {
+    if (ts.isFunctionLike(node)) {
       if (
         inferredTypeNode.type.kind === ts.SyntaxKind.AnyKeyword &&
         node.type
       ) {
         inferredTypeNode.type = node.type;
       }
+
       if (inferredTypeNode.parameters) {
         for (let i = 0; i < inferredTypeNode.parameters.length; i++) {
           const param = inferredTypeNode.parameters[i];
@@ -61,6 +64,7 @@ export const resolveType = (
       ) {
         inferredTypeNode.type = varNodeType.type;
       }
+
       if (inferredTypeNode.parameters) {
         for (let i = 0; i < inferredTypeNode.parameters.length; i++) {
           const param = inferredTypeNode.parameters[i];
@@ -74,6 +78,15 @@ export const resolveType = (
         }
       }
     }
+  } else if (ts.isConstructorDeclaration(node)) {
+    // dirty hack to transform a constructor to a ConstructorTypeNode
+    // this is needed because the type checker will return a AnyKeyword?!?!?
+    const constructorTypeNode = ts.createConstructorTypeNode(
+      node.typeParameters,
+      node.parameters,
+      node.type
+    );
+    return constructorTypeNode;
   } else if (inferredTypeNode.kind === ts.SyntaxKind.AnyKeyword) {
     if (
       (ts.isVariableDeclaration(node) || ts.isPropertyDeclaration(node)) &&
@@ -112,32 +125,37 @@ export const weavePrograms = (
   const typeMap = new Map<string, ts.TypeNode>();
 
   function buildTypeMap(node: ts.Node, scope: string) {
-    if (node.kind === ts.SyntaxKind.VariableDeclaration) {
-      const varDec = node as ts.VariableDeclaration;
+    if (ts.isVariableDeclaration(node)) {
       // if name is not a ident, skip
       // NOTE: we have to be careful, we want to ignore variable decls
       // that are inside a for (let x of y) loop, because those
       // cannot be type annotated.
       // we can do this by checking if the parent of the parent is a for of statement
       if (
-        varDec.name.kind === ts.SyntaxKind.Identifier &&
+        node.name.kind === ts.SyntaxKind.Identifier &&
         !(
           node.parent && // we do the check noted above
           node.parent.parent &&
           node.parent.parent.kind === ts.SyntaxKind.ForOfStatement
         )
       ) {
-        const typeNode = resolveType(varDec, nettleChecker);
-        const name = varDec.name.getText();
+        const typeNode = resolveType(node, nettleChecker);
+        const name = node.name.getText();
         typeMap.set(scope + name, typeNode);
       }
     } else if (ts.isPropertyDeclaration(node)) {
-      const propDec = node as ts.PropertyDeclaration;
-      if (propDec.name.kind === ts.SyntaxKind.Identifier) {
-        const typeNode = resolveType(propDec, nettleChecker);
-        const name = propDec.name.getText();
+      if (node.name.kind === ts.SyntaxKind.Identifier) {
+        const typeNode = resolveType(node, nettleChecker);
+        const name = node.name.getText();
         typeMap.set(scope + name, typeNode);
       }
+    } else if (ts.isConstructorDeclaration(node)) {
+      const name = "__constructor__"; // janky, but it works
+      const typeNode = resolveType(node, nettleChecker);
+      typeMap.set(scope + name, typeNode);
+      // we change the scope
+      ts.forEachChild(node, (child) => buildTypeMap(child, scope + name + "$"));
+      return;
     } else if (ts.isFunctionDeclaration(node)) {
       const name = node.name!.getText();
       const typeNode = resolveType(node, nettleChecker);
@@ -153,7 +171,7 @@ export const weavePrograms = (
       // we need some name for the function, so we check for a variable declaration
       if (node.parent?.kind === ts.SyntaxKind.VariableDeclaration) {
         const varDec = node.parent as ts.VariableDeclaration;
-        const typeNode = resolveType(varDec, nettleChecker);
+        const typeNode = resolveType(node, nettleChecker);
         const name = varDec.name.getText();
         typeMap.set(scope + name, typeNode);
         // we change the scope
@@ -178,28 +196,29 @@ export const weavePrograms = (
 
   // we weave the types into the original AST
   function weaveNode(node: ts.Node, scope: string, level: number) {
-    if (ts.isVariableDeclaration(node)) {
-      const varDecl = node as ts.VariableDeclaration;
-      const name = varDecl.name.getText();
+    if (ts.isVariableDeclaration(node) && !isVarDeclBoundFunction(node)) {
+      const name = node.name.getText();
       const type = typeMap.get(scope + name);
-      if (type) {
-        varDecl.type = type;
-      }
+      node.type = type ?? node.type;
     } else if (ts.isPropertyDeclaration(node)) {
-      const propDecl = node as ts.PropertyDeclaration;
-      const name = propDecl.name.getText();
+      const name = node.name.getText();
       const type = typeMap.get(scope + name);
+      node.type = type ?? node.type;
+    } else if (ts.isConstructorDeclaration(node)) {
+      const name = "__constructor__"; // janky, but it works
+      const type = typeMap.get(scope + name) as ts.ConstructorTypeNode;
       if (type) {
-        propDecl.type = type;
+        node.typeParameters = type.typeParameters;
+        node.parameters = type.parameters;
+        node.type = type.type;
       }
     } else if (ts.isFunctionDeclaration(node)) {
-      const funcDecl = node as ts.FunctionDeclaration;
-      const name = funcDecl.name!.getText();
+      const name = node.name!.getText();
       const type = typeMap.get(scope + name) as ts.FunctionTypeNode;
       if (type) {
-        funcDecl.typeParameters = type.typeParameters;
-        funcDecl.parameters = type.parameters;
-        funcDecl.type = type.type;
+        node.typeParameters = type.typeParameters;
+        node.parameters = type.parameters;
+        node.type = type.type;
       }
       // we change the scope, if we are at the nettle level
       if (level >= nettleLevel) {
@@ -212,13 +231,12 @@ export const weavePrograms = (
         return;
       }
     } else if (ts.isMethodDeclaration(node)) {
-      const methodDecl = node as ts.MethodDeclaration;
-      const name = methodDecl.name.getText();
+      const name = node.name.getText();
       const type = typeMap.get(scope + name) as ts.FunctionTypeNode;
       if (type) {
-        methodDecl.typeParameters = type.typeParameters;
-        methodDecl.parameters = type.parameters;
-        methodDecl.type = type.type;
+        node.typeParameters = type.typeParameters;
+        node.parameters = type.parameters;
+        node.type = type.type;
       }
     } else if (ts.isFunctionExpression(node) || ts.isArrowFunction(node)) {
       // we need some name for the function, so we check for a variable declaration
@@ -226,7 +244,11 @@ export const weavePrograms = (
         const varDec = node.parent as ts.VariableDeclaration;
         const name = varDec.name.getText();
         const type = typeMap.get(scope + name);
-        if (type) {
+        if (type && ts.isFunctionTypeNode(type)) {
+          node.typeParameters = type.typeParameters;
+          node.parameters = type.parameters;
+          node.type = type.type;
+        } else {
           varDec.type = type;
         }
         // we change the scope, if we are at the nettle level

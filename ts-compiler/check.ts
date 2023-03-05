@@ -1,5 +1,5 @@
 import ts from "typescript";
-import { typeTraversal, createFakeType } from "./utils";
+import { typeTraversal, createFakeType, isVarDeclBoundFunction } from "./utils";
 import { codePrinter } from "./utils";
 
 const count_nodes = (child: ts.Node): number => {
@@ -54,11 +54,13 @@ export const checkCompleted = (
         );
 
   // checks completed types and scores them
-  completed.forEachChild((child) => {
-    typeTraversal(child, (ty, _) => {
-      // means codex removed the type
+  completed.forEachChild((toplevelChild) => {
+    typeTraversal(toplevelChild, (ty, child) => {
+      // means codex removed the type, or could be a vardecl-bound function
       if (!ty) {
-        isCompleted = false;
+        if (!isVarDeclBoundFunction(child)) {
+          isCompleted = false;
+        }
         return ty;
       }
 
@@ -183,8 +185,8 @@ export const checkCompleted = (
   }
 
   // now strip types
-  const fakeType = createFakeType("bleh");
-  const stripTypes = (_: ts.TypeNode | undefined): ts.TypeNode => fakeType; // does not matter what we return here
+  const fake = createFakeType("bleh");
+  const stripTypes = (_: ts.TypeNode | undefined) => fake;
 
   originalStripped.forEachChild((child) => {
     typeTraversal(child, stripTypes);
