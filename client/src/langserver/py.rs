@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-use crate::{impl_langserver_commands, tree::CodeBlockTree};
+use crate::{impl_langserver_commands};
 
 use super::{abstraction::SocketAbstraction, LangServer, LangServerError};
 
@@ -53,7 +53,7 @@ impl LangServer for PyServer {
         todo!()
     }
 
-    async fn type_check(&self, code: &str) -> Result<bool, LangServerError> {
+    async fn type_check(&self, _code: &str) -> Result<bool, LangServerError> {
         todo!()
     }
 

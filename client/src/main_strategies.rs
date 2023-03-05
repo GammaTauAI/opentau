@@ -1,6 +1,6 @@
 use crate::{
     completion::ArcCompletionEngine,
-    completion::{Completion, CompletionError, CompletionQuery, CompletionQueryBuilder},
+    completion::{Completion, CompletionError, CompletionQueryBuilder},
     debug,
     tree::CompletionLevels,
 };

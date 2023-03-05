@@ -30,8 +30,7 @@ impl<'a> Deserialize<'a> for CheckProblem {
             "ChangedCode" => Ok(CheckProblem::ChangedCode),
             "ChangedComments" => Ok(CheckProblem::ChangedComments),
             _ => Err(serde::de::Error::custom(format!(
-                "invalid CheckProblem: {}",
-                s
+                "invalid CheckProblem: {s}"
             ))),
         }
     }
