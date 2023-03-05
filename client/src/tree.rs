@@ -9,8 +9,7 @@ use tokio::task::JoinHandle;
 
 use crate::{
     completion::{
-        ArcCompletionEngine, Completion, CompletionEngine, CompletionError, CompletionQuery,
-        CompletionQueryBuilder,
+        ArcCompletionEngine, Completion, CompletionError, CompletionQuery, CompletionQueryBuilder,
     },
     langserver::CheckProblem,
 };
