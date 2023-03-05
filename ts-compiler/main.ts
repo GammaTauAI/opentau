@@ -8,6 +8,8 @@ import { weavePrograms } from "./weave";
 import { findUsages } from "./findUsages";
 import { objectInfo } from "./objectInfo";
 import assert from "assert";
+import { alphaRenameTransformer } from "./aRename";
+import {typedefGen} from "./typedefGen";
 
 if (process.argv.length != 4) {
   console.log("usage: [path to socket] [pid of rust proc]");
@@ -246,7 +248,9 @@ const handleObjectInfo = (decodedText: string): string => {
     true, // for setParentNodes
     ts.ScriptKind.TS
   );
-  const res = objectInfo(sourceFile);
+  const alphaRenamed = ts.transform(sourceFile, [alphaRenameTransformer])
+    .transformed[0];
+  const res = objectInfo(alphaRenamed);
   const base64 = Buffer.from(
     JSON.stringify(res, (_key, value) =>
       value instanceof Set ? [...value] : value
@@ -257,6 +261,29 @@ const handleObjectInfo = (decodedText: string): string => {
     text: base64,
   });
 };
+
+const handleTypedefGen = (decodedText: string): string => {
+  // create the source file
+  const sourceFile = ts.createSourceFile(
+    "bleh.ts", // name does not matter until we save, which we don't from here
+    decodedText,
+    ts.ScriptTarget.Latest,
+    true, // for setParentNodes
+    ts.ScriptKind.TS
+  );
+
+  const alphaRenamed = ts.transform(sourceFile, [alphaRenameTransformer])
+    .transformed[0];
+  const res = typedefGen(alphaRenamed);
+
+  const base64 = Buffer.from(res).toString("base64");
+
+  return JSON.stringify({
+    type: "typedefGenResponse",
+    text: base64,
+  });
+}
+
 
 var unixServer = net.createServer(function (client) {
   client.on("data", function (data) {

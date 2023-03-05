@@ -1,7 +1,6 @@
 import assert from "assert";
 import ts, { isVariableDeclaration } from "typescript";
-import { alphaRenameTransformer } from "./aRename";
-import { codePrinter, printNodeToStderr, setUnion } from "./utils";
+import { setUnion } from "./utils";
 
 // NOTE: These types come from typedef_gen.rs
 type FieldInfoCall = {
@@ -289,13 +288,8 @@ const resolveVarDecl = (
   }
 };
 
-// simple object info function. this is just a placeholder for now.
+// NOTE: assumes that sourceFile is alpha-renamed
 export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
-  let transformed = ts.transform(sourceFile, [alphaRenameTransformer])
-    .transformed[0];
-
-  console.error(codePrinter.printFile(transformed));
-
   const objectInfoMap: ObjectInfoMap = {};
 
   const visitFunc = (
@@ -447,7 +441,7 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
     ts.forEachChild(node, visitor);
   };
 
-  ts.forEachChild(transformed, visitor);
+  ts.forEachChild(sourceFile, visitor);
 
   return normalizeObjectInfo(objectInfoMap);
 };
