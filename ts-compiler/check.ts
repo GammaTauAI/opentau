@@ -11,25 +11,33 @@ const count_nodes = (child: ts.Node): number => {
 };
 
 // gets the number of comments from a source file. both trailing and leading
-const get_comments = (s: ts.SourceFile): number => {
+const get_comment_count = (s: ts.SourceFile): number => {
   let count = 0;
-  const leading = ts.getLeadingCommentRanges(s.getFullText(), 0);
-  const trailing = ts.getTrailingCommentRanges(s.getFullText(), 0);
-  if (leading) {
-    count += leading.length;
-  }
-  if (trailing) {
-    count += trailing.length;
-  }
+  let text = s.getFullText();
+  const visit = (node: ts.Node) => {
+    const leading = ts.getLeadingCommentRanges(text, node.getFullStart());
+    const trailing = ts.getTrailingCommentRanges(text, node.getEnd());
+    if (leading) {
+      count += leading.length;
+    }
+    if (trailing) {
+      count += trailing.length;
+    }
+    node.forEachChild(visit);
+  };
+  s.forEachChild(visit);
   return count;
 };
+
+type CheckProblem = "NotComplete" | "ChangedCode" | "ChangedComments";
 
 export const checkCompleted = (
   original: ts.SourceFile,
   completed: ts.SourceFile,
   completedChecker: ts.TypeChecker
-): [boolean, number] => {
+): [CheckProblem[], number] => {
   let isCompleted = true;
+  let problems: CheckProblem[] = [];
   let rawScore = 0;
 
   // this is the number of type nodes (only leaf nodes)
@@ -163,9 +171,8 @@ export const checkCompleted = (
     });
   });
 
-  // short circuit if not completed
   if (!isCompleted) {
-    return [false, computeScore(rawScore, numTypeNodes)];
+    problems.push("NotComplete");
   }
 
   // now, strip types out of the original and completed
@@ -173,17 +180,16 @@ export const checkCompleted = (
   const completedStripped = ts.getMutableClone(completed);
 
   // check if it added any weird comments
-  let originalComments = get_comments(originalStripped);
-  let completedComments = get_comments(completedStripped);
+  let originalComments = get_comment_count(originalStripped);
+  let completedComments = get_comment_count(completedStripped);
 
-  // short circuit if it added comments
   if (originalComments !== completedComments) {
-    return [false, computeScore(rawScore, numTypeNodes)];
+    problems.push("ChangedComments");
   }
 
   // now strip types
-  const stripTypes = (_: ts.TypeNode | undefined): ts.TypeNode =>
-    createFakeType("bleh"); // does not matter what we return here
+  const fakeType = createFakeType("bleh");
+  const stripTypes = (_: ts.TypeNode | undefined): ts.TypeNode => fakeType; // does not matter what we return here
 
   originalStripped.forEachChild((child) => {
     typeTraversal(child, stripTypes);
@@ -196,8 +202,9 @@ export const checkCompleted = (
   const originalCount = count_nodes(originalStripped);
   const completedCount = count_nodes(completedStripped);
 
-  return [
-    originalCount === completedCount,
-    computeScore(rawScore, numTypeNodes),
-  ];
+  if (originalCount !== completedCount) {
+    problems.push("ChangedCode");
+  }
+
+  return [problems, computeScore(rawScore, numTypeNodes)];
 };

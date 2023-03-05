@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     cache::Cache,
-    langserver::{LangServer, LangServerError},
+    langserver::{CheckProblem, LangServer, LangServerError},
 };
 
 use self::codex::EditRespError;
@@ -36,7 +36,7 @@ pub trait CompletionEngine {
 
 pub type ArcCompletionEngine = Arc<dyn CompletionEngine + Send + Sync>;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct CompletionQuery {
     /// The prompt to complete
     pub input: String,
@@ -46,11 +46,11 @@ pub struct CompletionQuery {
     pub retries: usize,
     /// Whether to include a completion that has `any` as the type of all holes.
     pub fallback: bool,
-    /// Whether to check and score the completions with the heuristics or not.
-    pub do_check: bool,
+    /// Whitelist of CheckProblems that are allowed to happen in the completion.
+    pub problem_whitelist: Vec<CheckProblem>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct CompletionQueryBuilder {
     input: String,
     /// defaults to 3
@@ -59,8 +59,8 @@ pub struct CompletionQueryBuilder {
     retries: Option<usize>,
     /// defaults to false
     fallback: Option<bool>,
-    /// defaults to true
-    do_check: Option<bool>,
+    /// defaults to vec![]
+    problem_whitelist: Option<Vec<CheckProblem>>,
 }
 
 impl CompletionQueryBuilder {
@@ -70,7 +70,7 @@ impl CompletionQueryBuilder {
             num_comps: None,
             retries: None,
             fallback: None,
-            do_check: None,
+            problem_whitelist: None,
         }
     }
 
@@ -89,8 +89,8 @@ impl CompletionQueryBuilder {
         self
     }
 
-    pub fn do_check(mut self, do_check: bool) -> Self {
-        self.do_check = Some(do_check);
+    pub fn problem_whitelist(mut self, problem_whitelist: Vec<CheckProblem>) -> Self {
+        self.problem_whitelist = Some(problem_whitelist);
         self
     }
 
@@ -100,7 +100,7 @@ impl CompletionQueryBuilder {
             num_comps: self.num_comps.unwrap_or(3),
             retries: self.retries.unwrap_or(1),
             fallback: self.fallback.unwrap_or(false),
-            do_check: self.do_check.unwrap_or(true),
+            problem_whitelist: self.problem_whitelist.unwrap_or(vec![]),
         }
     }
 }

@@ -156,7 +156,7 @@ const handleCheck = (decodedText: string, req: any): string => {
 
   return JSON.stringify({
     type: "checkResponse",
-    text: res[0],
+    problems: res[0],
     score: res[1],
   });
 };

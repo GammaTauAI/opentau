@@ -8,6 +8,35 @@ mod abstraction; // the socket abstraction
 pub mod py; // the python server
 pub mod ts; // the typescript server
 
+/// The kinds of problems that can occur when running the heuristics on a completion.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum CheckProblem {
+    /// The completion still has holes or undefined types.
+    NotComplete,
+    /// The completion added/removed code that isn't a type.
+    ChangedCode,
+    /// The completion added/removed comments.
+    ChangedComments,
+}
+
+impl<'a> Deserialize<'a> for CheckProblem {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'a>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match s.as_str() {
+            "NotComplete" => Ok(CheckProblem::NotComplete),
+            "ChangedCode" => Ok(CheckProblem::ChangedCode),
+            "ChangedComments" => Ok(CheckProblem::ChangedComments),
+            _ => Err(serde::de::Error::custom(format!(
+                "invalid CheckProblem: {}",
+                s
+            ))),
+        }
+    }
+}
+
 #[async_trait]
 pub trait LangServerCommands {
     /// pretty print the given code, making all missing types the given type token
@@ -24,7 +53,7 @@ pub trait LangServerCommands {
         &self,
         original: &str,
         completed: &str,
-    ) -> Result<(bool, u16), LangServerError>;
+    ) -> Result<(Vec<CheckProblem>, u16), LangServerError>;
 
     /// performs a type weaving operation on the given `original` code, such that the types of the
     /// `nettle` code are transplanted into the `original` code. The `level` parameter specifies the
@@ -252,17 +281,26 @@ macro_rules! impl_langserver_commands {
                 &self,
                 original: &str,
                 completed: &str,
-            ) -> Result<(bool, u16), $crate::langserver::LangServerError> {
+            ) -> Result<
+                (Vec<$crate::langserver::CheckProblem>, u16),
+                $crate::langserver::LangServerError,
+            > {
                 // encode original and completed into json: {original: "", completed: ""}
                 let req = $crate::langserver::LSCheckReq {
                     cmd: "check".to_string(),
                     text: base64::encode(completed),
                     original: base64::encode(original),
                 };
-
                 let resp = self.socket.send_req(&req).await?;
+
+                let problems_json = resp["problems"].as_array().unwrap();
+                let mut problems = Vec::new();
+                for p in problems_json {
+                    problems.push(serde_json::from_value(p.clone()).unwrap());
+                }
+
                 Ok((
-                    resp["text"].as_bool().unwrap(),
+                    problems,
                     resp["score"].as_u64().unwrap().try_into().unwrap(),
                 ))
             }

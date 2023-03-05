@@ -326,7 +326,7 @@ impl CodexClient {
         // from query:
         let num_comps = query.num_comps;
         let input = query.input.to_string();
-        let do_check_complete = query.do_check;
+        let problem_whitelist = query.problem_whitelist.clone();
 
         tokio::spawn(async move {
             let token = rl.wait_token().await;
@@ -378,20 +378,18 @@ impl CodexClient {
                     continue;
                 }
 
-                let (is_complete, score) = if do_check_complete {
+                let (problems, score) =
                     lang_client
                         .check_complete(&input, &text)
                         .await
-                        .unwrap_or_else(|e| {
+                        .map_err(|e| {
                             println!("Error checking completion: {e}");
-                            (false, 0) // if there is an error, we assume it is not complete
-                        })
-                } else {
-                    (true, 0)
-                };
+                            CompletionError::CodexCouldNotComplete
+                        })?;
 
                 // we don't want completions with higher type score than the max
-                if is_complete && score <= max_type_score {
+                if problems.iter().all(|p| problem_whitelist.contains(p)) && score <= max_type_score
+                {
                     filtered_completions.lock().await.push((text, score));
                 }
             }

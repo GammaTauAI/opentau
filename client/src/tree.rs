@@ -7,9 +7,12 @@ use std::{
 use serde::{Deserialize, Serialize};
 use tokio::task::JoinHandle;
 
-use crate::completion::{
-    ArcCompletionEngine, Completion, CompletionEngine, CompletionError, CompletionQuery,
-    CompletionQueryBuilder,
+use crate::{
+    completion::{
+        ArcCompletionEngine, Completion, CompletionEngine, CompletionError, CompletionQuery,
+        CompletionQueryBuilder,
+    },
+    langserver::CheckProblem,
 };
 use crate::{
     debug,
@@ -256,6 +259,8 @@ impl CompletionLevels<PreparedState> {
                                     .num_comps(num_comps)
                                     .retries(retries)
                                     .fallback(fallback)
+                                    // added comments are safe, we type-weave after
+                                    .problem_whitelist(vec![CheckProblem::ChangedComments])
                                     .build();
 
                                 debug!("query: {}", q.input);
