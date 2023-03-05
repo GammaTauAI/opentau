@@ -51,6 +51,11 @@ pub struct CompLevel {
     pub nodes: Vec<CompNode>,
 }
 
+// these are states that the completion levels can be in.
+// this is used to enforce the state machine of the completion levels, and to prevent
+// the user from calling methods on the completion levels in the wrong order.
+//
+// new -> prepare -> tree_complete -> disassemble
 pub struct NewState;
 pub struct PreparedState;
 pub struct CompletedState;
