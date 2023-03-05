@@ -37,6 +37,10 @@ impl<'a> Deserialize<'a> for CheckProblem {
 }
 
 #[async_trait]
+/// The language server commands that are available to the completion engine.
+/// The `simple` strategy only requires the `pretty_print` and `check_complete` commands.
+/// The `tree` strategy additionally requires `to_tree`, `stub`, `weave`, and `usages`.
+/// For type definition generation, the `typedef_gen` and object_info` commands are required.
 pub trait LangServerCommands {
     /// pretty print the given code, making all missing types the given type token
     async fn pretty_print(&self, code: &str, type_name: &str) -> Result<String, LangServerError>;
@@ -96,7 +100,6 @@ pub trait LangServerCommands {
     /// which can be removed to get the original identifier.
     async fn object_info(&self, code: &str) -> Result<ObjectInfoMap, LangServerError>;
 
-    /*
     /// Generates type definition templates for the given code. The produced output is going
     /// to be the given code with the templates added.
     /// For example, if you have the following code (TypeScript in this case):
@@ -118,7 +121,6 @@ pub trait LangServerCommands {
     /// }
     /// ```
     async fn typedef_gen(&self, code: &str) -> Result<String, LangServerError>;
-    */
 }
 
 /// This is the trait that defines operations on the language server.
@@ -357,6 +359,22 @@ macro_rules! impl_langserver_commands {
                 let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
 
                 Ok(serde_json::from_slice(&resp).unwrap())
+            }
+
+            async fn typedef_gen(
+                &self,
+                code: &str,
+            ) -> Result<String, $crate::langserver::LangServerError> {
+                let req = $crate::langserver::LSReq {
+                    cmd: "typedefGen".to_string(),
+                    text: base64::encode(code),
+                };
+
+                let resp = self.socket.send_req(&req).await?;
+                // decode the response
+                let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
+
+                Ok(String::from_utf8(resp).unwrap())
             }
         }
     };
