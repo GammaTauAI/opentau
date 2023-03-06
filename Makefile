@@ -2,17 +2,21 @@ FULLPATH := $(shell pwd)
 
 all: build-release
 
-build-debug:
+build-debug: clean-debug-link
 	cd ./ts-compiler/ && npm install && cd ../; \
 	cd ./client/ && cargo build && ln -s $(FULLPATH)/client/target/debug/main $(FULLPATH)/out/client-debug && cd ../;
 
-build-release:
+build-release: clean-release-link
 	cd ./ts-compiler/ && npm install && cd ../; \
 	cd ./client/ && cargo build --release && ln -s $(FULLPATH)/client/target/release/main $(FULLPATH)/out/client && cd ../;
 
-clean:
-	rm -f ./out/client; \
-	rm -f ./out/client-debug; \
+clean-release-link:
+	rm -f ./out/client;
+
+clean-debug-link:
+	rm -f ./out/client-debug;
+
+clean: clean-release-link clean-debug-link
 	rm -rf ./ts-compiler/node_modules; \
 
 
