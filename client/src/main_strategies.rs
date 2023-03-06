@@ -124,10 +124,21 @@ impl MainStrategy for SimpleStrategy {
     /// Runs the simple completion strategy, which just runs the completion on the given file
     /// without any transformation, other than adding "_hole_" to each unknwon type
     async fn run(&self, context: MainCtx) -> Vec<Completion> {
+        let initial_input = if context.enable_defgen {
+            context
+                .engine
+                .get_ls()
+                .typedef_gen(&context.file_contents)
+                .await
+                .unwrap()
+        } else {
+            context.file_contents.clone()
+        };
+
         let printed = context
             .engine
             .get_ls()
-            .pretty_print(&context.file_contents, "_hole_")
+            .pretty_print(&initial_input, "_hole_")
             .await
             .unwrap();
 
