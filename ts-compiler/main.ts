@@ -9,7 +9,7 @@ import { findUsages } from "./findUsages";
 import { objectInfo } from "./objectInfo";
 import assert from "assert";
 import { alphaRenameTransformer } from "./aRename";
-import {typedefGen} from "./typedefGen";
+import { typedefGen } from "./typedefGen";
 
 if (process.argv.length != 4) {
   console.log("usage: [path to socket] [pid of rust proc]");
@@ -282,8 +282,7 @@ const handleTypedefGen = (decodedText: string): string => {
     type: "typedefGenResponse",
     text: base64,
   });
-}
-
+};
 
 var unixServer = net.createServer(function (client) {
   client.on("data", function (data) {
@@ -340,6 +339,11 @@ var unixServer = net.createServer(function (client) {
         // generate the object info map for the given file contents
         case "objectInfo": {
           client.write(handleObjectInfo(decodedText));
+          break;
+        }
+        // construct the type definition template
+        case "typedefGen": {
+          client.write(handleTypedefGen(decodedText));
           break;
         }
         default: {

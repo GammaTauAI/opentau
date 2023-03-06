@@ -1,0 +1,66 @@
+{
+    "f": ObjectFuncInfo {
+        params: {
+            "obj$0": {
+                Field {
+                    id: "a",
+                },
+                Field {
+                    id: "b",
+                },
+                Call {
+                    id: "c",
+                    args: [
+                        None,
+                        Some(
+                            [
+                                "obj$0",
+                                "d",
+                                "e",
+                            ],
+                        ),
+                        None,
+                    ],
+                },
+                Object {
+                    id: "d",
+                    fields: {
+                        Call {
+                            id: "m",
+                            args: [
+                                Some(
+                                    [
+                                        "obj$0",
+                                    ],
+                                ),
+                                None,
+                            ],
+                        },
+                        Object {
+                            id: "e",
+                            fields: {
+                                Field {
+                                    id: "f",
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        ret: None,
+    },
+    "g$0": ObjectFuncInfo {
+        params: {
+            "obj_2$0_1": {
+                Field {
+                    id: "d",
+                },
+                Field {
+                    id: "e",
+                },
+            },
+        },
+        ret: None,
+    },
+}
