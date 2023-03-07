@@ -17,7 +17,7 @@ type FieldInfoObject = {
   id: string;
   fields: Set<FieldInfo>;
 };
-type FieldInfo = FieldInfoCall | FieldInfoField | FieldInfoObject;
+export type FieldInfo = FieldInfoCall | FieldInfoField | FieldInfoObject;
 
 const isField = (info: FieldInfo): info is FieldInfoField =>
   info.type === "field";
@@ -29,12 +29,12 @@ const isObject = (info: FieldInfo): info is FieldInfoObject =>
 
 type ParamsType = { [name: string]: Set<FieldInfo> };
 
-type FuncInfo = {
+export type FuncInfo = {
   params: ParamsType;
   ret: Set<FieldInfo> | null;
 };
 
-type ObjectInfoMap = { [name: string]: FuncInfo };
+export type ObjectInfoMap = { [name: string]: FuncInfo };
 
 // merges ObjectInfoMap objects together and normalizes them
 // for example:
