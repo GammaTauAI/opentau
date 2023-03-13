@@ -88,8 +88,14 @@ async fn main() {
     // }
 
     // testing out "object_info"
+    //{
+        //let object_info = codex.get_ls().object_info(&input).await.unwrap();
+        //println!("object_info: {object_info:#?}");
+    //}
+
+    // test "typedef_gen"
     {
-        let object_info = codex.get_ls().object_info(&input).await.unwrap();
-        println!("object_info: {object_info:#?}");
+        let typedef_gen_template = codex.get_ls().typedef_gen(&input).await.unwrap();
+        println!("typedef_gen:\n{}", typedef_gen_template);
     }
 }

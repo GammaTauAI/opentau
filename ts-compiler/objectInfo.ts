@@ -12,12 +12,12 @@ type FieldInfoField = {
   type: "field";
   id: string;
 };
-type FieldInfoObject = {
+export type FieldInfoObject = {
   type: "object";
   id: string;
   fields: Set<FieldInfo>;
 };
-type FieldInfo = FieldInfoCall | FieldInfoField | FieldInfoObject;
+export type FieldInfo = FieldInfoCall | FieldInfoField | FieldInfoObject;
 
 const isField = (info: FieldInfo): info is FieldInfoField =>
   info.type === "field";
@@ -27,14 +27,32 @@ const isCall = (info: FieldInfo): info is FieldInfoCall => info.type === "call";
 const isObject = (info: FieldInfo): info is FieldInfoObject =>
   info.type === "object";
 
+export const fieldInfoToString = (info: FieldInfo): string => {
+  switch (info.type) {
+    case "field":
+      return JSON.stringify(info);
+    case "call":
+      return JSON.stringify({
+        type: "call",
+        id: info.id,
+        args: info.args.sort(),
+      });
+    case "object":
+      return JSON.stringify({
+        type: "object",
+        fields: [...info.fields].map(fieldInfoToString).sort(),
+      });
+  }
+};
+
 type ParamsType = { [name: string]: Set<FieldInfo> };
 
-type FuncInfo = {
+export type FuncInfo = {
   params: ParamsType;
   ret: Set<FieldInfo> | null;
 };
 
-type ObjectInfoMap = { [name: string]: FuncInfo };
+export type ObjectInfoMap = { [name: string]: FuncInfo };
 
 // merges ObjectInfoMap objects together and normalizes them
 // for example:
@@ -414,7 +432,7 @@ export const objectInfo = (sourceFile: ts.SourceFile): ObjectInfoMap => {
 
       visitFunc(node, paramMap, null);
       const params: ParamsType = {};
-      console.error(paramMap);
+      // console.error(paramMap);
       // NOTE: a map in typescript iterates in insertion order,
       // so this is safe.
       for (let paramInfo of paramMap.values()) {
