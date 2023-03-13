@@ -43,5 +43,5 @@ pub struct ObjectFuncInfo {
 pub type ObjectInfoMap = BTreeMap<String, ObjectFuncInfo>;
 
 // Typedef instructions for edit-based models
-pub const TYPEDEF_INSTRUCTIONS: &str = r#"Substitute the identifier _hole_ with the correct type. 
-For interfaces, substitute the identifier _name_ with the correct name."#;
+pub const TYPEDEF_INSTRUCTIONS: &str = r#"Substitute the identifiers denoted with _hole_ with the correct type annotations.
+For interfaces, substitute the identifier _name_ with the correct name. Interfaces with _hole_{idx} placeholders are linked to inner structs in main interfaces."#;
