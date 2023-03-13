@@ -271,32 +271,32 @@ export const typedefGen = (alphaRenamedSourceFile: ts.SourceFile): string => {
 
 // TODO: remove this
 // for testing only
-const loadFile = (fileName: string): ts.SourceFile => {
-  const program = ts.createProgram([fileName], {});
-  const tmpSourceFile = program.getSourceFile(fileName);
-  if (!tmpSourceFile) {
-    throw new Error("Could not load source file");
-  }
-  const decodedText = ts.sys.readFile(fileName, "utf8");
-  if (!decodedText) {
-    throw new Error("Could not read file");
-  }
-  const sourceFile = ts.createSourceFile(
-    "bleh.ts", // name does not matter until we save, which we don't from here
-    decodedText,
-    ts.ScriptTarget.Latest,
-    true, // for setParentNodes
-    ts.ScriptKind.TS
-  );
+//const loadFile = (fileName: string): ts.SourceFile => {
+//const program = ts.createProgram([fileName], {});
+//const tmpSourceFile = program.getSourceFile(fileName);
+//if (!tmpSourceFile) {
+//throw new Error("Could not load source file");
+//}
+//const decodedText = ts.sys.readFile(fileName, "utf8");
+//if (!decodedText) {
+//throw new Error("Could not read file");
+//}
+//const sourceFile = ts.createSourceFile(
+//"bleh.ts", // name does not matter until we save, which we don't from here
+//decodedText,
+//ts.ScriptTarget.Latest,
+//true, // for setParentNodes
+//ts.ScriptKind.TS
+//);
 
-  const alphaRenamed = ts.transform(sourceFile, [alphaRenameTransformer])
-    .transformed[0];
-  return alphaRenamed;
-};
+//const alphaRenamed = ts.transform(sourceFile, [alphaRenameTransformer])
+//.transformed[0];
+//return alphaRenamed;
+//};
 
-// const sourceFile = loadFile("../utils/testfiles/defgen/medium.ts");
-const sourceFile = loadFile(
-  "../utils/testfiles/defgen/dedup_with_correct_links.ts"
-);
-const newSourceFileString = typedefGen(sourceFile);
-console.log(newSourceFileString);
+//// const sourceFile = loadFile("../utils/testfiles/defgen/medium.ts");
+//const sourceFile = loadFile(
+//"../utils/testfiles/defgen/dedup_with_correct_links.ts"
+//);
+//const newSourceFileString = typedefGen(sourceFile);
+//console.log(newSourceFileString);
