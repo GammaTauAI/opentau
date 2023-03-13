@@ -46,6 +46,9 @@ pub struct CompletionQuery {
     pub retries: usize,
     /// Whether to include a completion that has `any` as the type of all holes.
     pub fallback: bool,
+    /// The instructions for codex on how to edit the code. This is used if the model utilizes
+    /// some kind of instruction based editing.
+    pub instructions: Option<String>,
     /// Whitelist of CheckProblems that are allowed to happen in the completion.
     pub problem_whitelist: Vec<CheckProblem>,
 }
@@ -59,6 +62,8 @@ pub struct CompletionQueryBuilder {
     retries: Option<usize>,
     /// defaults to false
     fallback: Option<bool>,
+    /// defaults to ""
+    instructions: Option<String>,
     /// defaults to vec![]
     problem_whitelist: Option<Vec<CheckProblem>>,
 }
@@ -70,6 +75,7 @@ impl CompletionQueryBuilder {
             num_comps: None,
             retries: None,
             fallback: None,
+            instructions: None,
             problem_whitelist: None,
         }
     }
@@ -89,6 +95,11 @@ impl CompletionQueryBuilder {
         self
     }
 
+    pub fn instructions<S: Into<String>>(mut self, instructions: S) -> Self {
+        self.instructions = Some(instructions.into());
+        self
+    }
+
     pub fn problem_whitelist(mut self, problem_whitelist: Vec<CheckProblem>) -> Self {
         self.problem_whitelist = Some(problem_whitelist);
         self
@@ -99,6 +110,7 @@ impl CompletionQueryBuilder {
             input: self.input,
             num_comps: self.num_comps.unwrap_or(3),
             retries: self.retries.unwrap_or(1),
+            instructions: self.instructions,
             fallback: self.fallback.unwrap_or(false),
             problem_whitelist: self.problem_whitelist.unwrap_or(vec![]),
         }

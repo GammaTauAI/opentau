@@ -144,11 +144,16 @@ impl MainStrategy for SimpleStrategy {
 
         debug!("pretty:\n{}", printed);
 
-        let query = CompletionQueryBuilder::new(printed)
+        let mut queryBuilder = CompletionQueryBuilder::new(printed)
             .num_comps(context.num_comps)
             .retries(context.retries)
-            .fallback(context.fallback)
-            .build();
+            .fallback(context.fallback);
+
+        if context.enable_defgen {
+            queryBuilder = queryBuilder.instructions(crate::typedef_gen::TYPEDEF_INSTRUCTIONS);
+        }
+
+        let query = queryBuilder.build();
 
         let candidates = match context.engine.complete(query.clone()).await {
             Ok(r) => r,

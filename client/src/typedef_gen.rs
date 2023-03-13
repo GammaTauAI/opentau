@@ -11,7 +11,10 @@ pub enum ObjectFieldInfo {
     /// where it will be a Some only if the parameter is an object.
     /// The inner vec is the path to the object. For example,
     /// f(obj) is just [obj], but f(obj.a.b) is [obj, a, b].
-    Call { id: String, args: Vec<Option<Vec<String>>> },
+    Call {
+        id: String,
+        args: Vec<Option<Vec<String>>>,
+    },
     /// A field that is an object
     Object {
         id: String,
@@ -24,7 +27,7 @@ pub struct ObjectFuncInfo {
     /// The parameters of the function. Maps [name] -> [Set<FieldInfo>].
     /// The parameters in the set are only objects, no primitive parameters.
     pub params: BTreeMap<String, BTreeSet<ObjectFieldInfo>>,
-    /// The return info of the function. 
+    /// The return info of the function.
     /// where the Set<FieldInfo> is the fields of the object.
     /// If this is None, it means that either the function does not return anything,
     /// or it returns a non-object type.
@@ -38,3 +41,7 @@ pub struct ObjectFuncInfo {
 /// parent function, and the second part is the name of the child function.
 /// The value is the object information related to the function.
 pub type ObjectInfoMap = BTreeMap<String, ObjectFuncInfo>;
+
+// Typedef instructions for edit-based models
+pub const TYPEDEF_INSTRUCTIONS: &str = r#"Substitute the identifier _hole_ with the correct type. 
+For interfaces, substitute the identifier _name_ with the correct name."#;

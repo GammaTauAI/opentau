@@ -328,6 +328,11 @@ impl CodexClient {
         let num_comps = query.num_comps;
         let input = query.input.to_string();
         let problem_whitelist = query.problem_whitelist.clone();
+        let instructions = query
+            .instructions
+            .as_ref()
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| INSTRUCTIONS.to_string());
 
         tokio::spawn(async move {
             let token = rl.wait_token().await;
@@ -340,7 +345,7 @@ impl CodexClient {
                     input: input.to_string(),
                     n: num_comps,
                     temperature: temp,
-                    instruction: INSTRUCTIONS.to_string(),
+                    instruction: instructions,
                 })?)
                 .timeout(std::time::Duration::from_secs(std::cmp::max(
                     30, // make timeout scale up with number of completions
