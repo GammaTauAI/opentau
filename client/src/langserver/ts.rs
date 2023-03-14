@@ -5,7 +5,7 @@ use tokio::io::AsyncBufReadExt;
 
 use crate::{debug, impl_langserver_commands};
 
-use super::{abstraction::SocketAbstraction, LangServer, LangServerError};
+use super::{abstraction::SocketAbstraction, LSReq, LangServer, LangServerError};
 
 #[derive(Debug)]
 pub struct TsServer {
@@ -60,55 +60,15 @@ impl LangServer for TsServer {
     }
 
     async fn type_check(&self, code: &str) -> Result<bool, LangServerError> {
-        // get a temp file (overwrite if exists)
-        let tmp_dir = std::env::temp_dir();
-        let pid = std::process::id();
-        // make a tmp subfolder
-        let tmp_dir = tmp_dir.join(format!("type-check-{pid}"));
-        // create folder if it doesn't exist
-        if !tmp_dir.exists() {
-            let _ = tokio::fs::create_dir(&tmp_dir).await;
-        }
-        // get a random number
-        let rand = rand::random::<u64>();
-        let tmp_file = tmp_dir.join(format!("type-check-{rand}.ts"));
-        tokio::fs::write(&tmp_file, code).await?;
-
-        // runs: tsc --allowJs --checkJs --noEmit filename.ts
-        let mut process = match tokio::process::Command::new("tsc")
-            .args([
-                "--allowJs",
-                "--checkJs",
-                "--noEmit",
-                "--target",
-                "es2022",
-                tmp_file.to_str().unwrap(),
-            ])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-        {
-            Ok(p) => p,
-            Err(_) => return Err(LangServerError::ProcessSpawn),
+        // for typescript, we use the language server for typechecking
+        let req = LSReq {
+            cmd: "typecheck".to_string(),
+            text: base64::encode(code),
         };
+        let resp = self.socket.send_req(&req).await?;
 
-        // check if the process exited with code 0
-        let status = process.wait().await?;
-
-        // delete the tmp file
-        tokio::fs::remove_file(&tmp_file).await?;
-
-        // delete the tmp folder if empty
-        if tokio::fs::read_dir(&tmp_dir)
-            .await?
-            .next_entry()
-            .await?
-            .is_none()
-        {
-            tokio::fs::remove_dir(&tmp_dir).await?;
-        }
-
-        Ok(status.success())
+        let errors: usize = resp["errors"].as_u64().unwrap() as usize;
+        Ok(errors == 0)
     }
 
     fn any_type(&self) -> String {

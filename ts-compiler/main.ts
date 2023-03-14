@@ -284,6 +284,29 @@ const handleTypedefGen = (decodedText: string): string => {
   });
 };
 
+const handleTypeCheck = (decodedText: string): string => {
+  const completedProgram = ts.createProgram({
+    rootNames: ["comp.ts"],
+    options: compilerOptions,
+    host: makeCompilerHost(
+      "comp.ts",
+      ts.createSourceFile(
+        "comp.ts",
+        decodedText,
+        ts.ScriptTarget.Latest,
+        false, // for setParentNodes
+        ts.ScriptKind.TS
+      )
+    ),
+  });
+  const completedFile = completedProgram.getSourceFile("comp.ts")!;
+  const diag = ts.getPreEmitDiagnostics(completedProgram, completedFile);
+  return JSON.stringify({
+    type: "typeCheckResponse",
+    errors: diag.length,
+  });
+};
+
 var unixServer = net.createServer(function (client) {
   client.on("data", function (data) {
     // try to parse the data as a json object
@@ -344,6 +367,11 @@ var unixServer = net.createServer(function (client) {
         // construct the type definition template
         case "typedefGen": {
           client.write(handleTypedefGen(decodedText));
+          break;
+        }
+        // typecheck the given file contents, returns the number of errors
+        case "typecheck": {
+          client.write(handleTypeCheck(decodedText));
           break;
         }
         default: {
