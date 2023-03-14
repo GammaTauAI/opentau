@@ -251,7 +251,7 @@ const insertInterfaceDeclarations = (
 // and returns the original names.
 export const typedefGen = (alphaRenamedSourceFile: ts.SourceFile): string => {
   // convert to object info
-  const objectMap: ObjectInfoMap = objectInfo(sourceFile);
+  const objectMap: ObjectInfoMap = objectInfo(alphaRenamedSourceFile);
 
   // generate interface declarations
   const interfaceDeclarations = genInterfaceDeclarations(objectMap);
