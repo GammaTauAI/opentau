@@ -15,8 +15,9 @@ pub struct MainCtx {
     pub retries: usize,
     pub fallback: bool,
     pub stop_at: usize,
-    pub disable_type_check: bool,
+    pub enable_type_check: bool,
     pub enable_defgen: bool,
+    pub enable_usages: bool,
     pub depth_limit: Option<usize>,
 }
 
@@ -29,11 +30,11 @@ impl MainCtx {
         for (i, candidate) in candidates.into_iter().enumerate() {
             debug!("candidate {}:\n{}", i, candidate.code);
             let lang_client = self.engine.get_ls();
-            let disable_type_check = self.disable_type_check;
+            let enable_type_check = self.enable_type_check;
             handles.push(tokio::task::spawn(async move {
                 // this is kind of a hack, but it's the easiest way to get the
                 // `self.stop_at` to work well without code duplication
-                if disable_type_check {
+                if !enable_type_check {
                     return Some(candidate);
                 }
 
@@ -86,18 +87,19 @@ impl MainStrategy for TreeStrategy {
             tree.depth_limit(limit);
         }
 
-        let levels = CompletionLevels::new(context.retries, context.num_comps, context.fallback)
-            .prepare(tree, context.engine.get_ls())
-            .await
-            .unwrap();
-        let completed = levels
-            .tree_complete(context.engine.clone())
-            .await
-            .disassemble();
+        let levels = CompletionLevels::new(
+            context.retries,
+            context.num_comps,
+            context.fallback,
+            context.enable_usages,
+        );
+        let prepared = levels.prepare(tree, context.engine.get_ls()).await.unwrap();
+        let completed = prepared.tree_complete(context.engine.clone()).await;
+        let disassembled = completed.disassemble();
 
         // score the code at the root
         let mut handles: Vec<JoinHandle<Completion>> = vec![];
-        for code in completed {
+        for code in disassembled {
             let ls = context.engine.get_ls();
             handles.push(tokio::task::spawn(async move {
                 let (_, score) = ls

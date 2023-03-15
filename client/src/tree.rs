@@ -82,18 +82,22 @@ pub struct CompletionLevels<State = NewState> {
     retries: usize,
     num_comps: usize,
     fallback: bool,
+    // if we want to create usages block or not
+    usages: bool,
+    // this is the state of the completion levels
     state: std::marker::PhantomData<State>,
 }
 
 impl CompletionLevels<NewState> {
     /// Creates a new completion levels, with the given number of retries, number of completions,
     /// and whether to fallback to the `any` type.
-    pub fn new(retries: usize, num_comps: usize, fallback: bool) -> Self {
+    pub fn new(retries: usize, num_comps: usize, fallback: bool, usages: bool) -> Self {
         Self {
             levels: vec![],
             retries,
             num_comps,
             fallback,
+            usages,
             state: std::marker::PhantomData,
         }
     }
@@ -104,7 +108,7 @@ impl CompletionLevels<NewState> {
         tree: CodeBlockTree,
         langsever: ArcLangServer,
     ) -> Result<CompletionLevels<PreparedState>, LangServerError> {
-        // dyanmic programming solution. took me a while to figure out how to do this.
+        // dynamic programming solution. took me a while to figure out how to do this.
 
         // here we have the levels of the tree
         let mut levels = vec![];
@@ -141,7 +145,11 @@ impl CompletionLevels<NewState> {
                     parent.children_idxs.push(idx);
 
                     // we get the usages of this node, from the parent
-                    let usages = langsever.usages(&parent.code, &child.code).await?;
+                    let usages = if self.usages {
+                        langsever.usages(&parent.code, &child.code).await?
+                    } else {
+                        String::new()
+                    };
 
                     // push unpatched node
                     nodes.push(CompNode {
@@ -163,6 +171,7 @@ impl CompletionLevels<NewState> {
             retries: self.retries,
             num_comps: self.num_comps,
             fallback: self.fallback,
+            usages: self.usages,
             state: std::marker::PhantomData,
         })
     }
@@ -321,6 +330,7 @@ impl CompletionLevels<PreparedState> {
             retries: self.retries,
             num_comps: self.num_comps,
             fallback: self.fallback,
+            usages: self.usages,
             state: std::marker::PhantomData,
         }
     }

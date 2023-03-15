@@ -90,6 +90,10 @@ struct Args {
     /// Depth limit for the tree strategy
     #[clap(long, value_parser)]
     depth_limit: Option<usize>,
+
+    /// Disables the usage blocks in the tree strategy prompts
+    #[clap(long, value_parser, default_value_t = false)]
+    disable_usages: bool,
 }
 
 impl Args {
@@ -211,9 +215,10 @@ async fn main() {
         retries: args.retries,
         fallback: args.fallback,
         stop_at: args.stop_at,
-        disable_type_check: args.disable_type_check,
+        enable_type_check: !args.disable_type_check,
         enable_defgen: args.enable_defgen,
         depth_limit: args.depth_limit,
+        enable_usages: !args.disable_usages,
     };
 
     // the typechecked and completed code(s). here if we get errors we exit with 1
