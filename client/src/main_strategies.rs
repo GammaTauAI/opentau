@@ -17,6 +17,7 @@ pub struct MainCtx {
     pub stop_at: usize,
     pub disable_type_check: bool,
     pub enable_defgen: bool,
+    pub depth_limit: Option<usize>,
 }
 
 impl MainCtx {
@@ -74,12 +75,16 @@ impl MainStrategy for TreeStrategy {
     ///
     /// TODO: somehow add caching to this strategy, maybe go up the tree?
     async fn run(&self, context: MainCtx) -> Vec<Completion> {
-        let tree = context
+        let mut tree = context
             .engine
             .get_ls()
             .to_tree(&context.file_contents)
             .await
             .unwrap();
+
+        if let Some(limit) = context.depth_limit {
+            tree.depth_limit(limit);
+        }
 
         let levels = CompletionLevels::new(context.retries, context.num_comps, context.fallback)
             .prepare(tree, context.engine.get_ls())

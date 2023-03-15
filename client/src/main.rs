@@ -86,6 +86,10 @@ struct Args {
     /// Enables type definition generation
     #[clap(long, value_parser, default_value_t = false)]
     enable_defgen: bool,
+
+    /// Depth limit for the tree strategy
+    #[clap(long, value_parser)]
+    depth_limit: Option<usize>,
 }
 
 impl Args {
@@ -209,6 +213,7 @@ async fn main() {
         stop_at: args.stop_at,
         disable_type_check: args.disable_type_check,
         enable_defgen: args.enable_defgen,
+        depth_limit: args.depth_limit,
     };
 
     // the typechecked and completed code(s). here if we get errors we exit with 1

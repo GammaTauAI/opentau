@@ -26,6 +26,19 @@ pub struct CodeBlockTree {
     pub children: Vec<CodeBlockTree>,
 }
 
+impl CodeBlockTree {
+    /// Depth-limits the given code block tree to the given depth
+    pub fn depth_limit(&mut self, depth: usize) {
+        if depth == 0 {
+            self.children = vec![];
+        } else {
+            for child in self.children.iter_mut() {
+                child.depth_limit(depth - 1);
+            }
+        }
+    }
+}
+
 /// tree compeltion algo v2 (more expensive but more accurate):
 /// - Step 1: make the code block tree out of the original input code.
 /// - Step 2: make a nested array of code blocks, where the outer array index is the
