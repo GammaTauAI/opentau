@@ -21,7 +21,9 @@ use crate::{
 /// A codeblock tree, taken from the `tree` command of the language server
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct CodeBlockTree {
-    pub name: String, // NOTE: this is a generated name, not the original name
+    /// NOTE: this is a generated name, not the original name.
+    /// If this starts with "topnode", it's a toplevel node, and usages should not be emitted.
+    pub name: String, 
     pub code: String,
     pub children: Vec<CodeBlockTree>,
 }
@@ -145,7 +147,7 @@ impl CompletionLevels<NewState> {
                     parent.children_idxs.push(idx);
 
                     // we get the usages of this node, from the parent
-                    let usages = if self.usages {
+                    let usages = if self.usages && !child.name.starts_with("topnode") {
                         langsever.usages(&parent.code, &child.code).await?
                     } else {
                         String::new()
