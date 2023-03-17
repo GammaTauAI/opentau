@@ -106,7 +106,6 @@ export const makeTree = (sourceFile: ts.SourceFile): CodeBlockTree => {
 
       return;
     } else if (atTop && isTypable(child)) {
-      console.log("top level", ts.SyntaxKind[child.kind]);
       // toplevel node, make a child
       const name = symgen("topnode");
       let code;
@@ -115,6 +114,22 @@ export const makeTree = (sourceFile: ts.SourceFile): CodeBlockTree => {
       } else {
         code = generateCode(child);
       }
+
+      // now we do some magic. we want to aggregate all adjacent toplevel nodes, so we check
+      // if the last node that was pushed to the parent is a toplevel node (name starts with "topnode").
+      // if it is, we aggregate the code of the current node with the last node
+      if (ctxParentNode.children.length > 0) {
+        const lastNode =
+          ctxParentNode.children[ctxParentNode.children.length - 1];
+        if (lastNode.name.startsWith("topnode")) {
+          lastNode.code += "\n" + code;
+          child.forEachChild((child) => {
+            traverse(child, ctxParentNode);
+          });
+          return;
+        }
+      }
+      // otherwise, we just push the node as normal
       let thisNode = { name, code, children: [] };
       ctxParentNode.children.push(thisNode);
     }
