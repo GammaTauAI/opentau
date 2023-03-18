@@ -3,7 +3,7 @@ use std::sync::Arc;
 use opentau::{
     cache::Cache,
     completion::Completion,
-    completion::{codex::CodexClientBuilder, ArcCompletionEngine},
+    completion::{codex::CodexClientBuilder, ArcCompletionEngine, CompletionClientBuilder},
     langserver::{py::PyServer, ts::TsServer, ArcLangServer, LangServer},
     main_strategies::{MainCtx, MainStrategy, SimpleStrategy, TreeStrategy},
 };
@@ -136,7 +136,7 @@ impl Args {
         ls: ArcLangServer,
         cache: Option<Arc<Mutex<Cache>>>,
     ) -> ArcCompletionEngine {
-        match self.engine.as_str() {
+        let model = match self.engine.as_str() {
             "codex" => {
                 if self.tokens.is_none() {}
                 let tokens = self
@@ -150,32 +150,27 @@ impl Args {
                     .map(|s| s.to_string())
                     .collect::<Vec<_>>();
 
-                let mut codex = CodexClientBuilder::new(tokens, ls);
-                codex
-                    .endpoint(
-                        self.endpoint
-                            .as_deref()
-                            .unwrap_or("https://api.openai.com/v1/edits")
-                            .to_string(),
-                    )
-                    .temperature(self.temp)
-                    .max_type_score(self.max_type_quality)
-                    .rate_limit(!self.disable_rate_limit);
-
-                if let Some(cache) = cache {
-                    codex.cache(cache);
-                }
-
-                Arc::new(codex.build())
-            }
-            "incoder" => {
-                todo!("Implement incoder")
+                Arc::new(
+                    CodexClientBuilder::new(tokens)
+                        .rate_limit(!self.disable_rate_limit)
+                        .build(),
+                )
             }
             _ => {
                 eprintln!("Unknown engine, {}", self.engine);
                 std::process::exit(1);
             }
+        };
+        let mut engine = CompletionClientBuilder::new(ls, model)
+            .temperature(self.temp)
+            .max_type_score(self.max_type_quality);
+        if let Some(cache) = cache {
+            engine = engine.cache(cache);
         }
+        if let Some(endpoint) = &self.endpoint {
+            engine = engine.endpoint(endpoint.to_string());
+        }
+        Arc::new(engine.build())
     }
 
     fn stategy_factory(&self) -> Box<dyn MainStrategy> {

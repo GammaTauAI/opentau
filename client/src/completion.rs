@@ -1,10 +1,13 @@
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
+use tokio::{sync::Mutex, task::JoinHandle};
 
 use crate::{
     cache::Cache,
-    langserver::{CheckProblem, LangServer, LangServerError},
+    debug,
+    langserver::{ArcLangServer, CheckProblem, LangServer, LangServerError},
 };
 
 use self::codex::EditRespError;
@@ -29,12 +32,35 @@ pub trait CompletionEngine {
     /// Gets the language server object from the completion engine object.
     fn get_ls(&self) -> Arc<dyn LangServer + Send + Sync>;
 
+    /// Gets an endpoint url for the model, if there is one.
+    fn get_endpoint(&self) -> Option<String>;
+
+    /// Gets the temperature used for querying the model.
+    fn get_temperature(&self) -> f64;
+
+    /// Gets the maximum type score allowed for a completion.
+    fn get_max_type_score(&self) -> u16;
+
     /// Gets a mutex guard to the cache from the codex client.
     /// If the given completion engine does not use a cache, this will return None.
     async fn get_cache(&self) -> Option<tokio::sync::MutexGuard<Cache>>;
 }
 
 pub type ArcCompletionEngine = Arc<dyn CompletionEngine + Send + Sync>;
+
+/// This is a trait that defines operations for a model that can be used to complete code.
+pub trait CompletionModel {
+    /// Spawns a completion thread, and populates the filtered_completion vector with
+    /// the completions of the query.
+    fn spawn_comp(
+        &self,
+        query: &CompletionQuery,
+        engine: &dyn CompletionEngine,
+        filtered_completions: Arc<Mutex<Vec<(String, u16)>>>,
+    ) -> JoinHandle<Result<(), ModelResponseError>>;
+}
+
+pub type ArcCompletionModel = Arc<dyn CompletionModel + Send + Sync>;
 
 #[derive(Debug, Clone)]
 pub struct CompletionQuery {
@@ -127,54 +153,271 @@ pub struct Completion {
     pub fallbacked: bool,
 }
 
-// TODO: generalize this to all completion engines
-// to do that, we need to decouple these variants:
-// - ErrorResponse: We need to make this more generic
-// - CodexCouldNotComplete: This is specific to codex, split it out
-// - RateLimit: This is specific to codex and other completion engines that use rate limiting
-// - Reqwest: This is specific to engines that use http requests. probably keep this?
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum CompletionError {
-    ErrorResponse(EditRespError),
-    CodexCouldNotComplete,
     // where the Vec<String> is the list of completions we got before the rate limit
+    #[error("Rate limit. Got {} completions", .0.len())]
     RateLimit(Vec<Completion>),
+    #[error("Language server error: {0}")]
     LangServer(LangServerError),
-    Reqwest(reqwest::Error),
-    Serde(serde_json::Error),
+    #[error("Completion engine could not complete")]
+    CouldNotComplete,
 }
 
-impl From<LangServerError> for CompletionError {
-    fn from(e: LangServerError) -> Self {
-        CompletionError::LangServer(e)
+#[derive(Debug, Error)]
+pub enum ModelResponseError {
+    #[error("Reqwest error: {0}")]
+    Reqwest(#[from] reqwest::Error),
+    #[error("Serde error: {0}")]
+    Serde(#[from] serde_json::Error),
+    #[error("Invalid response: {0}")]
+    InvalidResponse(String),
+    #[error("Model could not complete")]
+    CouldNotComplete,
+    #[error("Model rate limited. Response: {0}")]
+    RateLimited(String),
+}
+
+/// Filters out completions that don't follow certain rules.
+async fn filter_comps(
+    filtered_completions: Arc<Mutex<Vec<(String, u16)>>>,
+    lang_client: ArcLangServer,
+    input_text: &str,
+    comp_text: String,
+    problem_whitelist: Vec<CheckProblem>,
+    max_type_score: u16,
+) -> Result<(), ModelResponseError> {
+    // check first if it's duplicate in our filtered completions
+    if !filtered_completions
+        .lock()
+        .await
+        .iter()
+        .any(|(c, _)| c == &comp_text)
+    {
+        let (problems, score) = lang_client
+            .check_complete(input_text, &comp_text)
+            .await
+            .map_err(|e| {
+                println!("Error checking completion: {e}");
+                ModelResponseError::CouldNotComplete
+            })?;
+
+        // we don't want completions with higher type score than the max
+        if problems.iter().all(|p| problem_whitelist.contains(p)) && score <= max_type_score {
+            filtered_completions.lock().await.push((comp_text, score));
+        } else {
+            debug!("Filtered out completion (Problems: {problems:?}):\n{comp_text}");
+        }
     }
+    Ok(())
 }
 
-impl From<reqwest::Error> for CompletionError {
-    fn from(e: reqwest::Error) -> Self {
-        CompletionError::Reqwest(e)
-    }
+/// Represents a client to the completion API.
+#[derive(Clone)]
+pub struct CompletionClient {
+    // the language server
+    lang_server: ArcLangServer,
+    // the codex URL endpoint
+    pub endpoint: Option<String>,
+    // the temperature to use for the completion
+    pub temperature: f64,
+    // the maxmimum type score
+    pub max_type_score: u16,
+    // The cache to use for the completions
+    cache: Option<Arc<Mutex<Cache>>>,
+    // The model that we are using
+    pub model: ArcCompletionModel,
 }
 
-impl From<serde_json::Error> for CompletionError {
-    fn from(e: serde_json::Error) -> Self {
-        CompletionError::Serde(e)
-    }
-}
+const HOLE_IDENTIFIER: &str = "_hole_";
+const INSTRUCTIONS: &str = "Substitute the identifier _hole_ with the correct type.";
 
-impl std::fmt::Display for CompletionError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CompletionError::LangServer(e) => write!(f, "Language client error: {e}"),
-            CompletionError::Reqwest(e) => write!(f, "Reqwest error: {e}"),
-            CompletionError::Serde(e) => write!(f, "Serde error: {e}"),
-            CompletionError::ErrorResponse(s) => write!(f, "Codex error response: {s}"),
-            CompletionError::CodexCouldNotComplete => write!(f, "Codex could not complete"),
-            CompletionError::RateLimit(completions) => {
-                write!(f, "Codex rate limit. Got {} completions", completions.len())
+#[async_trait::async_trait]
+impl CompletionEngine for CompletionClient {
+    /// Completes the given input code using the model API. The given input code has to be pretty
+    /// printed such that unknown types are represented by "_hole_".
+    /// num_comps is the number of completions to return per request.
+    /// retries is the number of requests to make to codex, which creates duplicates, so we filter
+    /// them out.
+    /// fallback is whether to fallback to "any" if we don't get any completions.
+    async fn complete(
+        &self,
+        mut query: CompletionQuery,
+    ) -> Result<Vec<Completion>, CompletionError> {
+        // we filter incomplete completions
+        // scored vec: implemented scoring, sort resulting vec by score,
+        //             and fall back to all "any" in worst case (if enabled)
+        let filtered_completions: Arc<Mutex<Vec<(String, u16)>>> = Arc::new(Mutex::new(Vec::new()));
+        let mut handles: Vec<JoinHandle<Result<(), ModelResponseError>>> = Vec::new();
+
+        // check cache first, if the cache is set
+        // NOTE: we need to query a list of comps with the same (input, num_comps, retries) tuple
+
+        if let Some(cache) = &self.cache {
+            let mut cache = cache.lock().await;
+            let cached_completions = cache.retrieve(&query).unwrap();
+            if let Some(cached_completions) = cached_completions {
+                filtered_completions
+                    .lock()
+                    .await
+                    .extend(cached_completions.into_iter().map(|c| (c, 0)));
+                query.retries = 0; // so we don't make any requests to codex
             }
+        }
+
+        while query.retries > 0 {
+            handles.push(
+                self.model
+                    .spawn_comp(&query, self, filtered_completions.clone()),
+            );
+            query.retries -= 1;
+        }
+
+        let mut rate_limit = false;
+
+        for handle in handles {
+            let res = handle.await.unwrap();
+            if let Err(e) = res {
+                if let ModelResponseError::RateLimited(_) = &e {
+                    println!("{e}");
+                    rate_limit = true;
+                } else {
+                    println!("Error in completion thread: {e:?}");
+                }
+            }
+        }
+
+        // sort the vec by score, low..high
+        filtered_completions
+            .lock()
+            .await
+            .sort_by(|(_, s1), (_, s2)| s1.cmp(s2));
+
+        let mut final_completions = filtered_completions
+            .lock()
+            .await
+            .iter()
+            .map(|(c, i)| Completion {
+                code: c.to_string(),
+                score: *i,
+                fallbacked: false,
+            })
+            .collect::<Vec<Completion>>();
+
+        if query.fallback {
+            // NOTE: we add the fallback despite the type score limit
+            final_completions.push(Completion {
+                code: query
+                    .input
+                    .replace(HOLE_IDENTIFIER, &self.lang_server.any_type()),
+                score: 1000,
+                fallbacked: true,
+            });
+        }
+
+        if rate_limit {
+            // if we rate limit, we still want to return the completions we have (may not have any)
+            return Err(CompletionError::RateLimit(final_completions));
+        }
+
+        // if we have no completions, we return an error
+        if final_completions.is_empty() {
+            return Err(CompletionError::CouldNotComplete);
+        }
+
+        // print out scores
+        print!("Score(s): ");
+        let lock = filtered_completions.lock().await;
+        for (i, (_, score)) in lock.iter().enumerate() {
+            print!("{score}");
+            if i != lock.len() - 1 {
+                print!(", ");
+            }
+        }
+        println!();
+
+        Ok(final_completions)
+    }
+
+    /// Gets the language server object from the codex client
+    fn get_ls(&self) -> Arc<dyn LangServer + Send + Sync> {
+        self.lang_server.clone()
+    }
+
+    /// Gets an endpoint url for the model, if there is one.
+    fn get_endpoint(&self) -> Option<String> {
+        self.endpoint.clone()
+    }
+
+    /// Gets the temperature used for querying the model.
+    fn get_temperature(&self) -> f64 {
+        self.temperature
+    }
+
+    /// Gets the maximum type score allowed for a completion.
+    fn get_max_type_score(&self) -> u16 {
+        self.max_type_score
+    }
+
+    /// Gets a mutex guard to the cache from the codex client, if a cache is being used
+    async fn get_cache(&self) -> Option<tokio::sync::MutexGuard<Cache>> {
+        if let Some(cache) = &self.cache {
+            Some(cache.lock().await)
+        } else {
+            None
         }
     }
 }
 
-impl std::error::Error for CompletionError {}
+pub struct CompletionClientBuilder {
+    lang_server: ArcLangServer,
+    endpoint: Option<String>,
+    temperature: Option<f64>,
+    max_type_score: Option<u16>,
+    cache: Option<Arc<Mutex<Cache>>>,
+    model: ArcCompletionModel,
+}
+
+impl CompletionClientBuilder {
+    pub fn new(lang_server: ArcLangServer, model: ArcCompletionModel) -> Self {
+        Self {
+            lang_server,
+            endpoint: None,
+            temperature: None,
+            max_type_score: None,
+            cache: None,
+            model,
+        }
+    }
+
+    pub fn endpoint(mut self, endpoint: String) -> Self {
+        self.endpoint = Some(endpoint);
+        self
+    }
+
+    pub fn temperature(mut self, temperature: f64) -> Self {
+        self.temperature = Some(temperature);
+        self
+    }
+
+    pub fn cache(mut self, cache: Arc<Mutex<Cache>>) -> Self {
+        self.cache = Some(cache);
+        self
+    }
+
+    pub fn max_type_score(mut self, max_type_score: u16) -> Self {
+        self.max_type_score = Some(max_type_score);
+        self
+    }
+
+    pub fn build(self) -> CompletionClient {
+        CompletionClient {
+            lang_server: self.lang_server,
+            endpoint: self.endpoint,
+            temperature: self.temperature.unwrap_or(1.0),
+            max_type_score: self.max_type_score.unwrap_or(1000),
+            cache: self.cache,
+            model: self.model,
+        }
+    }
+}

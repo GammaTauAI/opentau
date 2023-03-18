@@ -5,11 +5,15 @@ use tokio::{sync::Mutex, task::JoinHandle};
 
 use crate::{
     cache::Cache,
+    completion::filter_comps,
     debug,
     langserver::{ArcLangServer, LangServer},
 };
 
-use super::{Completion, CompletionEngine, CompletionError, CompletionQuery};
+use super::{
+    Completion, CompletionEngine, CompletionError, CompletionModel, CompletionQuery,
+    ModelResponseError, INSTRUCTIONS,
+};
 
 mod rl {
     use dashmap::DashMap;
@@ -88,241 +92,68 @@ mod rl {
 /// wrapped in an Arc.
 #[derive(Clone)]
 pub struct CodexClient {
+    // the reqwest client used to send requests to codex
     pub client: reqwest::Client,
-    // the language server
-    lang_server: ArcLangServer,
-    // the codex URL endpoint
-    pub endpoint: String,
-    // the temperature to use for the completion
-    pub temperature: f64,
-    // the maxmimum type score
-    pub max_type_score: u16,
-    // The cache to use for the completions
-    cache: Option<Arc<Mutex<Cache>>>,
     // The rate limited token pool, that produces the token used for this client
     rate_limiter: rl::RateLimitedTokenPool,
 }
 
 #[derive(Clone)]
 pub struct CodexClientBuilder {
-    pub client: Option<reqwest::Client>,
-    pub tokens: Vec<String>,
-    pub lang_server: ArcLangServer,
-    pub endpoint: Option<String>,
-    pub temperature: Option<f64>,
-    pub max_type_score: Option<u16>,
-    pub cache: Option<Arc<Mutex<Cache>>>,
-    pub rate_limit: bool,
+    client: Option<reqwest::Client>,
+    tokens: Vec<String>,
+    rate_limit: bool,
 }
 
 impl CodexClientBuilder {
-    pub fn new(tokens: Vec<String>, lang_server: ArcLangServer) -> Self {
+    pub fn new(tokens: Vec<String>) -> Self {
         Self {
             client: None,
             tokens,
-            lang_server,
-            endpoint: None,
-            temperature: None,
-            max_type_score: None,
-            cache: None,
             rate_limit: true,
         }
     }
 
-    pub fn client(&mut self, client: reqwest::Client) -> &mut Self {
+    pub fn client(mut self, client: reqwest::Client) -> Self {
         self.client = Some(client);
         self
     }
 
-    pub fn endpoint(&mut self, endpoint: String) -> &mut Self {
-        self.endpoint = Some(endpoint);
-        self
-    }
-
-    pub fn temperature(&mut self, temperature: f64) -> &mut Self {
-        self.temperature = Some(temperature);
-        self
-    }
-
-    pub fn cache(&mut self, cache: Arc<Mutex<Cache>>) -> &mut Self {
-        self.cache = Some(cache);
-        self
-    }
-
-    pub fn rate_limit(&mut self, rate_limit: bool) -> &mut Self {
+    pub fn rate_limit(mut self, rate_limit: bool) -> Self {
         self.rate_limit = rate_limit;
         self
     }
 
-    pub fn max_type_score(&mut self, max_type_score: u16) -> &mut Self {
-        self.max_type_score = Some(max_type_score);
-        self
-    }
-
     /// Builds the client and consumes the builder
-    pub fn build(&mut self) -> CodexClient {
-        let client = self.client.take().unwrap_or_else(reqwest::Client::new);
-        let endpoint = self
-            .endpoint
-            .take()
-            .unwrap_or_else(|| "https://api.openai.com/v1/edits".to_string());
-        let temperature = self.temperature.take().unwrap_or(1.0);
-        let max_type_score = self.max_type_score.take().unwrap_or(1000);
-        let cache = self.cache.take();
-        let rate_limiter =
-            rl::RateLimitedTokenPool::new(self.tokens.drain(..).collect(), self.rate_limit);
+    pub fn build(self) -> CodexClient {
+        let client = self.client.unwrap_or_else(reqwest::Client::new);
+        let rate_limiter = rl::RateLimitedTokenPool::new(self.tokens, self.rate_limit);
         CodexClient {
             client,
-            lang_server: self.lang_server.clone(),
-            endpoint,
-            temperature,
-            max_type_score,
-            cache,
             rate_limiter,
         }
     }
 }
 
-const HOLE_IDENTIFIER: &str = "_hole_";
-const INSTRUCTIONS: &str = "Substitute the identifier _hole_ with the correct type.";
-
-#[async_trait::async_trait]
-impl CompletionEngine for CodexClient {
-    /// Completes the given input code using the codex API. The given input code has to be pretty
-    /// printed such that unknown types are represented by "_hole_".
-    /// num_comps is the number of completions to return per request.
-    /// retries is the number of requests to make to codex, which creates duplicates, so we filter
-    /// them out.
-    /// fallback is whether to fallback to "any" if we don't get any completions.
-    async fn complete(
-        &self,
-        mut query: CompletionQuery,
-    ) -> Result<Vec<Completion>, CompletionError> {
-        // we filter incomplete completions
-        // scored vec: implemented scoring, sort resulting vec by score,
-        //             and fall back to all "any" in worst case (if enabled)
-        let filtered_completions: Arc<Mutex<Vec<(String, u16)>>> = Arc::new(Mutex::new(Vec::new()));
-        let mut handles: Vec<JoinHandle<Result<(), CompletionError>>> = Vec::new();
-
-        // check cache first, if the cache is set
-        // NOTE: we need to query a list of comps with the same (input, num_comps, retries) tuple
-
-        if let Some(cache) = &self.cache {
-            let mut cache = cache.lock().await;
-            let cached_completions = cache.retrieve(&query).unwrap();
-            if let Some(cached_completions) = cached_completions {
-                filtered_completions
-                    .lock()
-                    .await
-                    .extend(cached_completions.into_iter().map(|c| (c, 0)));
-                query.retries = 0; // so we don't make any requests to codex
-            }
-        }
-
-        while query.retries > 0 {
-            handles.push(self.spawn_comp_req(&query, filtered_completions.clone()));
-            query.retries -= 1;
-        }
-
-        let mut rate_limit = false;
-
-        for handle in handles {
-            let res = handle.await.unwrap();
-            if let Err(e) = res {
-                if let CompletionError::ErrorResponse(EditRespError::RateLimited { message: msg }) =
-                    &e
-                {
-                    println!("Rate limited by codex. {msg}");
-                    rate_limit = true;
-                } else {
-                    println!("Error in completion thread: {e:?}");
-                }
-            }
-        }
-
-        // sort the vec by score, low..high
-        filtered_completions
-            .lock()
-            .await
-            .sort_by(|(_, s1), (_, s2)| s1.cmp(s2));
-
-        let mut final_completions = filtered_completions
-            .lock()
-            .await
-            .iter()
-            .map(|(c, i)| Completion {
-                code: c.to_string(),
-                score: *i,
-                fallbacked: false,
-            })
-            .collect::<Vec<Completion>>();
-
-        if query.fallback {
-            // NOTE: we add the fallback despite the type score limit
-            final_completions.push(Completion {
-                code: query
-                    .input
-                    .replace(HOLE_IDENTIFIER, &self.lang_server.any_type()),
-                score: 1000,
-                fallbacked: true,
-            });
-        }
-
-        if rate_limit {
-            // if we rate limit, we still want to return the completions we have (may not have any)
-            return Err(CompletionError::RateLimit(final_completions));
-        }
-
-        // if we have no completions, we return an error
-        if final_completions.is_empty() {
-            return Err(CompletionError::CodexCouldNotComplete);
-        }
-
-        // print out scores
-        print!("Score(s): ");
-        let lock = filtered_completions.lock().await;
-        for (i, (_, score)) in lock.iter().enumerate() {
-            print!("{score}");
-            if i != lock.len() - 1 {
-                print!(", ");
-            }
-        }
-        println!();
-
-        Ok(final_completions)
-    }
-
-    /// Gets the language server object from the codex client
-    fn get_ls(&self) -> Arc<dyn LangServer + Send + Sync> {
-        self.lang_server.clone()
-    }
-
-    /// Gets a mutex guard to the cache from the codex client, if a cache is being used
-    async fn get_cache(&self) -> Option<tokio::sync::MutexGuard<Cache>> {
-        if let Some(cache) = &self.cache {
-            Some(cache.lock().await)
-        } else {
-            None
-        }
-    }
-}
-
-impl CodexClient {
+impl CompletionModel for CodexClient {
     /// Spawns a task that sends the completion requests to codex
-    fn spawn_comp_req(
+    fn spawn_comp(
         &self,
         query: &CompletionQuery,
+        engine: &dyn CompletionEngine,
         filtered_completions: Arc<Mutex<Vec<(String, u16)>>>,
-    ) -> JoinHandle<Result<(), CompletionError>> {
+    ) -> JoinHandle<Result<(), ModelResponseError>> {
         // clones for the closure
 
         // from self:
-        let lang_client = self.lang_server.clone();
+        let lang_client = engine.get_ls();
         let client = self.client.clone(); // NOTE: reqwest uses Arc internally
-        let endpoint = self.endpoint.clone();
-        let temp = self.temperature;
+        let endpoint = engine
+            .get_endpoint()
+            .unwrap_or_else(|| "https://api.openai.com/v1/edits".to_string());
+        let temp = engine.get_temperature();
         let rl = self.rate_limiter.clone();
-        let max_type_score = self.max_type_score;
+        let max_type_score = engine.get_max_type_score();
 
         // from query:
         let num_comps = query.num_comps;
@@ -355,11 +186,11 @@ impl CodexClient {
             let body = res.text().await?;
             let choices: Vec<EditRespChoice> = match serde_json::from_str::<EditResp>(&body) {
                 Ok(EditResp::Choices { choices }) => choices,
-                Ok(EditResp::Error { error }) => return Err(CompletionError::ErrorResponse(error)),
+                Ok(EditResp::Error { error }) => return Err(error.into()),
                 Err(e) => {
                     eprintln!("Error parsing response from codex: {e}");
                     eprintln!("Response: {body}");
-                    return Err(CompletionError::CodexCouldNotComplete);
+                    return Err(ModelResponseError::CouldNotComplete);
                 }
             };
 
@@ -374,32 +205,15 @@ impl CodexClient {
                     }
                 };
 
-                // check first if it's duplicate in our filtered completions
-                if filtered_completions
-                    .lock()
-                    .await
-                    .iter()
-                    .any(|(c, _)| c == &text)
-                {
-                    continue;
-                }
-
-                let (problems, score) =
-                    lang_client
-                        .check_complete(&input, &text)
-                        .await
-                        .map_err(|e| {
-                            println!("Error checking completion: {e}");
-                            CompletionError::CodexCouldNotComplete
-                        })?;
-
-                // we don't want completions with higher type score than the max
-                if problems.iter().all(|p| problem_whitelist.contains(p)) && score <= max_type_score
-                {
-                    filtered_completions.lock().await.push((text, score));
-                } else {
-                    debug!("Filtered out completion (Problems: {problems:?}):\n{text}");
-                }
+                filter_comps(
+                    filtered_completions.clone(),
+                    lang_client.clone(),
+                    &input,
+                    text,
+                    problem_whitelist.clone(),
+                    max_type_score,
+                )
+                .await?;
             }
 
             Ok(())
@@ -437,6 +251,15 @@ pub enum EditRespError {
     InvalidEdit { message: String },
     #[serde(rename = "requests")]
     RateLimited { message: String },
+}
+
+impl From<EditRespError> for ModelResponseError {
+    fn from(e: EditRespError) -> Self {
+        match e {
+            EditRespError::InvalidEdit { message } => ModelResponseError::InvalidResponse(message),
+            EditRespError::RateLimited { message } => ModelResponseError::RateLimited(message),
+        }
+    }
 }
 
 impl std::fmt::Display for EditRespError {

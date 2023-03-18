@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use opentau::{
-    completion::{codex::CodexClientBuilder, CompletionEngine},
+    completion::{codex::CodexClientBuilder, CompletionClientBuilder, CompletionEngine},
     langserver::{ts::TsServer, LangServer},
 };
 
@@ -27,7 +27,8 @@ async fn main() {
         .to_string();
 
     let lang_server = Arc::new(TsServer::make(&client_path).await.unwrap());
-    let codex = CodexClientBuilder::new(vec![token], lang_server).build();
+    let codex = Arc::new(CodexClientBuilder::new(vec![token]).build());
+    let engine = CompletionClientBuilder::new(lang_server, codex).build();
 
     // {
     // let printed = codex
@@ -89,13 +90,13 @@ async fn main() {
 
     // testing out "object_info"
     //{
-        //let object_info = codex.get_ls().object_info(&input).await.unwrap();
-        //println!("object_info: {object_info:#?}");
+    //let object_info = codex.get_ls().object_info(&input).await.unwrap();
+    //println!("object_info: {object_info:#?}");
     //}
 
     // test "typedef_gen"
     {
-        let typedef_gen_template = codex.get_ls().typedef_gen(&input).await.unwrap();
+        let typedef_gen_template = engine.get_ls().typedef_gen(&input).await.unwrap();
         println!("typedef_gen:\n{}", typedef_gen_template);
     }
 }

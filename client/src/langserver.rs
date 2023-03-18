@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::{tree::CodeBlockTree, typedef_gen::ObjectInfoMap};
 mod abstraction; // the socket abstraction
@@ -182,7 +183,7 @@ pub struct LSWeaveReq {
 
 /// Request to the language server, for the usages command.
 /// in the format of {cmd: "the-cmd", text: "the-outer-block",
-///                   innerBlcok: "the-inner-block"}
+///                   innerBlock: "the-inner-block"}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LSUsagesReq {
     pub cmd: String,
@@ -191,11 +192,15 @@ pub struct LSUsagesReq {
     pub inner_block: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Error)]
 pub enum LangServerError {
+    #[error("Language client error: {0}")]
     LC(String), // actual error from the language client
+    #[error("Could not spawn language server")]
     ProcessSpawn,
+    #[error("Socket connection error")]
     SocketConnect,
+    #[error("Socket IO error")]
     SocketIO,
 }
 
@@ -204,19 +209,6 @@ impl From<std::io::Error> for LangServerError {
         LangServerError::SocketIO
     }
 }
-
-impl std::fmt::Display for LangServerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            LangServerError::LC(s) => write!(f, "Language client error: {s}"),
-            LangServerError::ProcessSpawn => write!(f, "could not spawn language server"),
-            LangServerError::SocketConnect => write!(f, "Socket connection error"),
-            LangServerError::SocketIO => write!(f, "Socket IO error"),
-        }
-    }
-}
-
-impl std::error::Error for LangServerError {}
 
 /// Implements the LangServerCommands trait for a given language server.
 ///
