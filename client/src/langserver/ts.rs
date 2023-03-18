@@ -78,3 +78,37 @@ impl LangServer for TsServer {
 
 // implement the LangServerCommands trait
 impl_langserver_commands!(TsServer);
+
+#[cfg(feature = "tsparser")]
+async fn ts_parse_type(input: String) -> Option<String> {
+    use swc_common::sync::Lrc;
+    use swc_common::{FileName, SourceMap, Spanned};
+    use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax};
+    let mut input = String::new();
+    input = input.trim().to_string();
+
+    let cm: Lrc<SourceMap> = Default::default();
+
+    let fm = cm.new_source_file(FileName::Anon, input);
+
+    let string_input = StringInput::from(&*fm);
+    let lexer = Lexer::new(
+        Syntax::Typescript(Default::default()),
+        Default::default(),
+        string_input,
+        None,
+    );
+
+    let mut parser = Parser::new_from(lexer);
+    match parser.parse_type() {
+        Err(_) => None,
+        Ok(typ) => {
+            if !parser.take_errors().is_empty() {
+                return None;
+            }
+            let hi: usize = typ.span_hi().0.try_into().unwrap();
+            let input_prefix = &fm.src[..hi - 1];
+            Some(input_prefix.trim().to_string())
+        }
+    }
+}

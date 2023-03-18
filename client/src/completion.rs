@@ -10,9 +10,8 @@ use crate::{
     langserver::{ArcLangServer, CheckProblem, LangServer, LangServerError},
 };
 
-use self::codex::EditRespError;
-
 pub mod codex;
+pub mod incoder;
 
 /// This is the trait that defines operations on the completion engine (Codex, incoder, santacoder,
 /// etc..). The completion engine is coupled with the language server.

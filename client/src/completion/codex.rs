@@ -3,17 +3,9 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tokio::{sync::Mutex, task::JoinHandle};
 
-use crate::{
-    cache::Cache,
-    completion::filter_comps,
-    debug,
-    langserver::{ArcLangServer, LangServer},
-};
+use crate::completion::filter_comps;
 
-use super::{
-    Completion, CompletionEngine, CompletionError, CompletionModel, CompletionQuery,
-    ModelResponseError, INSTRUCTIONS,
-};
+use super::{CompletionEngine, CompletionModel, CompletionQuery, ModelResponseError, INSTRUCTIONS};
 
 mod rl {
     use dashmap::DashMap;
