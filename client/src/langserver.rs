@@ -4,9 +4,8 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{tree::CodeBlockTree, typedef_gen::ObjectInfoMap};
+use crate::{socket::SocketError, tree::CodeBlockTree, typedef_gen::ObjectInfoMap};
 
-mod abstraction; // the socket abstraction
 pub mod py; // the python server
 pub mod ts; // the typescript server
 
@@ -199,15 +198,16 @@ pub enum LangServerError {
     LC(String), // actual error from the language client
     #[error("Could not spawn language server")]
     ProcessSpawn,
-    #[error("Socket connection error")]
-    SocketConnect,
     #[error("Socket IO error")]
     SocketIO,
 }
 
-impl From<std::io::Error> for LangServerError {
-    fn from(_: std::io::Error) -> Self {
-        LangServerError::SocketIO
+impl From<SocketError> for LangServerError {
+    fn from(e: SocketError) -> Self {
+        match e {
+            SocketError::Io(_) | SocketError::Serde(_) => LangServerError::SocketIO,
+            SocketError::Service(s) => LangServerError::LC(s),
+        }
     }
 }
 

@@ -1,10 +1,9 @@
 use serde::Serialize;
+use thiserror::Error;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt},
     net::UnixStream,
 };
-
-use super::LangServerError;
 
 #[derive(Debug)]
 pub struct SocketAbstraction {
@@ -12,26 +11,36 @@ pub struct SocketAbstraction {
     pub process: tokio::process::Child,
 }
 
+#[derive(Debug, Error)]
+pub enum SocketError {
+    #[error("IO error: {0}")]
+    Io(#[from] tokio::io::Error),
+    #[error("JSON error: {0}")]
+    Serde(#[from] serde_json::Error),
+    #[error("Service error: {0}")]
+    Service(String),
+}
+
 impl SocketAbstraction {
-    pub async fn send_req<T>(&self, req: &T) -> Result<serde_json::Value, LangServerError>
+    pub async fn send_req<T>(&self, req: &T) -> Result<serde_json::Value, SocketError>
     where
         T: ?Sized + Serialize,
     {
         let buf = socket_transaction(&self.socket_path, &req).await?;
 
         // into json object
-        let resp: serde_json::Value = serde_json::from_str(&buf).unwrap();
+        let resp: serde_json::Value = serde_json::from_str(&buf)?;
 
         // check if the response is not an error
         if resp["type"] == "error" {
-            return Err(LangServerError::LC(resp["message"].to_string()));
+            return Err(SocketError::Service(resp["message"].to_string()));
         }
 
         Ok(resp)
     }
 }
 
-pub async fn socket_transaction<T>(socket_path: &str, req: &T) -> Result<String, LangServerError>
+pub async fn socket_transaction<T>(socket_path: &str, req: &T) -> Result<String, SocketError>
 where
     T: ?Sized + Serialize,
 {

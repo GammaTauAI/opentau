@@ -85,7 +85,7 @@ mod rl {
 #[derive(Clone)]
 pub struct CodexClient {
     // the reqwest client used to send requests to codex
-    pub client: reqwest::Client,
+    client: reqwest::Client,
     // The rate limited token pool, that produces the token used for this client
     rate_limiter: rl::RateLimitedTokenPool,
 }

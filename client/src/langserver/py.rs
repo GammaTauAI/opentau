@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 
-use crate::{impl_langserver_commands};
+use crate::{impl_langserver_commands, socket::SocketAbstraction};
 
-use super::{abstraction::SocketAbstraction, LangServer, LangServerError};
+use super::{LangServer, LangServerError};
 
 #[derive(Debug)]
 pub struct PyServer {
