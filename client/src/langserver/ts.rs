@@ -15,47 +15,10 @@ pub struct TsServer {
 #[async_trait]
 impl LangServer for TsServer {
     async fn make(server_path: &str) -> Result<Self, LangServerError> {
-        let pid = std::process::id();
-        let tmp_dir = std::env::temp_dir();
-        let tmp_socket_file = tmp_dir.join(format!("opentau-ls-{pid}.sock"));
-        debug!("tmp_socket_file: {:?}", tmp_socket_file);
-
-        let mut process = match tokio::process::Command::new("npm")
-            .args([
-                "--prefix",
-                server_path,
-                "start",
-                tmp_socket_file.to_str().unwrap(),
-                pid.to_string().as_str(),
-            ])
-            .stdout(Stdio::piped())
-            // stderr is open by default, we want to see the output
-            .spawn()
-        {
-            Ok(p) => p,
-            Err(_) => return Err(LangServerError::ProcessSpawn),
-        };
-
-        // before allowing to connect, wait for the process to output "Listening"
-        {
-            let stdout = process.stdout.as_mut().unwrap();
-            let reader = tokio::io::BufReader::new(stdout);
-            let mut lines = reader.lines();
-            debug!("client output:");
-            while let Some(line) = lines.next_line().await.unwrap() {
-                debug!("{}", line);
-                if line.contains("Listening") {
-                    break;
-                }
-            }
-        }
-
-        debug!("client ready to connect to socket!");
-        let socket_path = tmp_socket_file.to_str().unwrap().to_string();
-        let socket = SocketAbstraction {
-            socket_path,
-            process,
-        };
+        let args = ["npm", "--prefix", server_path, "start"];
+        let socket = SocketAbstraction::spawn_server("typescript", &args, true)
+            .await
+            .map_err(|_| LangServerError::ProcessSpawn)?;
         Ok(Self { socket })
     }
 
