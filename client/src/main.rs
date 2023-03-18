@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use opentau::{
+    get_path_from_rootdir,
     cache::Cache,
     completion::Completion,
     completion::{codex::CodexClientBuilder, ArcCompletionEngine, CompletionClientBuilder},
@@ -98,18 +99,9 @@ struct Args {
 
 impl Args {
     async fn lang_client_factory(&self) -> ArcLangServer {
-        fn get_path(folder: String) -> String {
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .parent()
-                .unwrap()
-                .join(folder)
-                .to_str()
-                .unwrap()
-                .to_string()
-        }
         match self.lang.as_str() {
             "ts" => {
-                let path = get_path("ts-compiler".to_string());
+                let path = get_path_from_rootdir("ts-compiler".to_string());
                 Arc::new(
                     TsServer::make(&path)
                         .await
@@ -117,7 +109,7 @@ impl Args {
                 )
             }
             "py" => {
-                let path = get_path("py-ast".to_string());
+                let path = get_path_from_rootdir("py-ast".to_string());
                 Arc::new(
                     PyServer::make(&path)
                         .await
