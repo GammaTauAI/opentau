@@ -67,7 +67,7 @@ pub struct CompletionQuery {
     pub input: String,
     /// The numbers of completions to return, per request
     pub num_comps: usize,
-    /// The number of requests to make to codex, which may create duplicates, we filter these out.
+    /// The number of requests to make to the engine, which may create duplicates, we filter these out.
     pub retries: usize,
     /// Whether to include a completion that has `any` as the type of all holes.
     pub fallback: bool,

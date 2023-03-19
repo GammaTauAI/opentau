@@ -143,7 +143,7 @@ pub trait LangServer: LangServerCommands {
 
 pub type ArcLangServer = Arc<dyn LangServer + Send + Sync>;
 
-/// Request to the language server, with a given command and text
+/// Request to the language server with a given command and text
 /// in the format of {cmd: "the-cmd", text: "the-text"}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LSReq {
@@ -151,7 +151,7 @@ pub struct LSReq {
     pub text: String,
 }
 
-/// Request to the language server, for the printer command.
+/// Request to the language server for the printer command.
 /// in the format of {cmd: "the-cmd", text: "the-text", typeName: "the-type-name"}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LSPrintReq {
@@ -161,7 +161,7 @@ pub struct LSPrintReq {
     pub type_name: String,
 }
 
-/// Request to the language server, for the check command.
+/// Request to the language server for the check command.
 /// in the format of {cmd: "the-cmd", text: "the-completed-text", original: "the-original-text"}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LSCheckReq {
@@ -170,7 +170,7 @@ pub struct LSCheckReq {
     pub original: String,
 }
 
-/// Request to the language server, for the weave command.
+/// Request to the language server for the weave command.
 /// in the format of {cmd: "the-cmd", text: "the-original-text",
 ///                   nettle: "the-nettle-text", level: 0}
 #[derive(Debug, Clone, Serialize, Deserialize)]
