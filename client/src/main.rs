@@ -35,7 +35,7 @@ struct Args {
     output: String,
 
     /// Completion strategy. Either: {"simple": simple completion, "tree": tree completion}
-    #[clap(short, long, value_parser, default_value = "simple")]
+    #[clap(short, long, value_parser, default_value = "tree")]
     strategy: String,
 
     /// The number of completions to return
