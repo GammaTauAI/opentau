@@ -86,9 +86,8 @@ fn permutations(input: Vec<Vec<String>>) -> Vec<Vec<String>> {
     output
 }
 
-#[async_trait]
 impl CompletionModel for IncoderClient {
-    async fn spawn_comp(
+    fn spawn_comp(
         &self,
         query: &CompletionQuery,
         engine: &dyn CompletionEngine,
@@ -105,7 +104,8 @@ impl CompletionModel for IncoderClient {
             retries: query.num_comps,
         };
 
-        let resp = self.socket.send_req(&req).await?;
+        tokio::task::spawn(async move {
+        let resp: serde_json::Value = self.socket.send_req(&req).await.map_err(|e| ModelResponseError::InvalidResponse(e.to_string()))?;
         // the response is a base64 encoded string of a list of list of strings
         let decoded = base64::decode(resp).unwrap();
         let type_annotations_raw: Vec<Vec<String>> = serde_json::from_str(&decoded).unwrap();
@@ -115,7 +115,7 @@ impl CompletionModel for IncoderClient {
             let mut type_annotation_choices = Vec::new();
             for type_annotation_raw in type_annotation_choices_raw.into_iter() {
                 // parse the type annotations
-                let type_annotation = langserver::ts::ts_parse_type(&type_annotation_raw).unwrap();
+                let type_annotation = langserver::ts::ts_parse_type(&type_annotation_raw).await.unwrap();
                 type_annotation_choices.push(type_annotation);
             }
             type_annotations.push(type_annotation_choices);
@@ -146,6 +146,6 @@ impl CompletionModel for IncoderClient {
             .await?;
         }
         Ok(())
-
+        })
     }
 }
