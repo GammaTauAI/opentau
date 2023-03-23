@@ -58,7 +58,12 @@ impl Default for IncoderClientBuilder {
 }
 
 /// Request to the incoder server with a given command and text
-/// in the format of {code: <code>, retries: <number of retries>}
+/// in the format of
+/// {
+///     code: <code>,
+///     samples: <number of samples>,
+///     should_infill_single: <bool>,
+/// }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IncoderSocketReq {
     pub code: String,
@@ -93,60 +98,53 @@ impl CompletionModel for IncoderClient {
         };
         tokio::task::spawn(async move {
             let resp: serde_json::Value = self.socket.send_req(&req).await.map_err(|e| ModelResponseError::InvalidResponse(e.to_string()))?;
-        });
-        let decoded = base64::decode(resp).unwrap();
-        let all_choices: Vec<Vec<String>> = serde_json::from_str(&decoded).unwrap();
-        let all_choices_parsed = Vec::with_capacity(num_comps);
-        for type_annotation_choices_raw in all_choices.into_iter() {
-            let type_annotation_choices = Vec::new();
-            for type_annotation_choice_raw in type_annotation_choices_raw.into_iter() {
-                let type_annotation_choice = langserver::ts::ts_parse_type(&type_annotation_raw).await.unwrap();
-                type_annotation_choices.push(type_annotation_choice);
-            }
-            let type_annotation_choice = langserver::ts::ts_parse_type(&type_annotation_raw).await.unwrap();
-            type_annotation_choices.push(type_annotation_choice);
-        }
-
-        // loop until there are no more _hole_'s in the code
-        // - for first _hole_, we ask for `num_comps` samples
-        // - for subsequent _hole_'s, we ask for 1 samples
-        let mut cur_hole_idx = 0;
-        while code.contains("_hole_") {
-            // use 1 line if statement for num_samples
-            let req = IncoderSocketReq {
-                code: base64::encode(&code),
-                num_samples: if cur_hole_idx == 0 { num_comps } else { 1 },
-                should_infill_single: cur_hole_idx == 0,
-            };
-            tokio::task::spawn(async move {
-                let resp: serde_json::Value = self.socket.send_req(&req).await.map_err(|e| ModelResponseError::InvalidResponse(e.to_string()))?;
-            });
             let decoded = base64::decode(resp).unwrap();
-            let type_annotation_choices_raw: Vec<String> = serde_json::from_str(&decoded).unwrap();
-
-            // parse the type annotations
-            let type_annotation_choices = Vec::new();
-            for type_annotation_choice_raw in type_annotation_choices_raw.into_iter() {
-                let type_annotation_choice = langserver::ts::ts_parse_type(&type_annotation_raw).await.unwrap();
-                type_annotation_choices.push(type_annotation_choice);
+            let all_choices: Vec<Vec<String>> = serde_json::from_str(&decoded).unwrap();
+            // track index too
+            for (i, choices) in all_choices.iter().enumerate() {
+                // always length of 1
+                if let Some(choice) = choices.get(0) {
+                    let type_annotation_choice = langserver::ts::ts_parse_type(choice.to_string()).await.unwrap();
+                    // replace the first occurrence of "_hole_" in completions[i] with the type annotation
+                    completions[i] = completions[i].replacen("_hole_", &type_annotation_choice, 1);
+                    
+                }
+                // substitute the first occurrence of _hole_ with the type annotation
             }
 
-            // substitute the type annotations
-        }
-            
+            // loop until there are no more _hole_'s in the code
+            // - for subsequent _hole_'s, we ask for 1 sample
+            let mut cur_infill_count = 1;
+            while cur_infill_count < num_holes {
+                let req = IncoderSocketReq {
+                    code: base64::encode(&code),
+                    num_samples: 1,
+                    should_infill_single: true,
+                };
+                let resp: serde_json::Value = self.socket.send_req(&req).await.map_err(|e| ModelResponseError::InvalidResponse(e.to_string()))?;
+                let decoded = base64::decode(resp).unwrap();
+                let type_annotation_choices_raw: Vec<String> = serde_json::from_str(&decoded).unwrap();
+                for (i, type_annotation_choice_raw) in type_annotation_choices_raw.iter().enumerate() {
+                    if let type_annotation_choice = langserver::ts::ts_parse_type(type_annotation_choice_raw.to_string()).await.unwrap() {
+                    completions[i] = completions[i].replacen("_hole_", type_annotation_choice_raw, 1);
+                    }
+                }
 
-        for completion in completions.into_iter() {
-            filter_comps(
-                filtered_completions.clone(),
-                lang_client.clone(),
-                &code,
-                completion,
-                problem_whitelist.clone(),
-                max_type_score
-            )
-            .await?;
-        }
-        Ok(())
+            }
+
+            for completion in completions.into_iter() {
+                filter_comps(
+                    filtered_completions.clone(),
+                    lang_client.clone(),
+                    &code,
+                    completion,
+                    problem_whitelist.clone(),
+                    max_type_score
+                )
+                .await?;
+            }
+
+            Ok(())
         })
     }
 }

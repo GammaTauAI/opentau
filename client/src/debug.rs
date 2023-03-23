@@ -48,16 +48,16 @@ async fn main() {
     // }
 
     // testing out "naive tree"
-    // {
-    // let tree = codex.get_ls().to_tree(&input).await.unwrap();
-    // let mut naive: NaiveCompletionLevels = NaiveCompletionLevels::prepare(tree, codex.get_ls())
-    // .await
-    // .unwrap();
-    // println!("tree: {:#?}", naive);
-    // let codex = codex.clone();
-    // naive.tree_complete(codex).await;
-    // println!("root comp:\n {}", naive.levels[0].nodes[0].code);
-    // }
+     //{
+     //let tree = codex.get_ls().to_tree(&input).await.unwrap();
+     //let mut naive: NaiveCompletionLevels = NaiveCompletionLevels::prepare(tree, codex.get_ls())
+     //.await
+     //.unwrap();
+     //println!("tree: {:#?}", naive);
+     //let codex = codex.clone();
+     //naive.tree_complete(codex).await;
+     //println!("root comp:\n {}", naive.levels[0].nodes[0].code);
+     //}
 
     // testing out "tree v2"
     // {
