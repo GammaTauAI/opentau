@@ -51,59 +51,19 @@ impl IncoderClientBuilder {
     }
 }
 
-<<<<<<< HEAD
+impl Default for IncoderClientBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Request to the incoder server with a given command and text
 /// in the format of {code: <code>, retries: <number of retries>}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IncoderSocketReq {
     pub code: String,
-    pub retries: usize,
-}
-
-fn permutations(input: Vec<Vec<String>>) -> Vec<Vec<String>> {
-    let m = input[0].len();
-    let mut output = Vec::new();
-    let mut unique_strings = HashSet::new();
-
-    for i in 0..m {
-        let mut temp = Vec::new();
-        for j in 0..input.len() {
-            let current_string = input[j][i].clone();
-            temp.push(current_string);
-        }
-        temp.sort();
-        unique_strings.extend(temp.clone());
-
-        if i == m - 1 {
-            let mut all_permutations = unique_strings.into_iter().permutations(m).collect::<Vec<_>>();
-            for permutation in all_permutations.iter_mut() {
-                permutation.sort();
-            }
-            all_permutations.sort();
-
-            for permutation in all_permutations {
-                let mut new_row = Vec::new();
-                for j in 0..m {
-                    let mut new_string = String::new();
-                    for k in 0..input.len() {
-                        if input[k][j] == permutation[j] {
-                            new_string = input[k][j].clone();
-                            break;
-                        }
-                    }
-                    new_row.push(new_string);
-                }
-                output.push(new_row);
-            }
-        }
-    }
-    output
-=======
-impl Default for IncoderClientBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
->>>>>>> main
+    pub num_samples: usize,
+    pub should_infill_single: bool,
 }
 
 impl CompletionModel for IncoderClient {
@@ -117,42 +77,63 @@ impl CompletionModel for IncoderClient {
         let temp = engine.get_temperature();
         let max_type_score = engine.get_max_type_score();
         let num_comps = query.num_comps;
-        let code = query.input.clone();
+        let mut code = query.input.clone();
         let problem_whitelist = query.problem_whitelist.clone();
+
+        // count the number of _hole_'s in the code
+        let num_holes = code.matches("_hole_").count();
+
+        // vec of num_comps copies of the code
+        let mut completions = vec![code.clone(); num_holes];
+
         let req = IncoderSocketReq {
             code: base64::encode(&code),
-            retries: query.num_comps,
+            num_samples: num_comps,
+            should_infill_single: true,
         };
-
         tokio::task::spawn(async move {
-        let resp: serde_json::Value = self.socket.send_req(&req).await.map_err(|e| ModelResponseError::InvalidResponse(e.to_string()))?;
-        // the response is a base64 encoded string of a list of list of strings
+            let resp: serde_json::Value = self.socket.send_req(&req).await.map_err(|e| ModelResponseError::InvalidResponse(e.to_string()))?;
+        });
         let decoded = base64::decode(resp).unwrap();
-        let type_annotations_raw: Vec<Vec<String>> = serde_json::from_str(&decoded).unwrap();
+        let all_choices: Vec<Vec<String>> = serde_json::from_str(&decoded).unwrap();
+        let all_choices_parsed = Vec::with_capacity(num_comps);
+        for type_annotation_choices_raw in all_choices.into_iter() {
+            let type_annotation_choices = Vec::new();
+            for type_annotation_choice_raw in type_annotation_choices_raw.into_iter() {
+                let type_annotation_choice = langserver::ts::ts_parse_type(&type_annotation_raw).await.unwrap();
+                type_annotation_choices.push(type_annotation_choice);
+            }
+            let type_annotation_choice = langserver::ts::ts_parse_type(&type_annotation_raw).await.unwrap();
+            type_annotation_choices.push(type_annotation_choice);
+        }
 
-        let type_annotations = Vec::new();
-        for type_annotation_choices_raw in type_annotations_raw.into_iter() {
-            let mut type_annotation_choices = Vec::new();
-            for type_annotation_raw in type_annotation_choices_raw.into_iter() {
-                // parse the type annotations
-                let type_annotation = langserver::ts::ts_parse_type(&type_annotation_raw).await.unwrap();
-                type_annotation_choices.push(type_annotation);
+        // loop until there are no more _hole_'s in the code
+        // - for first _hole_, we ask for `num_comps` samples
+        // - for subsequent _hole_'s, we ask for 1 samples
+        let mut cur_hole_idx = 0;
+        while code.contains("_hole_") {
+            // use 1 line if statement for num_samples
+            let req = IncoderSocketReq {
+                code: base64::encode(&code),
+                num_samples: if cur_hole_idx == 0 { num_comps } else { 1 },
+                should_infill_single: cur_hole_idx == 0,
+            };
+            tokio::task::spawn(async move {
+                let resp: serde_json::Value = self.socket.send_req(&req).await.map_err(|e| ModelResponseError::InvalidResponse(e.to_string()))?;
+            });
+            let decoded = base64::decode(resp).unwrap();
+            let type_annotation_choices_raw: Vec<String> = serde_json::from_str(&decoded).unwrap();
+
+            // parse the type annotations
+            let type_annotation_choices = Vec::new();
+            for type_annotation_choice_raw in type_annotation_choices_raw.into_iter() {
+                let type_annotation_choice = langserver::ts::ts_parse_type(&type_annotation_raw).await.unwrap();
+                type_annotation_choices.push(type_annotation_choice);
             }
-            type_annotations.push(type_annotation_choices);
+
+            // substitute the type annotations
         }
-        let type_annotation_permutations: Vec<Vec<String>> = permutations(type_annotations);
-        
-        let mut completions = Vec::new();
-        for type_annotation_permutation in type_annotation_permutations.into_iter() {
-            let mut new_code = code.clone();
-            for type_annotation in type_annotation_permutation {
-                // replace the first occurrence of "_hole_" with the type annotation
-                if let Some(index) = new_code.find("_hole_") {
-                    new_code.replace_range(index..index + type_annotation.len(), &type_annotation);
-                }
-            }
-            completions.push(new_code);
-        }
+            
 
         for completion in completions.into_iter() {
             filter_comps(
