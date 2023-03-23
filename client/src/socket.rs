@@ -10,7 +10,7 @@ use crate::debug;
 #[derive(Debug)]
 pub struct SocketAbstraction {
     pub socket_path: String,
-    pub process: tokio::process::Child,
+    pub process: Option<tokio::process::Child>,
 }
 
 #[derive(Debug, Error)]
@@ -24,11 +24,23 @@ pub enum SocketError {
 }
 
 impl SocketAbstraction {
+    /// Creates a new socket abstraction, does not spawn a process for it.
+    /// The socket path is the path to the socket file, so we assume a
+    /// server is already running.
+    pub fn new(socket_path: String) -> Self {
+        Self {
+            socket_path,
+            process: None,
+        }
+    }
+
+    /// Sends the given request to the server and returns the response as a JSON object.
+    /// Expects the response to have a `type` field, and if it is `error`, returns an error.
     pub async fn send_req<T>(&self, req: &T) -> Result<serde_json::Value, SocketError>
     where
         T: ?Sized + Serialize,
     {
-        let buf = socket_transaction(&self.socket_path, &req).await?;
+        let buf = self.socket_transaction(&req).await?;
 
         // into json object
         let resp: serde_json::Value = serde_json::from_str(&buf)?;
@@ -41,6 +53,9 @@ impl SocketAbstraction {
         Ok(resp)
     }
 
+    /// Spawns a new server process and returns a socket abstraction for it.
+    /// The server command prefix is the prefix of the command to spawn the server.
+    /// Does not include the last two args, which are the socket path and pid (optional).
     pub async fn spawn_server(
         name: &str,
         // This is the prefix of the command to spawn the server.
@@ -88,24 +103,24 @@ impl SocketAbstraction {
         let socket_path = tmp_socket_file.to_str().unwrap().to_string();
         let socket = SocketAbstraction {
             socket_path,
-            process,
+            process: Some(process),
         };
         Ok(socket)
     }
-}
 
-pub async fn socket_transaction<T>(socket_path: &str, req: &T) -> Result<String, SocketError>
-where
-    T: ?Sized + Serialize,
-{
-    let mut stream = UnixStream::connect(socket_path).await?;
-    let req = serde_json::to_string(req).unwrap();
+    async fn socket_transaction<T>(&self, req: &T) -> Result<String, SocketError>
+    where
+        T: ?Sized + Serialize,
+    {
+        let mut stream = UnixStream::connect(self.socket_path.to_string()).await?;
+        let req = serde_json::to_string(req).unwrap();
 
-    stream.write_all(req.as_bytes()).await?;
-    stream.shutdown().await?;
+        stream.write_all(req.as_bytes()).await?;
+        stream.shutdown().await?;
 
-    let mut reader = tokio::io::BufReader::new(&mut stream);
-    let mut buf = String::new();
-    reader.read_line(&mut buf).await?;
-    Ok(buf)
+        let mut reader = tokio::io::BufReader::new(&mut stream);
+        let mut buf = String::new();
+        reader.read_line(&mut buf).await?;
+        Ok(buf)
+    }
 }

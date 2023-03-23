@@ -35,7 +35,7 @@ struct Args {
     output: String,
 
     /// Completion strategy. Either: {"simple": simple completion, "tree": tree completion}
-    #[clap(short, long, value_parser, default_value = "simple")]
+    #[clap(short, long, value_parser, default_value = "tree")]
     strategy: String,
 
     /// The number of completions to return
@@ -54,7 +54,8 @@ struct Args {
     #[clap(short, long, value_parser, default_value = "codex")]
     engine: String,
 
-    /// The url of the completion engine endpoint (if the engine is online)
+    /// The url or file path to the completion engine. If this is an online engine, it
+    /// may be a url. If it is a local engine, it may be a file path to a socket.
     #[clap(long, value_parser)]
     endpoint: Option<String>,
 

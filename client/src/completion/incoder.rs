@@ -20,15 +20,28 @@ pub struct IncoderClient {
 }
 
 pub struct IncoderClientBuilder {
-    socket_path: String,
+    socket_path: Option<String>,
 }
 
 impl IncoderClientBuilder {
-    pub fn new(socket_path: String) -> Self {
-        Self { socket_path }
+    pub fn new() -> Self {
+        Self { socket_path: None }
+    }
+
+    pub fn socket_path(mut self, socket_path: String) -> Self {
+        self.socket_path = Some(socket_path);
+        self
     }
 
     pub async fn build(self) -> Result<IncoderClient, ModelResponseError> {
+        // if we have a socket path, use that
+        if let Some(socket_path) = self.socket_path {
+            return Ok(IncoderClient {
+                socket: SocketAbstraction::new(socket_path),
+            });
+        };
+
+        // otherwise, we spawn a new server
         let incoder_path = get_path_from_rootdir("incoder-server".to_string());
         let server_command_prefix = vec!["python3", &incoder_path];
         let socket = SocketAbstraction::spawn_server("incoder", &server_command_prefix, false)
@@ -38,6 +51,7 @@ impl IncoderClientBuilder {
     }
 }
 
+<<<<<<< HEAD
 /// Request to the incoder server with a given command and text
 /// in the format of {code: <code>, retries: <number of retries>}
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -84,6 +98,12 @@ fn permutations(input: Vec<Vec<String>>) -> Vec<Vec<String>> {
         }
     }
     output
+=======
+impl Default for IncoderClientBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+>>>>>>> main
 }
 
 impl CompletionModel for IncoderClient {
