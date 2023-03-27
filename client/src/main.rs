@@ -3,7 +3,7 @@ use std::sync::Arc;
 use opentau::{
     get_path_from_rootdir,
     cache::Cache,
-    completion::Completion,
+    completion::{Completion, incoder::IncoderClientBuilder, ArcCompletionModel},
     completion::{codex::CodexClientBuilder, ArcCompletionEngine, CompletionClientBuilder},
     langserver::{py::PyServer, ts::TsServer, ArcLangServer, LangServer},
     main_strategies::{MainCtx, MainStrategy, SimpleStrategy, TreeStrategy},
@@ -124,12 +124,13 @@ impl Args {
         }
     }
 
-    fn completion_engine_factory(
+    async fn completion_engine_factory(
         &self,
         ls: ArcLangServer,
         cache: Option<Arc<Mutex<Cache>>>,
     ) -> ArcCompletionEngine {
-        let model = match self.engine.as_str() {
+        let model: ArcCompletionModel
+            = match self.engine.as_str() {
             "codex" => {
                 if self.tokens.is_none() {}
                 let tokens = self
@@ -148,6 +149,14 @@ impl Args {
                         .rate_limit(!self.disable_rate_limit)
                         .build(),
                 )
+            }
+            "incoder" => {
+                let mut builder = IncoderClientBuilder::new();
+                if let Some(endpoint) = &self.endpoint {
+                    builder = builder.socket_path(endpoint.clone());
+                }
+
+                Arc::new(builder.build().await.expect("Failed to spawn incoder server"))
             }
             _ => {
                 eprintln!("Unknown engine, {}", self.engine);
@@ -198,7 +207,7 @@ async fn main() {
 
     let ctx = MainCtx {
         file_contents,
-        engine: args.completion_engine_factory(lang_client, cache),
+        engine: args.completion_engine_factory(lang_client, cache).await,
         num_comps: args.n,
         retries: args.retries,
         fallback: args.fallback,

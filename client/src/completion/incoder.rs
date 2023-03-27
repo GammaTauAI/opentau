@@ -16,7 +16,7 @@ use super::{CompletionEngine, CompletionModel, CompletionQuery, ModelResponseErr
 
 pub struct IncoderClient {
     /// Unix socket to communicate with the model server
-    socket: SocketAbstraction,
+    socket: Arc<SocketAbstraction>,
 }
 
 pub struct IncoderClientBuilder {
@@ -37,16 +37,16 @@ impl IncoderClientBuilder {
         // if we have a socket path, use that
         if let Some(socket_path) = self.socket_path {
             return Ok(IncoderClient {
-                socket: SocketAbstraction::new(socket_path),
+                socket: Arc::new(SocketAbstraction::new(socket_path)),
             });
         };
 
         // otherwise, we spawn a new server
-        let incoder_path = get_path_from_rootdir("incoder-server".to_string());
+        let incoder_path = format!("{}/main.py", get_path_from_rootdir("incoder-server".to_string()));
         let server_command_prefix = vec!["python3", &incoder_path];
-        let socket = SocketAbstraction::spawn_server("incoder", &server_command_prefix, false)
+        let socket = Arc::new(SocketAbstraction::spawn_server("incoder", &server_command_prefix, false)
             .await
-            .expect("Failed to spawn incoder server");
+            .expect("Failed to spawn incoder server"));
         Ok(IncoderClient { socket })
     }
 }
@@ -79,27 +79,26 @@ impl CompletionModel for IncoderClient {
         filtered_completions: Arc<Mutex<Vec<(String, u16)>>>,
     ) -> JoinHandle<Result<(), ModelResponseError>> {
         let lang_client = engine.get_ls();
-        let temp = engine.get_temperature();
         let max_type_score = engine.get_max_type_score();
         let num_comps = query.num_comps;
-        let mut code = query.input.clone();
+        let code = query.input.clone();
         let problem_whitelist = query.problem_whitelist.clone();
+        let socket = self.socket.clone();
 
         // count the number of _hole_'s in the code
         let num_holes = code.matches("_hole_").count();
 
-        // vec of num_comps copies of the code
-        let mut completions = vec![code.clone(); num_holes];
-
-        let req = IncoderSocketReq {
-            code: base64::encode(&code),
-            num_samples: num_comps,
-            should_infill_single: true,
-        };
         tokio::task::spawn(async move {
-            let resp: serde_json::Value = self.socket.send_req(&req).await.map_err(|e| ModelResponseError::InvalidResponse(e.to_string()))?;
-            let decoded = base64::decode(resp).unwrap();
-            let all_choices: Vec<Vec<String>> = serde_json::from_str(&decoded).unwrap();
+            // vec of num_comps copies of the code
+            let mut completions = vec![code.clone(); num_holes];
+
+            let req = IncoderSocketReq {
+                code: base64::encode(&code),
+                num_samples: num_comps,
+                should_infill_single: false,
+            };
+            let resp: serde_json::Value = socket.send_req(&req).await.map_err(|e| ModelResponseError::InvalidResponse(e.to_string()))?;
+            let all_choices: Vec<Vec<String>> = serde_json::from_value(resp["type_annotations"].clone()).unwrap();
             // track index too
             for (i, choices) in all_choices.iter().enumerate() {
                 // always length of 1
@@ -114,22 +113,19 @@ impl CompletionModel for IncoderClient {
 
             // loop until there are no more _hole_'s in the code
             // - for subsequent _hole_'s, we ask for 1 sample
-            let mut cur_infill_count = 1;
-            while cur_infill_count < num_holes {
+            for _ in 0..num_holes {
                 let req = IncoderSocketReq {
                     code: base64::encode(&code),
                     num_samples: 1,
                     should_infill_single: true,
                 };
-                let resp: serde_json::Value = self.socket.send_req(&req).await.map_err(|e| ModelResponseError::InvalidResponse(e.to_string()))?;
-                let decoded = base64::decode(resp).unwrap();
-                let type_annotation_choices_raw: Vec<String> = serde_json::from_str(&decoded).unwrap();
+                let resp: serde_json::Value = socket.send_req(&req).await.map_err(|e| ModelResponseError::InvalidResponse(e.to_string()))?;
+                let type_annotation_choices_raw: Vec<String> = serde_json::from_value(resp["type_annotations"].clone()).unwrap();
                 for (i, type_annotation_choice_raw) in type_annotation_choices_raw.iter().enumerate() {
                     if let type_annotation_choice = langserver::ts::ts_parse_type(type_annotation_choice_raw.to_string()).await.unwrap() {
-                    completions[i] = completions[i].replacen("_hole_", type_annotation_choice_raw, 1);
+                    completions[i] = completions[i].replacen("_hole_", &type_annotation_choice, 1);
                     }
                 }
-
             }
 
             for completion in completions.into_iter() {
