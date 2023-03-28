@@ -12,6 +12,7 @@ use crate::{
 
 pub mod codex;
 pub mod incoder;
+pub mod santacoder;
 
 /// This is the trait that defines operations on the completion engine (Codex, incoder, santacoder,
 /// etc..). The completion engine is coupled with the language server.

@@ -49,8 +49,7 @@ pub async fn ts_parse_type(input: String) -> Option<String> {
     use swc_common::sync::Lrc;
     use swc_common::{FileName, SourceMap, Spanned};
     use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax};
-    let mut input = String::new();
-    input = input.trim().to_string();
+    let input = input.trim().to_string();
 
     let cm: Lrc<SourceMap> = Default::default();
 

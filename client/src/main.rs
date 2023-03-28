@@ -1,10 +1,13 @@
 use std::sync::Arc;
 
 use opentau::{
-    get_path_from_rootdir,
     cache::Cache,
-    completion::{Completion, incoder::IncoderClientBuilder, ArcCompletionModel},
     completion::{codex::CodexClientBuilder, ArcCompletionEngine, CompletionClientBuilder},
+    completion::{
+        incoder::IncoderClientBuilder, santacoder::SantacoderClientBuilder, ArcCompletionModel,
+        Completion,
+    },
+    get_path_from_rootdir,
     langserver::{py::PyServer, ts::TsServer, ArcLangServer, LangServer},
     main_strategies::{MainCtx, MainStrategy, SimpleStrategy, TreeStrategy},
 };
@@ -129,8 +132,7 @@ impl Args {
         ls: ArcLangServer,
         cache: Option<Arc<Mutex<Cache>>>,
     ) -> ArcCompletionEngine {
-        let model: ArcCompletionModel
-            = match self.engine.as_str() {
+        let model: ArcCompletionModel = match self.engine.as_str() {
             "codex" => {
                 if self.tokens.is_none() {}
                 let tokens = self
@@ -156,7 +158,25 @@ impl Args {
                     builder = builder.socket_path(endpoint.clone());
                 }
 
-                Arc::new(builder.build().await.expect("Failed to spawn incoder server"))
+                Arc::new(
+                    builder
+                        .build()
+                        .await
+                        .expect("Failed to spawn incoder server"),
+                )
+            }
+            "santacoder" => {
+                let mut builder = SantacoderClientBuilder::new();
+                if let Some(endpoint) = &self.endpoint {
+                    builder = builder.socket_path(endpoint.clone());
+                }
+
+                Arc::new(
+                    builder
+                        .build()
+                        .await
+                        .expect("Failed to spawn santacoder server"),
+                )
             }
             _ => {
                 eprintln!("Unknown engine, {}", self.engine);

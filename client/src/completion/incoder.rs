@@ -1,18 +1,13 @@
-use std::sync::Arc;
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use tokio::{
-    io::AsyncBufReadExt,
-    net::UnixStream,
-    sync::Mutex,
-    task::JoinHandle,
-};
+use tokio::{io::AsyncBufReadExt, net::UnixStream, sync::Mutex, task::JoinHandle};
 
-use crate::{debug, get_path_from_rootdir, socket::SocketAbstraction, langserver};
+use crate::{debug, get_path_from_rootdir, langserver, socket::SocketAbstraction};
 
-use super::{CompletionEngine, CompletionModel, CompletionQuery, ModelResponseError, filter_comps};
+use super::{filter_comps, CompletionEngine, CompletionModel, CompletionQuery, ModelResponseError};
 
 pub struct IncoderClient {
     /// Unix socket to communicate with the model server
@@ -42,11 +37,16 @@ impl IncoderClientBuilder {
         };
 
         // otherwise, we spawn a new server
-        let incoder_path = format!("{}/main.py", get_path_from_rootdir("incoder-server".to_string()));
+        let incoder_path = format!(
+            "{}/main.py",
+            get_path_from_rootdir("incoder-server".to_string())
+        );
         let server_command_prefix = vec!["python3", &incoder_path];
-        let socket = Arc::new(SocketAbstraction::spawn_server("incoder", &server_command_prefix, false)
-            .await
-            .expect("Failed to spawn incoder server"));
+        let socket = Arc::new(
+            SocketAbstraction::spawn_server("incoder", &server_command_prefix, false)
+                .await
+                .expect("Failed to spawn incoder server"),
+        );
         Ok(IncoderClient { socket })
     }
 }
@@ -97,33 +97,49 @@ impl CompletionModel for IncoderClient {
                 num_samples: num_comps,
                 should_infill_single: false,
             };
-            let resp: serde_json::Value = socket.send_req(&req).await.map_err(|e| ModelResponseError::InvalidResponse(e.to_string()))?;
-            let all_choices: Vec<Vec<String>> = serde_json::from_value(resp["type_annotations"].clone()).unwrap();
+            let resp: serde_json::Value = socket
+                .send_req(&req)
+                .await
+                .map_err(|e| ModelResponseError::InvalidResponse(e.to_string()))?;
+            let all_choices: Vec<Vec<String>> =
+                serde_json::from_value(resp["type_annotations"].clone()).unwrap();
             // track index too
             for (i, choices) in all_choices.iter().enumerate() {
                 // always length of 1
                 if let Some(choice) = choices.get(0) {
-                    let type_annotation_choice = langserver::ts::ts_parse_type(choice.to_string()).await.unwrap();
+                    let type_annotation_choice = langserver::ts::ts_parse_type(choice.to_string())
+                        .await
+                        .unwrap();
                     // replace the first occurrence of "_hole_" in completions[i] with the type annotation
                     completions[i] = completions[i].replacen("_hole_", &type_annotation_choice, 1);
-                    
                 }
                 // substitute the first occurrence of _hole_ with the type annotation
             }
 
             // loop until there are no more _hole_'s in the code
             // - for subsequent _hole_'s, we ask for 1 sample
-            for _ in 0..num_holes {
+            for _ in 1..num_holes {
                 let req = IncoderSocketReq {
                     code: base64::encode(&code),
                     num_samples: 1,
                     should_infill_single: true,
                 };
-                let resp: serde_json::Value = socket.send_req(&req).await.map_err(|e| ModelResponseError::InvalidResponse(e.to_string()))?;
-                let type_annotation_choices_raw: Vec<String> = serde_json::from_value(resp["type_annotations"].clone()).unwrap();
-                for (i, type_annotation_choice_raw) in type_annotation_choices_raw.iter().enumerate() {
-                    if let type_annotation_choice = langserver::ts::ts_parse_type(type_annotation_choice_raw.to_string()).await.unwrap() {
-                    completions[i] = completions[i].replacen("_hole_", &type_annotation_choice, 1);
+                let resp: serde_json::Value = socket
+                    .send_req(&req)
+                    .await
+                    .map_err(|e| ModelResponseError::InvalidResponse(e.to_string()))?;
+                let type_annotation_choices_raw: Vec<String> =
+                    serde_json::from_value(resp["type_annotations"].clone()).unwrap();
+                for (i, type_annotation_choice_raw) in
+                    type_annotation_choices_raw.iter().enumerate()
+                {
+                    if let type_annotation_choice =
+                        langserver::ts::ts_parse_type(type_annotation_choice_raw.to_string())
+                            .await
+                            .unwrap()
+                    {
+                        completions[i] =
+                            completions[i].replacen("_hole_", &type_annotation_choice, 1);
                     }
                 }
             }
@@ -135,7 +151,7 @@ impl CompletionModel for IncoderClient {
                     &code,
                     completion,
                     problem_whitelist.clone(),
-                    max_type_score
+                    max_type_score,
                 )
                 .await?;
             }
