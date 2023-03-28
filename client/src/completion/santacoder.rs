@@ -88,33 +88,45 @@ impl CompletionModel for SantacoderClient {
 
         tokio::task::spawn(async move {
             // vec of num_comps copies of the code
-            let mut completions = vec![code.clone(); num_holes];
+            let mut completions = vec![code.clone(); num_comps];
 
             // loop until there are no more _hole_'s in the code
             // - for subsequent _hole_'s, we ask for 1 sample
             for _ in 0..num_holes {
-                let req = SantacoderSocketReq {
-                    code: code.clone(),
-                    num_samples: num_comps,
-                };
-                let resp: serde_json::Value = socket
-                    .send_req(&req)
-                    .await
-                    .map_err(|e| ModelResponseError::InvalidResponse(e.to_string()))?;
-                let type_annotation_choices_raw: Vec<String> =
-                    serde_json::from_value(resp["type_annotations"].clone()).unwrap();
+                let mut generated_type_annotations: Vec<String> = Vec::new();
 
-                for (i, type_annotation_choice_raw) in
-                    type_annotation_choices_raw.iter().enumerate()
-                {
-                    debug!("trying to parse type annotation choice: {type_annotation_choice_raw}");
-                    if let Some(type_annotation_choice) =
-                        langserver::ts::ts_parse_type(type_annotation_choice_raw.to_string()).await
-                    {
-                        debug!("correctly parsed into: {type_annotation_choice}");
-                        completions[i] =
-                            completions[i].replacen("_hole_", &type_annotation_choice, 1);
+                let mut cur_iter = 0;
+                while generated_type_annotations.len() < num_holes {
+                    let req = SantacoderSocketReq {
+                        code: code.clone(),
+                        num_samples: 5,
+                    };
+                    let resp: serde_json::Value = socket
+                        .send_req(&req)
+                        .await
+                        .map_err(|e| ModelResponseError::InvalidResponse(e.to_string()))?;
+                    let type_annotation_choices_raw: Vec<String> =
+                        serde_json::from_value(resp["type_annotations"].clone()).unwrap();
+
+                    for type_annotation_choice_raw in type_annotation_choices_raw.iter() {
+                        debug!(
+                            "trying to parse type annotation choice: {type_annotation_choice_raw}"
+                        );
+                        if let Some(type_annotation_choice) =
+                            langserver::ts::ts_parse_type(type_annotation_choice_raw.to_string())
+                                .await
+                        {
+                            debug!("correctly parsed into: {type_annotation_choice}");
+                            generated_type_annotations.push(type_annotation_choice);
+                        }
                     }
+                    for (i, generated_type_annotation) in
+                        generated_type_annotations.iter().enumerate()
+                    {
+                        completions[i] =
+                            completions[i].replacen("_hole_", &generated_type_annotation, 1);
+                    }
+                    cur_iter += 1;
                 }
             }
 
