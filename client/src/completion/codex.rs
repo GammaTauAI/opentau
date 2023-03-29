@@ -164,7 +164,7 @@ impl CompletionModel for CodexClient {
                 .bearer_auth(token)
                 .header("Content-Type", "application/json")
                 .body(serde_json::to_string(&EditReq {
-                    model: "code-davinci-edit-001".to_string(),
+                    model: "text-davinci-edit-001".to_string(),
                     input: input.to_string(),
                     n: num_comps,
                     temperature: temp,
