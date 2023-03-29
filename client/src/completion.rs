@@ -7,7 +7,7 @@ use tokio::{sync::Mutex, task::JoinHandle};
 use crate::{
     cache::Cache,
     debug,
-    langserver::{ArcLangServer, CheckProblem, LangServer, LangServerError},
+    langserver::{ArcLangServer, CheckProblem, LangServer, LangServerError}, socket::SocketError,
 };
 
 pub mod codex;
@@ -175,6 +175,8 @@ pub enum ModelResponseError {
     CouldNotComplete,
     #[error("Model rate limited. Response: {0}")]
     RateLimited(String),
+    #[error("Socket error: {0}")]
+    Socket(#[from] SocketError),
 }
 
 /// Filters out completions that don't follow certain rules.

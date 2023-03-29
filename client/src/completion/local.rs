@@ -75,6 +75,13 @@ pub struct LocalModelSocketReq {
     pub temperature: f64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocalModelSocketResp {
+    #[serde(rename = "type")]
+    pub type_: String,
+    pub type_annotations: Vec<String>,
+}
+
 impl CompletionModel for LocalModelClient {
     fn spawn_comp(
         &self,
@@ -103,18 +110,12 @@ impl CompletionModel for LocalModelClient {
                 num_samples: num_comps,
                 temperature,
             };
-            let resp: serde_json::Value = {
-                socket
-                    .send_req(serde_json::to_value(&req).unwrap())
-                    .await
-                    .map_err(|e| ModelResponseError::InvalidResponse(e.to_string()))?
-            };
 
-            let annots: Vec<String> =
-                serde_json::from_value(resp["type_annotations"].clone()).unwrap();
+            let resp: LocalModelSocketResp =
+                serde_json::from_value(socket.send_req(serde_json::to_value(&req)?).await?)?;
 
-            debug!("got annotations {annots:?}");
-            for annot in annots {
+            debug!("got annotations {:?}", resp.type_annotations);
+            for annot in resp.type_annotations {
                 if let Some(parser) = &type_parser {
                     if let Some(parsed) = parser(&annot) {
                         debug!("succesfully parsed into {parsed}");
@@ -129,7 +130,7 @@ impl CompletionModel for LocalModelClient {
                 }
             }
 
-            'comp_loop: for mut completion in completions.into_iter() {
+            for mut completion in completions.into_iter() {
                 for _ in 1..num_holes {
                     let req = LocalModelSocketReq {
                         code: completion.clone(),
@@ -137,40 +138,32 @@ impl CompletionModel for LocalModelClient {
                         temperature,
                     };
 
-                    let resp: serde_json::Value = {
-                        socket
-                            .send_req(serde_json::to_value(&req).unwrap())
-                            .await
-                            .map_err(|e| ModelResponseError::InvalidResponse(e.to_string()))?
-                    };
+                    let resp: LocalModelSocketResp = serde_json::from_value(
+                        socket.send_req(serde_json::to_value(&req)?).await?,
+                    )?;
 
-                    let annots: Vec<String> =
-                        serde_json::from_value(resp["type_annotations"].clone()).unwrap();
-
-                    // get the first annot that parses
-                    let mut solved = false;
-                    debug!("got annotations {annots:?}");
-                    for annot in annots {
+                    // get the first annot that parses, or fallback to any
+                    let mut solved = None;
+                    debug!("got annotations {:?}", resp.type_annotations);
+                    for annot in resp.type_annotations {
                         if let Some(parser) = &type_parser {
                             if let Some(parsed) = parser(&annot) {
                                 debug!("succesfully parsed into {parsed}");
-                                completion = completion.replacen("_hole_", &parsed, 1);
-                                debug!("current completion: {completion}");
-                                solved = true;
+                                solved = Some(parsed);
                                 break;
                             }
                         } else {
                             // if we don't have a parser, just pray that it's valid
-                            completion = completion.replacen("_hole_", &annot, 1);
-                            debug!("current completion: {completion}");
-                            solved = true;
+                            solved = Some(annot);
                             break;
                         }
                     }
-                    if !solved {
-                        // NOTE: what if we retry here?
-                        continue 'comp_loop;
-                    }
+
+                    let solved = solved.unwrap_or_else(|| {
+                        debug!("falling back to any type :(");
+                        lang_client.any_type()
+                    });
+                    completion = completion.replacen("_hole_", &solved, 1);
                 }
 
                 filter_comps(
