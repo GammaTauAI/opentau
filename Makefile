@@ -21,4 +21,4 @@ clean: clean-release-link clean-debug-link
 
 
 build-report:
-	pandoc -f markdown+pipe_tables ./final_report.md -o final.pdf
+	pandoc -f markdown+pipe_tables ./docs/final_report.md -o final.pdf
