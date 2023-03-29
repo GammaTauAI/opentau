@@ -11,7 +11,7 @@ In this project, we make effective use of large natural language models to aid t
 Our approach utilizes static insertion of type holes for generating a prompt to be then edited or infilled by a language model.
 Our project mainly used Codex's _code-davinci-edit_ model for TypeScript type inference,
 but our design is general enough to be applied to other language models and
-programming languages. Unfortunately, Codex is now discontinued by OpenAI, therefore we are 
+programming languages. Unfortunately, Codex is now discontinued by OpenAI, therefore we are
 now supporting open source models such as _InCoder_ and _SantaCoder_.
 We have designed our system to be modular and extensible,
 including a language server protocol for the implementation of additional programming languages.
@@ -26,11 +26,9 @@ can be built by running `make build-report` in the root directory.
 
 - `rust`
 - Incoder model requirements (optional):
-
   - `torch`
   - `tokenizers>=0.12`
   - `transformers`
-
 - TypeScript inference requirements:
   - `ts-node`
   - `tsc`
