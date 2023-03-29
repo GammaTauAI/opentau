@@ -18,8 +18,8 @@ from stub_printer import stub_source
 from typing import Any, Union
 
 
-if len(sys.argv) != 4:
-    print(f'usage: [path to socket] [server addr] [pid of rust proc]')
+if len(sys.argv) != 2:
+    print(f'usage: [path to socket]')
     sys.exit(1)
 
 SERVER_ADDR = sys.argv[2]

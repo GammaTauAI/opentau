@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use opentau::{
-    get_path_from_rootdir,
     cache::Cache,
-    completion::Completion,
     completion::{codex::CodexClientBuilder, ArcCompletionEngine, CompletionClientBuilder},
+    completion::{local::LocalModelClientBuilder, ArcCompletionModel, Completion},
+    get_path_from_rootdir,
     langserver::{py::PyServer, ts::TsServer, ArcLangServer, LangServer},
     main_strategies::{MainCtx, MainStrategy, SimpleStrategy, TreeStrategy},
 };
@@ -50,12 +50,13 @@ struct Args {
     #[clap(long, value_parser, default_value_t = false)]
     fallback: bool,
 
-    /// Which engine to use. Either: {"codex", "incoder"}
+    /// Which engine to use. Either: {"codex", "incoder", "santacoder"}
     #[clap(short, long, value_parser, default_value = "codex")]
     engine: String,
 
     /// The url or file path to the completion engine. If this is an online engine, it
     /// may be a url. If it is a local engine, it may be a file path to a socket.
+    /// Some local models allow for multi-gpu via comma-separated socket paths.
     #[clap(long, value_parser)]
     endpoint: Option<String>,
 
@@ -124,12 +125,12 @@ impl Args {
         }
     }
 
-    fn completion_engine_factory(
+    async fn completion_engine_factory(
         &self,
         ls: ArcLangServer,
         cache: Option<Arc<Mutex<Cache>>>,
     ) -> ArcCompletionEngine {
-        let model = match self.engine.as_str() {
+        let model: ArcCompletionModel = match self.engine.as_str() {
             "codex" => {
                 if self.tokens.is_none() {}
                 let tokens = self
@@ -147,6 +148,19 @@ impl Args {
                     CodexClientBuilder::new(tokens)
                         .rate_limit(!self.disable_rate_limit)
                         .build(),
+                )
+            }
+            "incoder" | "santacoder" => {
+                let mut builder = LocalModelClientBuilder::new(self.engine.clone());
+                if let Some(endpoint) = &self.endpoint {
+                    builder = builder.socket_path(endpoint.clone());
+                }
+
+                Arc::new(
+                    builder
+                        .build()
+                        .await
+                        .unwrap_or_else(|_| panic!("failed to make {} client", self.engine)),
                 )
             }
             _ => {
@@ -198,7 +212,7 @@ async fn main() {
 
     let ctx = MainCtx {
         file_contents,
-        engine: args.completion_engine_factory(lang_client, cache),
+        engine: args.completion_engine_factory(lang_client, cache).await,
         num_comps: args.n,
         retries: args.retries,
         fallback: args.fallback,

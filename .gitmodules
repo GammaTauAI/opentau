@@ -4,3 +4,6 @@
 [submodule "incoder-server"]
 	path = incoder-server
 	url = git@github.com:gammatauai/incoder-server
+[submodule "santacoder-server"]
+	path = santacoder-server
+	url = https://github.com/gammatauai/santacoder-server
