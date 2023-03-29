@@ -117,12 +117,14 @@ impl CompletionModel for LocalModelClient {
             debug!("got annotations {:?}", resp.type_annotations);
             for annot in resp.type_annotations {
                 if let Some(parser) = &type_parser {
-                    if let Some(parsed) = parser(&annot) {
-                        debug!("succesfully parsed into {parsed}");
-                        let comp = code.replacen("_hole_", &parsed, 1);
-                        debug!("current completion: {comp}");
-                        completions.push(comp);
-                    }
+                    let parsed = parser(&annot).unwrap_or_else(|| {
+                        debug!("failed to parse {annot}. falling back to any type :(");
+                        lang_client.any_type()
+                    });
+                    debug!("succesfully parsed into {parsed}");
+                    let comp = code.replacen("_hole_", &parsed, 1);
+                    debug!("current completion: {comp}");
+                    completions.push(comp);
                 } else {
                     // if we don't have a parser, just pray that it's valid
                     let comp = code.replacen("_hole_", &annot, 1);
