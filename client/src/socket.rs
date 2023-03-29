@@ -1,8 +1,14 @@
+use std::{collections::HashMap, sync::Arc};
+
 use serde::Serialize;
 use thiserror::Error;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt},
     net::UnixStream,
+    sync::{
+        mpsc::{Receiver, Sender},
+        Mutex,
+    },
 };
 
 use crate::debug;
@@ -11,6 +17,76 @@ use crate::debug;
 pub struct SocketAbstraction {
     pub socket_path: String,
     pub process: Option<tokio::process::Child>,
+}
+
+#[derive(Debug)]
+pub struct SingleThreadedSocket {
+    socket: Mutex<SocketAbstraction>,
+}
+
+struct Worker {
+    socket: Arc<SocketAbstraction>,
+    avail_tx: Sender<String>,
+}
+
+/// A socket pool that can be used to delegate requests to multiple servers,
+/// asynchronously.
+pub struct SocketPool {
+    workers: Arc<Mutex<HashMap<String, Worker>>>,
+    avail_rx: Mutex<Receiver<String>>,
+}
+
+#[async_trait::async_trait]
+pub trait SendToSocket: Send + Sync {
+    /// Sends the given request to the server and returns the response as a JSON object.
+    /// Expects the response to have a `type` field, and if it is `error`, returns an error.
+    async fn send_req(&self, req: serde_json::Value) -> Result<serde_json::Value, SocketError>;
+}
+
+impl SocketPool {
+    pub async fn make(socket_paths: Vec<String>) -> Self {
+        let (avail_tx, avail_rx) = tokio::sync::mpsc::channel(socket_paths.len());
+        let workers: HashMap<String, Worker> = socket_paths
+            .into_iter()
+            .map(|socket_path| {
+                let socket = Arc::new(SocketAbstraction::new(socket_path.clone()));
+                let avail_tx = avail_tx.clone();
+                (socket_path, Worker { socket, avail_tx })
+            })
+            .collect();
+        for socket_path in workers.keys() {
+            avail_tx.send(socket_path.clone()).await.unwrap();
+        }
+        Self {
+            workers: Arc::new(Mutex::new(workers)),
+            avail_rx: Mutex::new(avail_rx),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl SendToSocket for SocketPool {
+    /// Sends the given request to the server and returns the response as a JSON object.
+    /// Expects the response to have a `type` field, and if it is `error`, returns an error.
+    async fn send_req(&self, req: serde_json::Value) -> Result<serde_json::Value, SocketError> {
+        let socket_name = {
+            let mut avail_rx = self.avail_rx.lock().await;
+            avail_rx.recv().await.unwrap()
+        }
+        .to_string();
+        debug!("picked socket from pool: {}", socket_name);
+        let (socket, avail) = {
+            let workers = self.workers.lock().await;
+            let worker = workers.get(&socket_name).unwrap();
+            (worker.socket.clone(), worker.avail_tx.clone())
+        };
+
+        let resp = socket.send_req(req).await?;
+
+        avail.send(socket_name).await.unwrap();
+
+        Ok(resp)
+    }
 }
 
 #[derive(Debug, Error)]
@@ -32,25 +108,6 @@ impl SocketAbstraction {
             socket_path,
             process: None,
         }
-    }
-
-    /// Sends the given request to the server and returns the response as a JSON object.
-    /// Expects the response to have a `type` field, and if it is `error`, returns an error.
-    pub async fn send_req<T>(&self, req: &T) -> Result<serde_json::Value, SocketError>
-    where
-        T: ?Sized + Serialize,
-    {
-        let buf = self.socket_transaction(&req).await?;
-
-        // into json object
-        let resp: serde_json::Value = serde_json::from_str(&buf)?;
-
-        // check if the response is not an error
-        if resp["type"] == "error" {
-            return Err(SocketError::Service(resp["message"].to_string()));
-        }
-
-        Ok(resp)
     }
 
     /// Spawns a new server process and returns a socket abstraction for it.
@@ -122,5 +179,42 @@ impl SocketAbstraction {
         let mut buf = String::new();
         reader.read_line(&mut buf).await?;
         Ok(buf)
+    }
+}
+
+#[async_trait::async_trait]
+impl SendToSocket for SocketAbstraction {
+    /// Sends the given request to the server and returns the response as a JSON object.
+    /// Expects the response to have a `type` field, and if it is `error`, returns an error.
+    async fn send_req(&self, req: serde_json::Value) -> Result<serde_json::Value, SocketError> {
+        let buf = self.socket_transaction(&req).await?;
+
+        // into json object
+        let resp: serde_json::Value = serde_json::from_str(&buf)?;
+
+        // check if the response is not an error
+        if resp["type"] == "error" {
+            return Err(SocketError::Service(resp["message"].to_string()));
+        }
+
+        Ok(resp)
+    }
+}
+
+impl SingleThreadedSocket {
+    pub fn new(socket_abstraction: SocketAbstraction) -> Self {
+        Self {
+            socket: Mutex::new(socket_abstraction),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl SendToSocket for SingleThreadedSocket {
+    /// Sends the given request to the server and returns the response as a JSON object.
+    /// Expects the response to have a `type` field, and if it is `error`, returns an error.
+    async fn send_req(&self, req: serde_json::Value) -> Result<serde_json::Value, SocketError> {
+        let socket = self.socket.lock().await;
+        socket.send_req(req).await
     }
 }

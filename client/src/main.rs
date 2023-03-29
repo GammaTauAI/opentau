@@ -59,6 +59,7 @@ struct Args {
 
     /// The url or file path to the completion engine. If this is an online engine, it
     /// may be a url. If it is a local engine, it may be a file path to a socket.
+    /// Some local models allow for multi-gpu via comma-separated socket paths.
     #[clap(long, value_parser)]
     endpoint: Option<String>,
 

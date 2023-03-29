@@ -5,13 +5,16 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tokio::{io::AsyncBufReadExt, net::UnixStream, sync::Mutex, task::JoinHandle};
 
-use crate::{debug, get_path_from_rootdir, langserver, socket::SocketAbstraction};
+use crate::{
+    debug, get_path_from_rootdir, langserver,
+    socket::{SendToSocket, SocketAbstraction},
+};
 
 use super::{filter_comps, CompletionEngine, CompletionModel, CompletionQuery, ModelResponseError};
 
 pub struct IncoderClient {
     /// Unix socket to communicate with the model server
-    socket: Arc<SocketAbstraction>,
+    socket: Arc<dyn SendToSocket>,
 }
 
 pub struct IncoderClientBuilder {
@@ -98,7 +101,7 @@ impl CompletionModel for IncoderClient {
                 should_infill_single: false,
             };
             let resp: serde_json::Value = socket
-                .send_req(&req)
+                .send_req(serde_json::to_value(&req).unwrap())
                 .await
                 .map_err(|e| ModelResponseError::InvalidResponse(e.to_string()))?;
             let all_choices: Vec<Vec<String>> =
@@ -125,7 +128,7 @@ impl CompletionModel for IncoderClient {
                     should_infill_single: true,
                 };
                 let resp: serde_json::Value = socket
-                    .send_req(&req)
+                    .send_req(serde_json::to_value(&req).unwrap())
                     .await
                     .map_err(|e| ModelResponseError::InvalidResponse(e.to_string()))?;
                 let type_annotation_choices_raw: Vec<String> =

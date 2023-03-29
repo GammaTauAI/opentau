@@ -3,7 +3,7 @@ use std::process::Stdio;
 use async_trait::async_trait;
 use tokio::io::AsyncBufReadExt;
 
-use crate::{debug, impl_langserver_commands, socket::SocketAbstraction};
+use crate::{debug, impl_langserver_commands, socket::SendToSocket, socket::SocketAbstraction};
 
 use super::{LSReq, LangServer, LangServerError};
 
@@ -28,7 +28,10 @@ impl LangServer for TsServer {
             cmd: "typecheck".to_string(),
             text: base64::encode(code),
         };
-        let resp = self.socket.send_req(&req).await?;
+        let resp = self
+            .socket
+            .send_req(serde_json::to_value(&req).unwrap())
+            .await?;
 
         let errors: usize = resp["errors"].as_u64().unwrap() as usize;
         Ok(errors == 0)

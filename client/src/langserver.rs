@@ -231,7 +231,8 @@ macro_rules! impl_langserver_commands {
                     type_name: type_name.to_string(),
                 };
 
-                let resp = self.socket.send_req(&req).await?;
+                use $crate::socket::SendToSocket;
+                let resp = self.socket.send_req(serde_json::to_value(&req).unwrap()).await?;
                 // decode the response
                 let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
 
@@ -247,7 +248,8 @@ macro_rules! impl_langserver_commands {
                     text: base64::encode(code),
                 };
 
-                let resp = self.socket.send_req(&req).await?;
+                use $crate::socket::SendToSocket;
+                let resp = self.socket.send_req(serde_json::to_value(&req).unwrap()).await?;
 
                 // decode the response
                 let tree = base64::decode(resp["text"].as_str().unwrap()).unwrap();
@@ -264,7 +266,8 @@ macro_rules! impl_langserver_commands {
                     text: base64::encode(code),
                 };
 
-                let resp = self.socket.send_req(&req).await?;
+                use $crate::socket::SendToSocket;
+                let resp = self.socket.send_req(serde_json::to_value(&req).unwrap()).await?;
                 // decode the response
                 let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
 
@@ -285,7 +288,8 @@ macro_rules! impl_langserver_commands {
                     text: base64::encode(completed),
                     original: base64::encode(original),
                 };
-                let resp = self.socket.send_req(&req).await?;
+                use $crate::socket::SendToSocket;
+                let resp = self.socket.send_req(serde_json::to_value(&req).unwrap()).await?;
 
                 let problems_json = resp["problems"].as_array().unwrap();
                 let mut problems = Vec::new();
@@ -312,7 +316,8 @@ macro_rules! impl_langserver_commands {
                     level,
                 };
 
-                let resp = self.socket.send_req(&req).await?;
+                use $crate::socket::SendToSocket;
+                let resp = self.socket.send_req(serde_json::to_value(&req).unwrap()).await?;
                 // decode the response
                 let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
 
@@ -330,7 +335,8 @@ macro_rules! impl_langserver_commands {
                     inner_block: base64::encode(inner_block),
                 };
 
-                let resp = self.socket.send_req(&req).await?;
+                use $crate::socket::SendToSocket;
+                let resp = self.socket.send_req(serde_json::to_value(&req).unwrap()).await?;
                 // decode the response
                 let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
 
@@ -347,7 +353,8 @@ macro_rules! impl_langserver_commands {
                     text: base64::encode(code),
                 };
 
-                let resp = self.socket.send_req(&req).await?;
+                use $crate::socket::SendToSocket;
+                let resp = self.socket.send_req(serde_json::to_value(&req).unwrap()).await?;
                 // decode the response
                 let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
 
@@ -363,7 +370,8 @@ macro_rules! impl_langserver_commands {
                     text: base64::encode(code),
                 };
 
-                let resp = self.socket.send_req(&req).await?;
+                use $crate::socket::SendToSocket;
+                let resp = self.socket.send_req(serde_json::to_value(&req).unwrap()).await?;
                 // decode the response
                 let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
 

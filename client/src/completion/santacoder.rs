@@ -7,16 +7,14 @@ use tokio::{io::AsyncBufReadExt, net::UnixStream, sync::Mutex, task::JoinHandle}
 use crate::{
     debug, get_path_from_rootdir,
     langserver::{self, ts::ts_parse_type},
-    socket::SocketAbstraction,
+    socket::{SendToSocket, SingleThreadedSocket, SocketAbstraction, SocketPool},
 };
 
 use super::{filter_comps, CompletionEngine, CompletionModel, CompletionQuery, ModelResponseError};
 
 pub struct SantacoderClient {
     /// Unix socket to communicate with the model server
-    ///
-    /// TODO: change mutex to semaphore
-    socket: Arc<Mutex<SocketAbstraction>>,
+    socket: Arc<dyn SendToSocket>,
 }
 
 pub struct SantacoderClientBuilder {
@@ -34,10 +32,13 @@ impl SantacoderClientBuilder {
     }
 
     pub async fn build(self) -> Result<SantacoderClient, ModelResponseError> {
-        // if we have a socket path, use that
+        // if we have a socket path, use that. open a pool. split on
+        // comma.
         if let Some(socket_path) = self.socket_path {
+            let socket_paths = socket_path.split(',').map(|s| s.to_string()).collect();
+            let pool = SocketPool::make(socket_paths).await;
             return Ok(SantacoderClient {
-                socket: Arc::new(Mutex::new(SocketAbstraction::new(socket_path))),
+                socket: Arc::new(pool),
             });
         };
 
@@ -47,7 +48,7 @@ impl SantacoderClientBuilder {
             get_path_from_rootdir("incoder-server".to_string())
         );
         let server_command_prefix = vec!["python3", &incoder_path];
-        let socket = Arc::new(Mutex::new(
+        let socket = Arc::new(SingleThreadedSocket::new(
             SocketAbstraction::spawn_server("incoder", &server_command_prefix, false)
                 .await
                 .expect("Failed to spawn incoder server"),
@@ -104,9 +105,7 @@ impl CompletionModel for SantacoderClient {
             };
             let resp: serde_json::Value = {
                 socket
-                    .lock()
-                    .await
-                    .send_req(&req)
+                    .send_req(serde_json::to_value(&req).unwrap())
                     .await
                     .map_err(|e| ModelResponseError::InvalidResponse(e.to_string()))?
             };
@@ -134,9 +133,7 @@ impl CompletionModel for SantacoderClient {
 
                     let resp: serde_json::Value = {
                         socket
-                            .lock()
-                            .await
-                            .send_req(&req)
+                            .send_req(serde_json::to_value(&req).unwrap())
                             .await
                             .map_err(|e| ModelResponseError::InvalidResponse(e.to_string()))?
                     };
