@@ -3,10 +3,7 @@ use std::sync::Arc;
 use opentau::{
     cache::Cache,
     completion::{codex::CodexClientBuilder, ArcCompletionEngine, CompletionClientBuilder},
-    completion::{
-        incoder::IncoderClientBuilder, santacoder::SantacoderClientBuilder, ArcCompletionModel,
-        Completion,
-    },
+    completion::{local::LocalModelClientBuilder, ArcCompletionModel, Completion},
     get_path_from_rootdir,
     langserver::{py::PyServer, ts::TsServer, ArcLangServer, LangServer},
     main_strategies::{MainCtx, MainStrategy, SimpleStrategy, TreeStrategy},
@@ -53,7 +50,7 @@ struct Args {
     #[clap(long, value_parser, default_value_t = false)]
     fallback: bool,
 
-    /// Which engine to use. Either: {"codex", "incoder"}
+    /// Which engine to use. Either: {"codex", "incoder", "santacoder"}
     #[clap(short, long, value_parser, default_value = "codex")]
     engine: String,
 
@@ -153,8 +150,8 @@ impl Args {
                         .build(),
                 )
             }
-            "incoder" => {
-                let mut builder = IncoderClientBuilder::new();
+            "incoder" | "santacoder" => {
+                let mut builder = LocalModelClientBuilder::new(self.engine.clone());
                 if let Some(endpoint) = &self.endpoint {
                     builder = builder.socket_path(endpoint.clone());
                 }
@@ -163,20 +160,7 @@ impl Args {
                     builder
                         .build()
                         .await
-                        .expect("Failed to spawn incoder server"),
-                )
-            }
-            "santacoder" => {
-                let mut builder = SantacoderClientBuilder::new();
-                if let Some(endpoint) = &self.endpoint {
-                    builder = builder.socket_path(endpoint.clone());
-                }
-
-                Arc::new(
-                    builder
-                        .build()
-                        .await
-                        .expect("Failed to spawn santacoder server"),
+                        .unwrap_or_else(|_| panic!("failed to make {} client", self.engine)),
                 )
             }
             _ => {

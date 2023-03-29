@@ -12,18 +12,22 @@ use crate::{
 
 use super::{filter_comps, CompletionEngine, CompletionModel, CompletionQuery, ModelResponseError};
 
-pub struct SantacoderClient {
+pub struct LocalModelClient {
     /// Unix socket to communicate with the model server
     socket: Arc<dyn SendToSocket>,
 }
 
-pub struct SantacoderClientBuilder {
+pub struct LocalModelClientBuilder {
+    kind: String, // e.g. incoder, or santacoder
     socket_path: Option<String>,
 }
 
-impl SantacoderClientBuilder {
-    pub fn new() -> Self {
-        Self { socket_path: None }
+impl LocalModelClientBuilder {
+    pub fn new(kind: String) -> Self {
+        Self {
+            kind,
+            socket_path: None,
+        }
     }
 
     pub fn socket_path(mut self, socket_path: String) -> Self {
@@ -31,52 +35,47 @@ impl SantacoderClientBuilder {
         self
     }
 
-    pub async fn build(self) -> Result<SantacoderClient, ModelResponseError> {
+    pub async fn build(self) -> Result<LocalModelClient, ModelResponseError> {
         // if we have a socket path, use that. open a pool. split on
         // comma.
         if let Some(socket_path) = self.socket_path {
             let socket_paths = socket_path.split(',').map(|s| s.to_string()).collect();
             let pool = SocketPool::make(socket_paths).await;
-            return Ok(SantacoderClient {
+            return Ok(LocalModelClient {
                 socket: Arc::new(pool),
             });
         };
 
         // otherwise, we spawn a new server
-        let incoder_path = format!(
+        let model_path = format!(
             "{}/main.py",
-            get_path_from_rootdir("incoder-server".to_string())
+            get_path_from_rootdir(format!("{}-server", self.kind))
         );
-        let server_command_prefix = vec!["python3", &incoder_path];
+        let server_command_prefix = vec!["python3", &model_path];
         let socket = Arc::new(SingleThreadedSocket::new(
-            SocketAbstraction::spawn_server("incoder", &server_command_prefix, false)
+            SocketAbstraction::spawn_server(&self.kind, &server_command_prefix, false)
                 .await
-                .expect("Failed to spawn incoder server"),
+                .map_err(|e| ModelResponseError::InvalidResponse(e.to_string()))?,
         ));
-        Ok(SantacoderClient { socket })
+        Ok(LocalModelClient { socket })
     }
 }
 
-impl Default for SantacoderClientBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Request to the incoder server with a given command and text
+/// Request to the local server with a given command and text
 /// in the format of
 /// {
 ///     code: <code>,
-///     samples: <number of samples>,
+///     num_samples: <num_samples>,
+///     temperature: <temperature>,
 /// }
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SantacoderSocketReq {
+pub struct LocalModelSocketReq {
     pub code: String,
     pub num_samples: usize,
     pub temperature: f64,
 }
 
-impl CompletionModel for SantacoderClient {
+impl CompletionModel for LocalModelClient {
     fn spawn_comp(
         &self,
         query: &CompletionQuery,
@@ -98,7 +97,7 @@ impl CompletionModel for SantacoderClient {
             let mut completions = Vec::with_capacity(num_comps);
 
             // first run, consider all that work
-            let req = SantacoderSocketReq {
+            let req = LocalModelSocketReq {
                 code: code.clone(),
                 num_samples: num_comps,
                 temperature,
@@ -125,7 +124,7 @@ impl CompletionModel for SantacoderClient {
 
             'comp_loop: for mut completion in completions.into_iter() {
                 for _ in 1..num_holes {
-                    let req = SantacoderSocketReq {
+                    let req = LocalModelSocketReq {
                         code: completion.clone(),
                         num_samples: 5,
                         temperature,
