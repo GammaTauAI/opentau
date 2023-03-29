@@ -9,12 +9,12 @@ This finding makes the built-in procedure ineffective in practice.
 
 In this project, we make effective use of large natural language models to aid these type inference procedures.
 Our approach utilizes static insertion of type holes for generating a prompt to be then edited or infilled by a language model.
-Our project mainly uses Codex's _code-davinci-edit_ model for TypeScript type inference,
+Our project mainly used Codex's _code-davinci-edit_ model for TypeScript type inference,
 but our design is general enough to be applied to other language models and
-programming languages. We have designed our system to be modular and extensible,
+programming languages. Unfortunately, Codex is now discontinued by OpenAI, therefore we are 
+now supporting open source models such as _InCoder_ and _SantaCoder_.
+We have designed our system to be modular and extensible,
 including a language server protocol for the implementation of additional programming languages.
-We have also explored other language models such as Facebook's _InCoder_ model, and we plan to experiment
-with Python type inference in the near future.
 
 Across our dataset, we were able to type-infer 91% of the files with descriptive, high quality type annotations,
 which is a significant improvement over 59% using TypeScript's built-in inference procedure.
