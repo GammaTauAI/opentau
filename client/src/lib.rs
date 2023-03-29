@@ -5,6 +5,7 @@ pub mod main_strategies;
 pub mod socket;
 pub mod tree;
 pub mod typedef_gen;
+pub mod args;
 
 /// macro for debug printing, only prints if #cfg(debug_assertions) is true
 #[macro_export]
