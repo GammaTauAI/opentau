@@ -60,6 +60,10 @@ impl LangServer for PyServer {
     fn any_type(&self) -> String {
         "Any".to_string()
     }
+
+    fn get_type_parser(&self) -> Option<Box<dyn Fn(&str) -> Option<String> + Sync + Send>> {
+        None
+    }
 }
 
 impl_langserver_commands!(PyServer);

@@ -89,6 +89,7 @@ impl CompletionModel for LocalModelClient {
         let problem_whitelist = query.problem_whitelist.clone();
         let socket = self.socket.clone();
         let temperature = engine.get_temperature();
+        let type_parser = lang_client.get_type_parser();
 
         // count the number of _hole_'s in the code
         let num_holes = code.matches("_hole_").count();
@@ -114,10 +115,16 @@ impl CompletionModel for LocalModelClient {
 
             debug!("got annotations {annots:?}");
             for annot in annots {
-                if let Some(parsed) = ts_parse_type(annot).await {
-                    debug!("succesfully parsed into {parsed}");
-                    let comp = code.replacen("_hole_", &parsed, 1);
-                    debug!("current completion: {comp}");
+                if let Some(parser) = &type_parser {
+                    if let Some(parsed) = parser(&annot) {
+                        debug!("succesfully parsed into {parsed}");
+                        let comp = code.replacen("_hole_", &parsed, 1);
+                        debug!("current completion: {comp}");
+                        completions.push(comp);
+                    }
+                } else {
+                    // if we don't have a parser, just pray that it's valid
+                    let comp = code.replacen("_hole_", &annot, 1);
                     completions.push(comp);
                 }
             }
@@ -144,15 +151,24 @@ impl CompletionModel for LocalModelClient {
                     let mut solved = false;
                     debug!("got annotations {annots:?}");
                     for annot in annots {
-                        if let Some(parsed) = ts_parse_type(annot).await {
-                            debug!("succesfully parsed into {parsed}");
-                            completion = completion.replacen("_hole_", &parsed, 1);
+                        if let Some(parser) = &type_parser {
+                            if let Some(parsed) = parser(&annot) {
+                                debug!("succesfully parsed into {parsed}");
+                                completion = completion.replacen("_hole_", &parsed, 1);
+                                debug!("current completion: {completion}");
+                                solved = true;
+                                break;
+                            }
+                        } else {
+                            // if we don't have a parser, just pray that it's valid
+                            completion = completion.replacen("_hole_", &annot, 1);
                             debug!("current completion: {completion}");
                             solved = true;
                             break;
                         }
                     }
                     if !solved {
+                        // NOTE: what if we retry here?
                         continue 'comp_loop;
                     }
                 }

@@ -139,6 +139,11 @@ pub trait LangServer: LangServerCommands {
     /// produces the Any type for the given language.
     /// for example, in TypeScript, this would be `any`.
     fn any_type(&self) -> String;
+
+    /// Produces a parser function that can parse out a type from the given code. 
+    /// The target function may require to enable features of the crate. If 
+    /// the feature is disabled or the language does not support it, None is returned.
+    fn get_type_parser(&self) -> Option<Box<dyn Fn(&str) -> Option<String> + Sync + Send>>;
 }
 
 pub type ArcLangServer = Arc<dyn LangServer + Send + Sync>;
