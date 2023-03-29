@@ -5,7 +5,11 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tokio::{io::AsyncBufReadExt, net::UnixStream, sync::Mutex, task::JoinHandle};
 
-use crate::{debug, get_path_from_rootdir, langserver, socket::SocketAbstraction};
+use crate::{
+    debug, get_path_from_rootdir,
+    langserver::{self, ts::ts_parse_type},
+    socket::SocketAbstraction,
+};
 
 use super::{filter_comps, CompletionEngine, CompletionModel, CompletionQuery, ModelResponseError};
 
@@ -87,50 +91,63 @@ impl CompletionModel for SantacoderClient {
         let num_holes = code.matches("_hole_").count();
 
         tokio::task::spawn(async move {
-            // vec of num_comps copies of the code
-            let mut completions = vec![code.clone(); num_comps];
+            let mut completions = Vec::with_capacity(num_comps);
 
-            // loop until there are no more _hole_'s in the code
-            // - for subsequent _hole_'s, we ask for 1 sample
-            for _ in 0..num_holes {
-                let mut generated_type_annotations: Vec<String> = Vec::new();
+            // first run, consider all that work
+            let req = SantacoderSocketReq {
+                code: code.clone(),
+                num_samples: num_comps,
+            };
+            let resp: serde_json::Value = socket
+                .send_req(&req)
+                .await
+                .map_err(|e| ModelResponseError::InvalidResponse(e.to_string()))?;
 
-                let mut cur_iter = 0;
-                while generated_type_annotations.len() < num_holes {
+            let annots: Vec<String> =
+                serde_json::from_value(resp["type_annotations"].clone()).unwrap();
+
+            for annot in annots {
+                debug!("got annotation {annot}");
+                if let Some(parsed) = ts_parse_type(annot).await {
+                    debug!("succesfully parsed into {parsed}");
+                    let comp = code.replacen("_hole_", &parsed, 1);
+                    debug!("current completion: {comp}");
+                    completions.push(comp);
+                }
+            }
+
+            'comp_loop: for mut completion in completions.into_iter() {
+                for _ in 1..num_holes {
                     let req = SantacoderSocketReq {
-                        code: code.clone(),
+                        code: completion.clone(),
                         num_samples: 5,
                     };
+
                     let resp: serde_json::Value = socket
                         .send_req(&req)
                         .await
                         .map_err(|e| ModelResponseError::InvalidResponse(e.to_string()))?;
-                    let type_annotation_choices_raw: Vec<String> =
+
+                    let annots: Vec<String> =
                         serde_json::from_value(resp["type_annotations"].clone()).unwrap();
 
-                    for type_annotation_choice_raw in type_annotation_choices_raw.iter() {
-                        debug!(
-                            "trying to parse type annotation choice: {type_annotation_choice_raw}"
-                        );
-                        if let Some(type_annotation_choice) =
-                            langserver::ts::ts_parse_type(type_annotation_choice_raw.to_string())
-                                .await
-                        {
-                            debug!("correctly parsed into: {type_annotation_choice}");
-                            generated_type_annotations.push(type_annotation_choice);
+                    // get the first annot that parses
+                    let mut solved = false;
+                    for annot in annots {
+                        debug!("got annotation {annot}");
+                        if let Some(parsed) = ts_parse_type(annot).await {
+                            debug!("succesfully parsed into {parsed}");
+                            completion = completion.replacen("_hole_", &parsed, 1);
+                            debug!("current completion: {completion}");
+                            solved = true;
+                            break;
                         }
                     }
-                    for (i, generated_type_annotation) in
-                        generated_type_annotations.iter().enumerate()
-                    {
-                        completions[i] =
-                            completions[i].replacen("_hole_", &generated_type_annotation, 1);
+                    if !solved {
+                        continue 'comp_loop;
                     }
-                    cur_iter += 1;
                 }
-            }
 
-            for completion in completions.into_iter() {
                 filter_comps(
                     filtered_completions.clone(),
                     lang_client.clone(),
