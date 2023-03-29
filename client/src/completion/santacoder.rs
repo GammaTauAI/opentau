@@ -72,6 +72,7 @@ impl Default for SantacoderClientBuilder {
 pub struct SantacoderSocketReq {
     pub code: String,
     pub num_samples: usize,
+    pub temperature: f64,
 }
 
 impl CompletionModel for SantacoderClient {
@@ -87,6 +88,7 @@ impl CompletionModel for SantacoderClient {
         let code = query.input.clone();
         let problem_whitelist = query.problem_whitelist.clone();
         let socket = self.socket.clone();
+        let temperature = engine.get_temperature();
 
         // count the number of _hole_'s in the code
         let num_holes = code.matches("_hole_").count();
@@ -98,6 +100,7 @@ impl CompletionModel for SantacoderClient {
             let req = SantacoderSocketReq {
                 code: code.clone(),
                 num_samples: num_comps,
+                temperature,
             };
             let resp: serde_json::Value = {
                 socket
@@ -126,6 +129,7 @@ impl CompletionModel for SantacoderClient {
                     let req = SantacoderSocketReq {
                         code: completion.clone(),
                         num_samples: 5,
+                        temperature,
                     };
 
                     let resp: serde_json::Value = {
