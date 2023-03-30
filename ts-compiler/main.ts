@@ -80,7 +80,7 @@ const handlePrint = (decodedText: string, req: any): string => {
     ts.ScriptKind.TS
   );
   req.typeName = req.typeName || "_hole_"; // default to _hole_
-  const res = printSource(sourceFile, req.typeName);
+  const res = printSource(sourceFile, req.typeName, req.types);
   const base64 = Buffer.from(res).toString("base64");
   return JSON.stringify({
     type: "printResponse",

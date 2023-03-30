@@ -11,7 +11,7 @@ use crate::{
     completion::{
         ArcCompletionEngine, Completion, CompletionError, CompletionQuery, CompletionQueryBuilder,
     },
-    langserver::CheckProblem,
+    langserver::{AnnotateType, CheckProblem},
 };
 use crate::{
     debug,
@@ -23,7 +23,7 @@ use crate::{
 pub struct CodeBlockTree {
     /// NOTE: this is a generated name, not the original name.
     /// If this starts with "topnode", it's a toplevel node, and usages should not be emitted.
-    pub name: String, 
+    pub name: String,
     pub code: String,
     pub children: Vec<CodeBlockTree>,
 }
@@ -86,6 +86,8 @@ pub struct CompletionLevels<State = NewState> {
     fallback: bool,
     // if we want to create usages block or not
     usages: bool,
+    // the kind of types that need to be annotated
+    types: Vec<AnnotateType>,
     // this is the state of the completion levels
     state: std::marker::PhantomData<State>,
 }
@@ -93,13 +95,20 @@ pub struct CompletionLevels<State = NewState> {
 impl CompletionLevels<NewState> {
     /// Creates a new completion levels, with the given number of retries, number of completions,
     /// and whether to fallback to the `any` type.
-    pub fn new(retries: usize, num_comps: usize, fallback: bool, usages: bool) -> Self {
+    pub fn new(
+        retries: usize,
+        num_comps: usize,
+        fallback: bool,
+        usages: bool,
+        types: Vec<AnnotateType>,
+    ) -> Self {
         Self {
             levels: vec![],
             retries,
             num_comps,
             fallback,
             usages,
+            types,
             state: std::marker::PhantomData,
         }
     }
@@ -174,6 +183,7 @@ impl CompletionLevels<NewState> {
             num_comps: self.num_comps,
             fallback: self.fallback,
             usages: self.usages,
+            types: self.types,
             state: std::marker::PhantomData,
         })
     }
@@ -220,13 +230,18 @@ impl CompletionLevels<PreparedState> {
             let mut handles: Vec<JoinHandle<(String, Vec<String>)>> = vec![]; // node's (name, code)
             let mut lookup: HashMap<String, usize> = HashMap::new(); // node's name -> idx
             for (i, node) in nodes.iter().enumerate() {
+                // copy stuff for the async closure
                 let node = node.clone();
                 let prev_level = prev_level.clone();
                 let num_comps = self.num_comps;
                 let retries = self.retries;
                 let fallback = self.fallback;
                 let engine = engine.clone();
+                let types_to_annot = self.types.clone();
+
+                // we store the idx of the node in the lookup table
                 lookup.insert(node.name.clone(), i);
+
                 // we concurrently complete the code blocks at the level.
                 handles.push(tokio::task::spawn(async move {
                     let mut prompts: Vec<String> = vec![node.code.clone()];
@@ -270,8 +285,10 @@ impl CompletionLevels<PreparedState> {
                             let mut new_comps = HashSet::new(); // we don't care about duplicates
                             for prompt in prompts.iter() {
                                 let stubbed = ls.stub(prompt).await.unwrap();
-                                let mut printed =
-                                    ls.pretty_print(&stubbed, "_hole_").await.unwrap();
+                                let mut printed = ls
+                                    .pretty_print(&stubbed, "_hole_", &types_to_annot)
+                                    .await
+                                    .unwrap();
 
                                 // we add usages to the prompt
                                 if !node.usages.is_empty() {
@@ -333,6 +350,7 @@ impl CompletionLevels<PreparedState> {
             num_comps: self.num_comps,
             fallback: self.fallback,
             usages: self.usages,
+            types: self.types,
             state: std::marker::PhantomData,
         }
     }

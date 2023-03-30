@@ -2,6 +2,7 @@ use crate::{
     completion::ArcCompletionEngine,
     completion::{Completion, CompletionError, CompletionQueryBuilder},
     debug,
+    langserver::AnnotateType,
     tree::CompletionLevels,
 };
 use tokio::task::JoinHandle;
@@ -19,6 +20,7 @@ pub struct MainCtx {
     pub enable_defgen: bool,
     pub enable_usages: bool,
     pub depth_limit: Option<usize>,
+    pub types: Vec<AnnotateType>,
 }
 
 impl MainCtx {
@@ -92,7 +94,9 @@ impl MainStrategy for TreeStrategy {
             context.num_comps,
             context.fallback,
             context.enable_usages,
+            context.types.clone(),
         );
+
         let prepared = levels.prepare(tree, context.engine.get_ls()).await.unwrap();
         let completed = prepared.tree_complete(context.engine.clone()).await;
         let disassembled = completed.disassemble();
@@ -145,22 +149,22 @@ impl MainStrategy for SimpleStrategy {
         let printed = context
             .engine
             .get_ls()
-            .pretty_print(&initial_input, "_hole_")
+            .pretty_print(&initial_input, "_hole_", &context.types)
             .await
             .unwrap();
 
         debug!("pretty:\n{}", printed);
 
-        let mut queryBuilder = CompletionQueryBuilder::new(printed)
+        let mut query_builder = CompletionQueryBuilder::new(printed)
             .num_comps(context.num_comps)
             .retries(context.retries)
             .fallback(context.fallback);
 
         if context.enable_defgen {
-            queryBuilder = queryBuilder.instructions(crate::typedef_gen::TYPEDEF_INSTRUCTIONS);
+            query_builder = query_builder.instructions(crate::typedef_gen::TYPEDEF_INSTRUCTIONS);
         }
 
-        let query = queryBuilder.build();
+        let query = query_builder.build();
 
         let candidates = match context.engine.complete(query.clone()).await {
             Ok(r) => r,

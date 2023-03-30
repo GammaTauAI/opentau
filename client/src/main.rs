@@ -1,9 +1,10 @@
-use std::sync::Arc;
+use std::{str::FromStr, sync::Arc};
 
 use clap::Parser;
 use opentau::{
     cache::Cache,
     completion::Completion,
+    langserver::AnnotateType,
     main_strategies::{MainCtx, MainStrategy},
 };
 use tokio::sync::Mutex;
@@ -26,6 +27,20 @@ async fn main() {
         )))
     });
 
+    let types_to_annot = match args.exclude {
+        None => AnnotateType::all(),
+        Some(ref exclude) => {
+            let commasplit = exclude.split(',');
+            let mut exclude_types = Vec::new();
+            for s in commasplit {
+                let ex_type: AnnotateType = AnnotateType::from_str(s)
+                    .unwrap_or_else(|_| panic!("Unknown type to exclude: {s}"));
+                exclude_types.push(ex_type);
+            }
+            AnnotateType::all_except(&exclude_types)
+        }
+    };
+
     let ctx = MainCtx {
         file_contents,
         engine: args.completion_engine_factory(lang_client, cache).await,
@@ -37,6 +52,7 @@ async fn main() {
         enable_defgen: args.enable_defgen,
         depth_limit: args.depth_limit,
         enable_usages: !args.disable_usages,
+        types: types_to_annot,
     };
 
     // the typechecked and completed code(s). here if we get errors we exit with 1

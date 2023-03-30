@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{str::FromStr, sync::Arc};
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -10,7 +10,7 @@ pub mod py; // the python server
 pub mod ts; // the typescript server
 
 /// The kinds of problems that can occur when running the heuristics on a completion.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CheckProblem {
     /// The completion still has holes or undefined types.
     NotComplete,
@@ -37,14 +37,103 @@ impl<'a> Deserialize<'a> for CheckProblem {
     }
 }
 
+/// The kinds of statements that can be annotated by the language server.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AnnotateType {
+    /// Variable declaration
+    VarDecl,
+    /// Function declaration
+    FuncDecl,
+    /// Function expression (e.g. lambdas or arrow functions)
+    FuncExpr,
+    /// Class property
+    ClassProp,
+    /// Class method
+    ClassMethod,
+    /// Type declaration
+    TypeDecl,
+}
+
+impl FromStr for AnnotateType {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "VarDecl" => Ok(AnnotateType::VarDecl),
+            "FuncDecl" => Ok(AnnotateType::FuncDecl),
+            "FuncExpr" => Ok(AnnotateType::FuncExpr),
+            "ClassProp" => Ok(AnnotateType::ClassProp),
+            "ClassMethod" => Ok(AnnotateType::ClassMethod),
+            "TypeDecl" => Ok(AnnotateType::TypeDecl),
+            _ => Err(()),
+        }
+    }
+}
+
+impl<'a> Deserialize<'a> for AnnotateType {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'a>,
+    {
+        let s = String::deserialize(deserializer)?;
+        let annot = AnnotateType::from_str(&s)
+            .map_err(|_| serde::de::Error::custom(format!("invalid AnnotateType: {s}")))?;
+        Ok(annot)
+    }
+}
+
+impl Serialize for AnnotateType {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            AnnotateType::VarDecl => serializer.serialize_str("VarDecl"),
+            AnnotateType::FuncDecl => serializer.serialize_str("FuncDecl"),
+            AnnotateType::FuncExpr => serializer.serialize_str("FuncExpr"),
+            AnnotateType::ClassProp => serializer.serialize_str("ClassProp"),
+            AnnotateType::ClassMethod => serializer.serialize_str("ClassMethod"),
+            AnnotateType::TypeDecl => serializer.serialize_str("TypeDecl"),
+        }
+    }
+}
+
+impl AnnotateType {
+    /// Returns a list of all the annotate types.
+    pub fn all() -> Vec<AnnotateType> {
+        vec![
+            AnnotateType::VarDecl,
+            AnnotateType::FuncDecl,
+            AnnotateType::FuncExpr,
+            AnnotateType::ClassProp,
+            AnnotateType::ClassMethod,
+            AnnotateType::TypeDecl,
+        ]
+    }
+
+    /// Returns a list of all the annotate types, except for the given types in `exclude`.
+    pub fn all_except(exclude: &[AnnotateType]) -> Vec<AnnotateType> {
+        AnnotateType::all()
+            .into_iter()
+            .filter(|t| !exclude.contains(t))
+            .collect()
+    }
+}
+
 #[async_trait]
 /// The language server commands that are available to the completion engine.
 /// The `simple` strategy only requires the `pretty_print` and `check_complete` commands.
 /// The `tree` strategy additionally requires `to_tree`, `stub`, `weave`, and `usages`.
 /// For type definition generation, the `typedef_gen` and object_info` commands are required.
 pub trait LangServerCommands {
-    /// pretty print the given code, making all missing types the given type token
-    async fn pretty_print(&self, code: &str, type_name: &str) -> Result<String, LangServerError>;
+    /// pretty print the given code, making all missing types the given type token.
+    /// the `types` parameter specifies which types of code blocks should be annotated.
+    async fn pretty_print(
+        &self,
+        code: &str,
+        type_name: &str,
+        types: &[AnnotateType],
+    ) -> Result<String, LangServerError>;
 
     /// transforms the given code into a tree of code blocks
     async fn to_tree(&self, code: &str) -> Result<CodeBlockTree, LangServerError>;
@@ -52,7 +141,7 @@ pub trait LangServerCommands {
     /// makes all functions/classes/methods that are one level deep into a stub
     async fn stub(&self, code: &str) -> Result<String, LangServerError>;
 
-    /// checks if the given code is complete, comparing it to the original input
+    /// checks if the given code is complete, comparing it to the original input.
     async fn check_complete(
         &self,
         original: &str,
@@ -140,8 +229,8 @@ pub trait LangServer: LangServerCommands {
     /// for example, in TypeScript, this would be `any`.
     fn any_type(&self) -> String;
 
-    /// Produces a parser function that can parse out a type from the given code. 
-    /// The target function may require to enable features of the crate. If 
+    /// Produces a parser function that can parse out a type from the given code.
+    /// The target function may require to enable features of the crate. If
     /// the feature is disabled or the language does not support it, None is returned.
     fn get_type_parser(&self) -> Option<Box<dyn Fn(&str) -> Option<String> + Sync + Send>>;
 }
@@ -164,6 +253,7 @@ pub struct LSPrintReq {
     pub text: String,
     #[serde(rename = "typeName")]
     pub type_name: String,
+    pub types: Vec<AnnotateType>,
 }
 
 /// Request to the language server for the check command.
@@ -229,15 +319,20 @@ macro_rules! impl_langserver_commands {
                 &self,
                 code: &str,
                 type_name: &str,
+                types: &[$crate::langserver::AnnotateType],
             ) -> Result<String, $crate::langserver::LangServerError> {
                 let req = $crate::langserver::LSPrintReq {
                     cmd: "print".to_string(),
                     text: base64::encode(code),
                     type_name: type_name.to_string(),
+                    types: types.to_vec(),
                 };
 
                 use $crate::socket::SendToSocket;
-                let resp = self.socket.send_req(serde_json::to_value(&req).unwrap()).await?;
+                let resp = self
+                    .socket
+                    .send_req(serde_json::to_value(&req).unwrap())
+                    .await?;
                 // decode the response
                 let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
 
@@ -254,7 +349,10 @@ macro_rules! impl_langserver_commands {
                 };
 
                 use $crate::socket::SendToSocket;
-                let resp = self.socket.send_req(serde_json::to_value(&req).unwrap()).await?;
+                let resp = self
+                    .socket
+                    .send_req(serde_json::to_value(&req).unwrap())
+                    .await?;
 
                 // decode the response
                 let tree = base64::decode(resp["text"].as_str().unwrap()).unwrap();
@@ -272,7 +370,10 @@ macro_rules! impl_langserver_commands {
                 };
 
                 use $crate::socket::SendToSocket;
-                let resp = self.socket.send_req(serde_json::to_value(&req).unwrap()).await?;
+                let resp = self
+                    .socket
+                    .send_req(serde_json::to_value(&req).unwrap())
+                    .await?;
                 // decode the response
                 let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
 
@@ -294,7 +395,10 @@ macro_rules! impl_langserver_commands {
                     original: base64::encode(original),
                 };
                 use $crate::socket::SendToSocket;
-                let resp = self.socket.send_req(serde_json::to_value(&req).unwrap()).await?;
+                let resp = self
+                    .socket
+                    .send_req(serde_json::to_value(&req).unwrap())
+                    .await?;
 
                 let problems_json = resp["problems"].as_array().unwrap();
                 let mut problems = Vec::new();
@@ -322,7 +426,10 @@ macro_rules! impl_langserver_commands {
                 };
 
                 use $crate::socket::SendToSocket;
-                let resp = self.socket.send_req(serde_json::to_value(&req).unwrap()).await?;
+                let resp = self
+                    .socket
+                    .send_req(serde_json::to_value(&req).unwrap())
+                    .await?;
                 // decode the response
                 let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
 
@@ -341,7 +448,10 @@ macro_rules! impl_langserver_commands {
                 };
 
                 use $crate::socket::SendToSocket;
-                let resp = self.socket.send_req(serde_json::to_value(&req).unwrap()).await?;
+                let resp = self
+                    .socket
+                    .send_req(serde_json::to_value(&req).unwrap())
+                    .await?;
                 // decode the response
                 let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
 
@@ -359,7 +469,10 @@ macro_rules! impl_langserver_commands {
                 };
 
                 use $crate::socket::SendToSocket;
-                let resp = self.socket.send_req(serde_json::to_value(&req).unwrap()).await?;
+                let resp = self
+                    .socket
+                    .send_req(serde_json::to_value(&req).unwrap())
+                    .await?;
                 // decode the response
                 let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
 
@@ -376,7 +489,10 @@ macro_rules! impl_langserver_commands {
                 };
 
                 use $crate::socket::SendToSocket;
-                let resp = self.socket.send_req(serde_json::to_value(&req).unwrap()).await?;
+                let resp = self
+                    .socket
+                    .send_req(serde_json::to_value(&req).unwrap())
+                    .await?;
                 // decode the response
                 let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
 

@@ -97,6 +97,11 @@ pub struct Args {
     /// Disables the usage blocks in the tree strategy prompts
     #[clap(long, value_parser, default_value_t = false)]
     pub disable_usages: bool,
+
+    /// List of statements to exclude from being annotated (comma-separated).
+    /// You can exclude the following types: {"VarDecl", "FuncDecl", "FuncExpr", "ClassProp", "ClassMethod"}
+    #[clap(long, value_parser)]
+    pub exclude: Option<String>,
 }
 
 impl Args {

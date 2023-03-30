@@ -1,4 +1,5 @@
 import ts from "typescript";
+import { allTypes, AnnotateType } from "./printer";
 
 // unions two sets into a new set
 export const setUnion = <T>(a: Set<T>, b: Set<T>): Set<T> => {
@@ -67,41 +68,70 @@ export const typeTraversal = (
   visitor: (
     ty: ts.TypeNode | undefined,
     inner_child: ts.Node
-  ) => ts.TypeNode | undefined
+  ) => ts.TypeNode | undefined,
+  // default to all types
+  visit_list: AnnotateType[] = allTypes
 ) => {
   if (
-    ts.isFunctionDeclaration(node) ||
-    ts.isFunctionExpression(node) ||
-    ts.isArrowFunction(node)
+    (ts.isFunctionExpression(node) || ts.isArrowFunction(node)) &&
+    visit_list.includes("FuncExpr")
   ) {
     node.type = visitor(node.type, node); // NOTE: return type
     node.parameters.forEach((parameter) => {
       parameter.type = visitor(parameter.type, parameter);
     });
-  } else if (ts.isMethodDeclaration(node)) {
+  } else if (
+    ts.isFunctionDeclaration(node) &&
+    visit_list.includes("FuncDecl")
+  ) {
+    node.type = visitor(node.type, node); // NOTE: return type
+    node.parameters.forEach((parameter) => {
+      parameter.type = visitor(parameter.type, parameter);
+    });
+  } else if (
+    ts.isMethodDeclaration(node) &&
+    visit_list.includes("ClassMethod")
+  ) {
     node.type = visitor(node.type, node);
     node.parameters.forEach((parameter) => {
       parameter.type = visitor(parameter.type, parameter);
     });
-  } else if (ts.isPropertyDeclaration(node)) {
+  } else if (
+    ts.isPropertyDeclaration(node) &&
+    visit_list.includes("ClassProp")
+  ) {
     node.type = visitor(node.type, node);
-  } else if (ts.isVariableStatement(node)) {
+  } else if (
+    ts.isVariableStatement(node) &&
+    visit_list.includes("VarDecl")
+  ) {
     node.declarationList.declarations.forEach((declaration) => {
       declaration.type = visitor(declaration.type, declaration);
     });
-  } else if (ts.isPropertySignature(node)) {
+  } else if (
+    ts.isPropertySignature(node) &&
+    visit_list.includes("TypeDecl")
+  ) {
     node.type = visitor(node.type, node);
-  } else if (ts.isFunctionTypeNode(node)) {
+  } else if (
+    ts.isFunctionTypeNode(node) &&
+    // this falls under FuncExpr
+    visit_list.includes("FuncExpr")
+  ) {
     node.parameters.forEach((parameter) => {
       parameter.type = visitor(parameter.type, parameter);
     });
     node.type = visitor(node.type, node) ?? node.type;
-  } else if (ts.isConstructorDeclaration(node)) {
+  } else if (
+    ts.isConstructorDeclaration(node) &&
+    // this falls under FuncDecl
+    visit_list.includes("FuncDecl")
+  ) {
     // no need for return type for constructors, why does typescript even declare it?
     node.parameters.forEach((parameter) => {
       parameter.type = visitor(parameter.type, parameter);
     });
   }
 
-  node.forEachChild((c) => typeTraversal(c, visitor));
+  node.forEachChild((c) => typeTraversal(c, visitor, visit_list));
 };
