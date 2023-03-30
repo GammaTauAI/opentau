@@ -56,11 +56,8 @@ export const checkCompleted = (
   // checks completed types and scores them
   completed.forEachChild((toplevelChild) => {
     typeTraversal(toplevelChild, (ty, child) => {
-      // means codex removed the type, or could be a vardecl-bound function
+      // means that the model removed the type, or could be a vardecl-bound function
       if (!ty) {
-        if (!isVarDeclBoundFunction(child)) {
-          isCompleted = false;
-        }
         return ty;
       }
 
