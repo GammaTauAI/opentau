@@ -2,7 +2,7 @@ use crate::{
     completion::ArcCompletionEngine,
     completion::{Completion, CompletionError, CompletionQueryBuilder},
     debug,
-    langserver::AnnotateType,
+    langserver::{AnnotateType, LangServerError},
     tree::CompletionLevels,
 };
 use tokio::task::JoinHandle;
@@ -25,7 +25,7 @@ pub struct MainCtx {
 
 impl MainCtx {
     /// Returns the subset of completions that type check from the given set of completions
-    async fn type_check_candidates(&self, candidates: Vec<Completion>) -> Vec<Completion> {
+    pub async fn type_check_candidates(&self, candidates: Vec<Completion>) -> Vec<Completion> {
         println!(" --- Type Checking {} Candidates ---", candidates.len());
         let mut comps: Vec<Completion> = vec![];
         let mut handles: Vec<JoinHandle<Option<Completion>>> = vec![];
@@ -64,9 +64,8 @@ impl MainCtx {
 
 #[async_trait::async_trait]
 pub trait MainStrategy {
-    /// Run the strategy on the given context. The program will exit with code 1 if
-    /// there are any errors.
-    async fn run(&self, context: MainCtx) -> Vec<Completion>;
+    /// Run the strategy on the given context.
+    async fn run(&self, context: MainCtx) -> Result<Vec<Completion>, LangServerError>;
 }
 
 pub struct TreeStrategy;
@@ -77,13 +76,12 @@ impl MainStrategy for TreeStrategy {
     /// Runs the tree completion strategy. Documentation on the strategy is in the `tree.rs` file.
     ///
     /// TODO: somehow add caching to this strategy, maybe go up the tree?
-    async fn run(&self, context: MainCtx) -> Vec<Completion> {
+    async fn run(&self, context: MainCtx) -> Result<Vec<Completion>, LangServerError> {
         let mut tree = context
             .engine
             .get_ls()
             .to_tree(&context.file_contents)
-            .await
-            .unwrap();
+            .await?;
 
         if let Some(limit) = context.depth_limit {
             tree.depth_limit(limit);
@@ -97,7 +95,7 @@ impl MainStrategy for TreeStrategy {
             context.types.clone(),
         );
 
-        let prepared = levels.prepare(tree, context.engine.get_ls()).await.unwrap();
+        let prepared = levels.prepare(tree, context.engine.get_ls()).await?;
         let completed = prepared.tree_complete(context.engine.clone()).await;
         let disassembled = completed.disassemble();
 
@@ -126,7 +124,7 @@ impl MainStrategy for TreeStrategy {
         // sort by lowest score first
         candidates.sort_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
 
-        context.type_check_candidates(candidates).await
+        Ok(context.type_check_candidates(candidates).await)
     }
 }
 
@@ -134,14 +132,13 @@ impl MainStrategy for TreeStrategy {
 impl MainStrategy for SimpleStrategy {
     /// Runs the simple completion strategy, which just runs the completion on the given file
     /// without any transformation, other than adding "_hole_" to each unknwon type
-    async fn run(&self, context: MainCtx) -> Vec<Completion> {
+    async fn run(&self, context: MainCtx) -> Result<Vec<Completion>, LangServerError> {
         let initial_input = if context.enable_defgen {
             context
                 .engine
                 .get_ls()
                 .typedef_gen(&context.file_contents)
-                .await
-                .unwrap()
+                .await?
         } else {
             context.file_contents.clone()
         };
@@ -150,8 +147,7 @@ impl MainStrategy for SimpleStrategy {
             .engine
             .get_ls()
             .pretty_print(&initial_input, "_hole_", &context.types)
-            .await
-            .unwrap();
+            .await?;
 
         debug!("pretty:\n{}", printed);
 
@@ -200,6 +196,6 @@ impl MainStrategy for SimpleStrategy {
             }
         }
 
-        comps
+        Ok(comps)
     }
 }

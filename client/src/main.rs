@@ -56,7 +56,13 @@ async fn main() {
     };
 
     // the typechecked and completed code(s). here if we get errors we exit with 1
-    let good_ones: Vec<Completion> = strategy.run(ctx).await;
+    let good_ones: Vec<Completion> = match strategy.run(ctx).await {
+        Ok(good_ones) => good_ones,
+        Err(e) => {
+            eprintln!("Fatal error while running strategy: {e}");
+            std::process::exit(1);
+        }
+    };
 
     if good_ones.is_empty() {
         eprintln!("No completions type checked");

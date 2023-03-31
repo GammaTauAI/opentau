@@ -99,7 +99,7 @@ pub struct Args {
     pub disable_usages: bool,
 
     /// List of statements to exclude from being annotated (comma-separated).
-    /// You can exclude the following types: {"VarDecl", "FuncDecl", "FuncExpr", "ClassProp", "ClassMethod"}
+    /// You can exclude the following types: {"VarDecl", "FuncDecl", "FuncExpr", "ClassProp", "ClassMethod", "TypeDecl"}
     #[clap(long, value_parser)]
     pub exclude: Option<String>,
 }
