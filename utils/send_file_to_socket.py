@@ -43,7 +43,8 @@ elif sys.argv[2] == "print":
     msg = {
         "cmd": sys.argv[2],
         "text": base64.b64encode(data).decode("utf-8"),
-        "typeName": sys.argv[4] if len(sys.argv) > 4 else "_hole_"
+        "typeName": sys.argv[4] if len(sys.argv) > 4 else "_hole_",
+        "types": sys.argv[5] if len(sys.argv) > 5 else "[\"VarDecl\", \"FuncDecl\", \"FuncExpr\", \"ClassProp\", \"ClassMethod\"]"
     }
 else:
     msg = {
