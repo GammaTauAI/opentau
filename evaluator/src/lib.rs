@@ -180,14 +180,11 @@ pub async fn check_file_delete(path: &str) {
     };
 
     if tokio::fs::metadata(results_path.clone()).await.is_ok() {
-        println!(
-            "File {} already exists, do you want to delete it? (y/n)",
-            results_path
-        );
-        let mut input = String::new();
+        println!("File {results_path} already exists, do you want to delete it? (y/n)");
+        let mut buf = [0; 1];
         let mut stdin = tokio::io::stdin();
-        stdin.read_to_string(&mut input).await.unwrap();
-        if input.trim() == "y" {
+        stdin.read_exact(&mut buf).await.unwrap();
+        if buf[0] == b'y' {
             tokio::fs::remove_file(results_path).await.unwrap();
         } else {
             println!("Exiting");
