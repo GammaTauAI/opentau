@@ -259,8 +259,13 @@ impl CompletionLevels<PreparedState> {
                             // make all possible permutations between prompt elements and
                             // child.completed elements
                             let mut new_prompts = vec![];
-                            for parent_code in prompts.iter() {
-                                for child_code in child.completed.iter() {
+                            for (p_i, parent_code) in prompts.iter().enumerate() {
+                                for (c_i, child_code) in child.completed.iter().enumerate() {
+                                    debug!(
+                                        "weaving child {c_i} into parent {p_i} (max p: {}, max c: {})",
+                                        prompts.len(),
+                                        child.completed.len()
+                                        );
                                     let comp = engine
                                         .get_ls()
                                         // we take the min because at level 0 we have the root node
