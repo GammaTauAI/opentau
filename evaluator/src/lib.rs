@@ -10,7 +10,7 @@ use opentau::{
     main_strategies::{MainCtx, MainStrategy, SimpleStrategy, TreeStrategy},
 };
 use serde::{Deserialize, Serialize};
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct EvalSpec {
@@ -168,6 +168,32 @@ pub async fn read_dataset(path: &str) -> Vec<DatasetElement> {
         dataset.push(element);
     }
     dataset
+}
+
+/// Checks if the file exists, and asks the user if they want to delete it.
+pub async fn check_file_delete(path: &str) {
+    let results_path = if path.starts_with('/') {
+        path.to_string()
+    } else {
+        let cargo_path = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+        format!("{cargo_path}/{path}")
+    };
+
+    if tokio::fs::metadata(results_path.clone()).await.is_ok() {
+        println!(
+            "File {} already exists, do you want to delete it? (y/n)",
+            results_path
+        );
+        let mut input = String::new();
+        let mut stdin = tokio::io::stdin();
+        stdin.read_to_string(&mut input).await.unwrap();
+        if input.trim() == "y" {
+            tokio::fs::remove_file(results_path).await.unwrap();
+        } else {
+            println!("Exiting");
+            std::process::exit(0);
+        }
+    }
 }
 
 pub async fn write_results(results: &Vec<ResultElement>, path: &str) {

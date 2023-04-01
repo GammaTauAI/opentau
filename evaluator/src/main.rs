@@ -1,5 +1,6 @@
 use evaluator::{
-    append_result, read_dataset, write_results, EvalSpec, ResultCompletion, ResultElement,
+    append_result, check_file_delete, read_dataset, write_results, EvalSpec, ResultCompletion,
+    ResultElement,
 };
 
 #[tokio::main]
@@ -31,6 +32,7 @@ async fn main() {
 
     let mut results: Vec<ResultElement> = Vec::new();
     let max_idx = dataset.len() - 1;
+    check_file_delete(&eval.results_path).await;
     for (i, element) in dataset.into_iter().enumerate() {
         println!("###### RUNNING {} ({i}/{max_idx}) ######", element.hexsha);
         let context =
