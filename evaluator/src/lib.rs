@@ -10,6 +10,7 @@ use opentau::{
     main_strategies::{MainCtx, MainStrategy, SimpleStrategy, TreeStrategy},
 };
 use serde::{Deserialize, Serialize};
+use tokio::io::AsyncWriteExt;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct EvalSpec {
@@ -169,7 +170,7 @@ pub async fn read_dataset(path: &str) -> Vec<DatasetElement> {
     dataset
 }
 
-pub async fn write_results(results: Vec<ResultElement>, path: &str) {
+pub async fn write_results(results: &Vec<ResultElement>, path: &str) {
     let results_path = if path.starts_with('/') {
         path.to_string()
     } else {
@@ -186,8 +187,40 @@ pub async fn write_results(results: Vec<ResultElement>, path: &str) {
         lines.push_str(&line);
         lines.push('\n');
     }
-    tokio::fs::write(results_path, lines).await.unwrap_or_else(|_| {
-        eprintln!("Failed to write results");
+    tokio::fs::write(results_path, lines)
+        .await
+        .unwrap_or_else(|_| {
+            eprintln!("Failed to write results");
+            std::process::exit(1);
+        });
+}
+
+pub async fn append_result(result: &ResultElement, path: &str) {
+    let results_path = if path.starts_with('/') {
+        path.to_string()
+    } else {
+        let cargo_path = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+        format!("{cargo_path}/{path}")
+    };
+
+    let line = serde_json::to_string(&result).unwrap_or_else(|_| {
+        eprintln!("Failed to serialize result");
+        std::process::exit(1);
+    });
+    let mut file = tokio::fs::OpenOptions::new()
+        .append(true)
+        .open(results_path)
+        .await
+        .unwrap_or_else(|_| {
+            eprintln!("Failed to open results file");
+            std::process::exit(1);
+        });
+    file.write_all(line.as_bytes()).await.unwrap_or_else(|_| {
+        eprintln!("Failed to write to results file");
+        std::process::exit(1);
+    });
+    file.write_all(b"\n").await.unwrap_or_else(|_| {
+        eprintln!("Failed to write to results file");
         std::process::exit(1);
     });
 }

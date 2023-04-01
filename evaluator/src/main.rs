@@ -1,4 +1,4 @@
-use evaluator::{read_dataset, write_results, EvalSpec, ResultCompletion, ResultElement};
+use evaluator::{read_dataset, write_results, EvalSpec, ResultCompletion, ResultElement, append_result};
 
 #[tokio::main]
 async fn main() {
@@ -79,8 +79,10 @@ async fn main() {
             }
         };
 
+        append_result(&elem, &eval.results_path).await;
         results.push(elem);
     }
 
-    write_results(results, &eval.results_path).await;
+    // rewrite results, just in case
+    write_results(&results, &eval.results_path).await;
 }
