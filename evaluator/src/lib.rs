@@ -208,6 +208,7 @@ pub async fn append_result(result: &ResultElement, path: &str) {
         std::process::exit(1);
     });
     let mut file = tokio::fs::OpenOptions::new()
+        .create(true)
         .append(true)
         .open(results_path)
         .await
