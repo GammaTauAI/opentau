@@ -1,4 +1,6 @@
-use evaluator::{read_dataset, write_results, EvalSpec, ResultCompletion, ResultElement, append_result};
+use evaluator::{
+    append_result, read_dataset, write_results, EvalSpec, ResultCompletion, ResultElement,
+};
 
 #[tokio::main]
 async fn main() {
@@ -28,7 +30,9 @@ async fn main() {
     let strategy = eval.get_strategy();
 
     let mut results: Vec<ResultElement> = Vec::new();
-    for element in dataset {
+    let max_idx = dataset.len() - 1;
+    for (i, element) in dataset.into_iter().enumerate() {
+        println!("###### RUNNING {} ({i}/{max_idx}) ######", element.hexsha);
         let context =
             eval.make_main_ctx(element.content_without_annotations.clone(), engine.clone());
         let comps = strategy.run(context).await;
