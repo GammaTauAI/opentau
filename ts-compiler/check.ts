@@ -1,5 +1,10 @@
 import ts from "typescript";
-import { typeTraversal, createFakeType, isVarDeclBoundFunction, getDeepMutableClone } from "./utils";
+import {
+  typeTraversal,
+  createFakeType,
+  isVarDeclBoundFunction,
+  getDeepMutableClone,
+} from "./utils";
 import { codePrinter } from "./utils";
 
 const count_nodes = (child: ts.Node): number => {
@@ -58,6 +63,11 @@ export const checkCompleted = (
     typeTraversal(toplevelChild, (ty, child) => {
       // means that the model removed the type, or could be a vardecl-bound function
       if (!ty) {
+        if (!isVarDeclBoundFunction(child)) {
+          rawScore += 0.5;
+          numTypeNodes += 1;
+          return;
+        }
         return ty;
       }
 
@@ -184,7 +194,7 @@ export const checkCompleted = (
   // now strip types
   const fake = createFakeType("bleh");
   const stripTypes = (_: ts.TypeNode | undefined) => fake;
-  
+
   originalStripped.forEachChild((child) => {
     typeTraversal(child, stripTypes);
   });

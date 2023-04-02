@@ -54,7 +54,7 @@ else:
 
 print("Sending msg: {}".format(msg))
 
-msg = json.dumps(msg)
+msg = json.dumps(msg) + r"??END??"
 b = msg.encode("utf-8")
 
 s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -62,8 +62,9 @@ s.connect(sock)
 s.sendall(b)
 
 # read the response and print it, receive all data until EOF
-data = s.recv(12288)
+data = s.recv(999999999)
 res = data.decode("utf-8")
+print("Response is:\n {}".format(res))
 try:
     jsonDecoded = json.loads(res)
     base64Decoded = base64.b64decode(jsonDecoded["text"]).decode("utf-8")

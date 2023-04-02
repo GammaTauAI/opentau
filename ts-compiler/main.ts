@@ -282,13 +282,22 @@ const handleTypeCheck = (decodedText: string): string => {
 };
 
 var unixServer = net.createServer(function (client) {
+  let completeData = "";
+  const END_TOKEN = "??END??";
   client.on("data", function (data) {
     // try to parse the data as a json object
 
     var req; // in the format of {cmd: "the-cmd", text: "the-text", ...}
     var decodedText;
     try {
-      req = JSON.parse(data.toString());
+      const strData = data.toString();
+      if (!strData.endsWith(END_TOKEN)) {
+        completeData += strData;
+        return;
+      }
+      completeData += strData.substring(0, strData.length - END_TOKEN.length);
+
+      req = JSON.parse(completeData);
       decodedText = Buffer.from(req.text, "base64").toString("utf8");
     } catch (e) {
       assert(e instanceof Error);

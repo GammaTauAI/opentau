@@ -36,6 +36,9 @@ pub struct SocketPool {
     avail_rx: Mutex<Receiver<String>>,
 }
 
+// end token to indicate the end of a response
+pub const END_TOKEN: &str = "??END??";
+
 #[async_trait::async_trait]
 pub trait SendToSocket: Send + Sync {
     /// Sends the given request to the server and returns the response as a JSON object.
@@ -170,7 +173,7 @@ impl SocketAbstraction {
         T: ?Sized + Serialize,
     {
         let mut stream = UnixStream::connect(self.socket_path.to_string()).await?;
-        let req = serde_json::to_string(req).unwrap();
+        let req = format!("{}{}", serde_json::to_string(req).unwrap(), END_TOKEN);
 
         stream.write_all(req.as_bytes()).await?;
         stream.shutdown().await?;
