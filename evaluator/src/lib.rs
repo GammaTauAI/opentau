@@ -170,8 +170,8 @@ pub async fn read_dataset(path: &str) -> Vec<DatasetElement> {
     dataset
 }
 
-/// Checks if the file exists, and asks the user if they want to delete it.
-pub async fn check_file_delete(path: &str) {
+/// Checks if the file exists, and asks the user if they want to delete it or resume from it.
+pub async fn check_file_delete(path: &str) -> Option<Vec<ResultElement>> {
     let results_path = if path.starts_with('/') {
         path.to_string()
     } else {
@@ -180,16 +180,35 @@ pub async fn check_file_delete(path: &str) {
     };
 
     if tokio::fs::metadata(results_path.clone()).await.is_ok() {
-        println!("File {results_path} already exists, do you want to delete it? (y/n)");
+        println!("File {results_path} already exists, do you want to delete it or resume?\n\td: delete\n\tr: resume\n\tc: cancel");
         let mut buf = [0; 1];
         let mut stdin = tokio::io::stdin();
         stdin.read_exact(&mut buf).await.unwrap();
-        if buf[0] == b'y' {
+        if buf[0] == b'd' {
             tokio::fs::remove_file(results_path).await.unwrap();
+            None
+        } else if buf[0] == b'r' {
+            let results_file = tokio::fs::read_to_string(results_path)
+                .await
+                .unwrap_or_else(|_| {
+                    eprintln!("Failed to read input file");
+                    std::process::exit(1);
+                });
+            let mut results = Vec::new();
+            for line in results_file.lines() {
+                let element: ResultElement = serde_json::from_str(line).unwrap_or_else(|_| {
+                    eprintln!("Failed to parse input file");
+                    std::process::exit(1);
+                });
+                results.push(element);
+            }
+            Some(results)
         } else {
             println!("Exiting");
             std::process::exit(0);
         }
+    } else {
+        None
     }
 }
 

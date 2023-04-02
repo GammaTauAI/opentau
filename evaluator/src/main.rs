@@ -32,8 +32,16 @@ async fn main() {
 
     let mut results: Vec<ResultElement> = Vec::new();
     let max_idx = dataset.len() - 1;
-    check_file_delete(&eval.results_path).await;
+    let maybe_resume = check_file_delete(&eval.results_path).await;
+    if let Some(resume) = maybe_resume {
+        results = resume;
+        println!("Resuming from {} results", results.len());
+    }
+
     for (i, element) in dataset.into_iter().enumerate() {
+        if i < results.len() { // already done from previous run
+            continue;
+        }
         println!("###### RUNNING {} ({i}/{max_idx}) ######", element.hexsha);
         let context =
             eval.make_main_ctx(element.content_without_annotations.clone(), engine.clone());
