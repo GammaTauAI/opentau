@@ -244,7 +244,7 @@ impl CompletionLevels<PreparedState> {
 
                 // we concurrently complete the code blocks at the level.
                 handles.push(tokio::task::spawn(async move {
-                    let mut prompts: Vec<String> = vec![node.code.clone()];
+                    let mut prompts_set: HashSet<String> = HashSet::from([node.code.clone()]);
                     // if we are not at a leaf, we need to patch the node with the children
                     if !node.children_idxs.is_empty() {
                         let level_below: &Vec<CompNode> = prev_level.as_ref().as_ref().unwrap();
@@ -258,12 +258,12 @@ impl CompletionLevels<PreparedState> {
                             });
                             // make all possible permutations between prompt elements and
                             // child.completed elements
-                            let mut new_prompts = vec![];
-                            for (p_i, parent_code) in prompts.iter().enumerate() {
+                            let mut new_prompts = HashSet::new();
+                            for (p_i, parent_code) in prompts_set.iter().enumerate() {
                                 for (c_i, child_code) in child.completed.iter().enumerate() {
                                     debug!(
                                         "weaving child {c_i} into parent {p_i} (max p: {}, max c: {})",
-                                        prompts.len(),
+                                        prompts_set.len(),
                                         child.completed.len()
                                         );
                                     let comp = engine
@@ -273,16 +273,15 @@ impl CompletionLevels<PreparedState> {
                                         .weave(parent_code, child_code, std::cmp::min(1, level))
                                         .await
                                         .unwrap();
-                                    new_prompts.push(comp);
+                                    new_prompts.insert(comp);
                                 }
                             }
 
-                            prompts = new_prompts;
+                            prompts_set = new_prompts;
                         }
                     }
-                    // remove duplicates from prompts
-                    let prompts_set = prompts.iter().cloned().collect::<HashSet<_>>();
-                    prompts = prompts_set.into_iter().collect();
+
+                    let prompts: Vec<String> = prompts_set.into_iter().collect();
                     debug!("number of level prompts: {}", prompts.len());
                     match level.cmp(&0) {
                         Ordering::Greater => {
