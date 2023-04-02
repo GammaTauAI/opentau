@@ -60,7 +60,10 @@ export const findUsages = (
             stmt = stmt.parent;
           }
 
-          usagesStmts.push(ts.createExpressionStatement(stmt as ts.Expression));
+          // if the usagesStmts already contains this statement, don't add it again
+          if (!usagesStmts.some((s) => s === stmt)) {
+            usagesStmts.push(ts.createExpressionStatement(stmt as ts.Expression));
+          }
         } else {
           // we don't want to add the declaration to the usages
           return;
