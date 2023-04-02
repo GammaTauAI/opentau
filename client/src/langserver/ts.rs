@@ -64,7 +64,7 @@ pub fn ts_parse_type(input: &str) -> Option<String> {
 
     let cm: Lrc<SourceMap> = Default::default();
 
-    let fm = cm.new_source_file(FileName::Anon, input);
+    let fm = cm.new_source_file(FileName::Anon, input.clone());
 
     let string_input = StringInput::from(&*fm);
     let lexer = Lexer::new(
@@ -83,6 +83,13 @@ pub fn ts_parse_type(input: &str) -> Option<String> {
             }
             let hi: usize = typ.span_hi().0.try_into().unwrap();
             let input_prefix = &fm.src[..hi - 1];
+
+            // there are some edge cases. for instance, this.blah gets parsed as a
+            // `this`. we should only parse as `this` if it's the only thing in the
+            // input.
+            if input_prefix.trim() == "this" && input.contains("this.") {
+                return None;
+            }
             Some(input_prefix.trim().to_string())
         }
     }
