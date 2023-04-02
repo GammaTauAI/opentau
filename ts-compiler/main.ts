@@ -74,6 +74,7 @@ const makeCompilerHost = (
 // ts.Program creation is expensive, so we cache them.
 // IMPORTANT INVARIANT: you must not mutate the source file after creating the program.
 // instead, you need to get a mutable clone using getDeepMutableClone (from ./utils).
+// that may seem inefficient, but it's still much faster than creating a new program.
 // the source file created is called "comp.ts" and is the only file in the program.
 const programCache = new LRUCache<string, ts.Program>({
   max: 100,
@@ -84,10 +85,8 @@ const getCachedOrCreateProgram = (
 ): ts.Program => {
   const cached = programCache.get(code);
   if (cached) {
-    console.log("cache hit");
     return cached;
   }
-  console.log("cache miss");
 
   const prog = ts.createProgram({
     rootNames: ["comp.ts"],
