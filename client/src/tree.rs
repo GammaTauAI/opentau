@@ -314,7 +314,9 @@ impl CompletionLevels<PreparedState> {
                                         for comp in comps {
                                             debug!("level comp: \n{}", comp.code);
                                             let rewoven =
-                                                ls.weave(prompt, &comp.code, 0).await.unwrap();
+                                                ls.weave(prompt, &comp.code, 0).await.unwrap_or_else(
+                                                    |_| comp.code.clone(),
+                                                );
                                             debug!("type-woven completion: \n{}", rewoven);
                                             new_comps.insert(rewoven);
                                         }
