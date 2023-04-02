@@ -49,10 +49,8 @@ async fn main() {
         let elem = match comps {
             Ok(comps) => {
                 // hack, but whatever
-                let mut context =
+                let context =
                     eval.make_main_ctx(element.content_without_annotations.clone(), engine.clone());
-                context.enable_type_check = true;
-
                 let typechecked = context.type_check_candidates(comps.clone()).await;
 
                 // get a diff of the ones that don't typecheck

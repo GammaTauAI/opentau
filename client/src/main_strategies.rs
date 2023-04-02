@@ -32,14 +32,7 @@ impl MainCtx {
         for (i, candidate) in candidates.into_iter().enumerate() {
             debug!("candidate {}:\n{}", i, candidate.code);
             let lang_client = self.engine.get_ls();
-            let enable_type_check = self.enable_type_check;
             handles.push(tokio::task::spawn(async move {
-                // this is kind of a hack, but it's the easiest way to get the
-                // `self.stop_at` to work well without code duplication
-                if !enable_type_check {
-                    return Some(candidate);
-                }
-
                 let type_checks = lang_client.type_check(&candidate.code).await.unwrap();
                 if type_checks {
                     Some(candidate)
@@ -124,7 +117,11 @@ impl MainStrategy for TreeStrategy {
         // sort by lowest score first
         candidates.sort_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
 
-        Ok(context.type_check_candidates(candidates).await)
+        Ok(if context.enable_type_check {
+            context.type_check_candidates(candidates).await
+        } else {
+            candidates
+        })
     }
 }
 
@@ -177,7 +174,11 @@ impl MainStrategy for SimpleStrategy {
             }
         };
 
-        let comps: Vec<Completion> = context.type_check_candidates(candidates).await;
+        let comps: Vec<Completion> = if context.enable_type_check {
+            context.type_check_candidates(candidates).await
+        } else {
+            candidates
+        };
 
         // cache the type-checked completions if we have a cache
         if let Some(mut cache) = context.engine.get_cache().await {
