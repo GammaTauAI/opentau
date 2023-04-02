@@ -1,5 +1,5 @@
 import ts from "typescript";
-import { codePrinter, isVarDeclBoundFunction } from "./utils";
+import { codePrinter, getDeepMutableClone, isVarDeclBoundFunction } from "./utils";
 
 // for debugging
 const typeMapPrint = (
@@ -115,10 +115,10 @@ export const weavePrograms = (
 ): string => {
   let sourceFile = original.getSourceFile("comp.ts")!;
   // clone, so LRU cache doesn't get messed up
-  sourceFile = ts.getMutableClone(sourceFile);
+  sourceFile = getDeepMutableClone(sourceFile);
 
   let nettleFile = nettle.getSourceFile("comp.ts")!;
-  nettleFile = ts.getMutableClone(nettleFile);
+  nettleFile = getDeepMutableClone(nettleFile);
   original.getTypeChecker();
   const nettleChecker = nettle.getTypeChecker();
 

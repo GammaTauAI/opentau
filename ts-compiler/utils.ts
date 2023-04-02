@@ -101,17 +101,11 @@ export const typeTraversal = (
     visit_list.includes("ClassProp")
   ) {
     node.type = visitor(node.type, node);
-  } else if (
-    ts.isVariableStatement(node) &&
-    visit_list.includes("VarDecl")
-  ) {
+  } else if (ts.isVariableStatement(node) && visit_list.includes("VarDecl")) {
     node.declarationList.declarations.forEach((declaration) => {
       declaration.type = visitor(declaration.type, declaration);
     });
-  } else if (
-    ts.isPropertySignature(node) &&
-    visit_list.includes("TypeDecl")
-  ) {
+  } else if (ts.isPropertySignature(node) && visit_list.includes("TypeDecl")) {
     node.type = visitor(node.type, node);
   } else if (
     ts.isFunctionTypeNode(node) &&
@@ -135,3 +129,33 @@ export const typeTraversal = (
 
   node.forEachChild((c) => typeTraversal(c, visitor, visit_list));
 };
+
+export function getDeepMutableClone<T extends ts.Node>(node: T): T {
+  return ts.transform(node, [
+    (context) => (node) => deepCloneWithContext(node, context),
+  ]).transformed[0];
+
+  function deepCloneWithContext<T extends ts.Node>(
+    node: T,
+    context: ts.TransformationContext
+  ): T {
+    const clonedNode = ts.visitEachChild(
+      stripRanges(ts.getMutableClone(node)),
+      (child) => deepCloneWithContext(child, context),
+      context
+    );
+    clonedNode.parent = undefined as any;
+    ts.forEachChild(clonedNode, (child) => {
+      child.parent = clonedNode;
+    });
+    return clonedNode;
+  }
+}
+
+// See https://stackoverflow.com/a/57367717/188246 for
+// why this is necessary.
+function stripRanges<T extends ts.Node>(node: T) {
+  node.pos = -1;
+  node.end = -1;
+  return node;
+}

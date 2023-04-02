@@ -1,5 +1,5 @@
 import ts from "typescript";
-import { typeTraversal, createFakeType, isVarDeclBoundFunction } from "./utils";
+import { typeTraversal, createFakeType, isVarDeclBoundFunction, getDeepMutableClone } from "./utils";
 import { codePrinter } from "./utils";
 
 const count_nodes = (child: ts.Node): number => {
@@ -170,12 +170,12 @@ export const checkCompleted = (
   }
 
   // now, strip types out of the original and completed
-  const originalStripped = ts.getMutableClone(original);
-  const completedStripped = ts.getMutableClone(completed);
+  const originalStripped = getDeepMutableClone(original);
+  const completedStripped = getDeepMutableClone(completed);
 
   // check if it added any weird comments
-  let originalComments = get_comment_count(originalStripped);
-  let completedComments = get_comment_count(completedStripped);
+  let originalComments = get_comment_count(original);
+  let completedComments = get_comment_count(completed);
 
   if (originalComments !== completedComments) {
     problems.push("ChangedComments");
@@ -184,7 +184,7 @@ export const checkCompleted = (
   // now strip types
   const fake = createFakeType("bleh");
   const stripTypes = (_: ts.TypeNode | undefined) => fake;
-
+  
   originalStripped.forEachChild((child) => {
     typeTraversal(child, stripTypes);
   });
