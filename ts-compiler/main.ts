@@ -1,4 +1,5 @@
 import ts from "typescript";
+import LRUCache from "lru-cache";
 import * as net from "net";
 import { printSource } from "./printer";
 import { makeTree } from "./tree";
@@ -70,6 +71,42 @@ const makeCompilerHost = (
   readFile: () => "",
 });
 
+// ts.Program creation is expensive, so we cache them.
+// IMPORTANT INVARIANT: you must not mutate the source file after creating the program.
+// instead, you need to get a mutable clone using ts.getMutableClone.
+const programCache = new LRUCache<string, ts.Program>({
+  max: 100,
+});
+const getCachedOrCreateProgram = (
+  name: string,
+  code: string,
+  setParentNodes = false
+): ts.Program => {
+  const cached = programCache.get(code);
+  if (cached) {
+    console.log("cache hit");
+    return cached;
+  }
+  console.log("cache miss");
+
+  const prog = ts.createProgram({
+    rootNames: [name],
+    options: compilerOptions,
+    host: makeCompilerHost(
+      name,
+      ts.createSourceFile(
+        name,
+        code,
+        ts.ScriptTarget.Latest,
+        setParentNodes,
+        ts.ScriptKind.TS
+      )
+    ),
+  });
+  programCache.set(code, prog);
+  return prog;
+};
+
 const handlePrint = (decodedText: string, req: any): string => {
   // create the source file
   const sourceFile = ts.createSourceFile(
@@ -133,21 +170,7 @@ const handleCheck = (decodedText: string, req: any): string => {
     ts.ScriptKind.TS
   );
 
-  const completedProgram = ts.createProgram({
-    rootNames: ["comp.ts"],
-    options: compilerOptions,
-    host: makeCompilerHost(
-      "comp.ts",
-      ts.createSourceFile(
-        "comp.ts",
-        decodedText,
-        ts.ScriptTarget.Latest,
-        false, // for setParentNodes
-        ts.ScriptKind.TS
-      )
-    ),
-  });
-
+  const completedProgram = getCachedOrCreateProgram("comp.ts", decodedText);
   const completedFile = completedProgram.getSourceFile("comp.ts")!;
 
   const res = checkCompleted(
@@ -175,23 +198,8 @@ const handleWeave = (decodedText: string, req: any): string => {
   const originalName = "original.ts";
   const nettleName = "nettle.ts";
 
-  const originalProgram = ts.createProgram({
-    rootNames: [originalName],
-    options: compilerOptions,
-    host: makeCompilerHost(
-      originalName,
-      ts.createSourceFile(originalName, decodedText, ts.ScriptTarget.Latest)
-    ),
-  });
-
-  const nettleProgram = ts.createProgram({
-    rootNames: [nettleName],
-    options: compilerOptions,
-    host: makeCompilerHost(
-      nettleName,
-      ts.createSourceFile(nettleName, decodedNettle, ts.ScriptTarget.Latest)
-    ),
-  });
+  const originalProgram = getCachedOrCreateProgram(originalName, decodedText, true);
+  const nettleProgram = getCachedOrCreateProgram(nettleName, decodedNettle, true);
 
   const res = weavePrograms(
     originalProgram,
@@ -285,20 +293,7 @@ const handleTypedefGen = (decodedText: string): string => {
 };
 
 const handleTypeCheck = (decodedText: string): string => {
-  const completedProgram = ts.createProgram({
-    rootNames: ["comp.ts"],
-    options: compilerOptions,
-    host: makeCompilerHost(
-      "comp.ts",
-      ts.createSourceFile(
-        "comp.ts",
-        decodedText,
-        ts.ScriptTarget.Latest,
-        false, // for setParentNodes
-        ts.ScriptKind.TS
-      )
-    ),
-  });
+  const completedProgram = getCachedOrCreateProgram("comp.ts", decodedText, false);
   const completedFile = completedProgram.getSourceFile("comp.ts")!;
   const diag = ts.getPreEmitDiagnostics(completedProgram, completedFile);
   return JSON.stringify({

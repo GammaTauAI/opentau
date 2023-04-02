@@ -115,7 +115,10 @@ export const weavePrograms = (
   nettlePath: string, // filepath of the temp file
   nettleLevel: number // the level of the nettle in the tree, 0 is the root.
 ): string => {
-  const sourceFile = original.getSourceFile(originalPath)!;
+  let sourceFile = original.getSourceFile(originalPath)!;
+  // clone, so LRU cache doesn't get messed up
+  sourceFile = ts.getMutableClone(sourceFile);
+
   const nettleFile = nettle.getSourceFile(nettlePath)!;
   original.getTypeChecker();
   const nettleChecker = nettle.getTypeChecker();
@@ -192,7 +195,7 @@ export const weavePrograms = (
 
   nettleFile.forEachChild((child) => buildTypeMap(child, ""));
 
-  console.log("typeMap:\n" + typeMapPrint(typeMap, nettleFile));
+  // console.log("typeMap:\n" + typeMapPrint(typeMap, nettleFile));
 
   // we weave the types into the original AST
   function weaveNode(node: ts.Node, scope: string, level: number) {
