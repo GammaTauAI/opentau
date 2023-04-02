@@ -117,7 +117,8 @@ export const weavePrograms = (
   // clone, so LRU cache doesn't get messed up
   sourceFile = ts.getMutableClone(sourceFile);
 
-  const nettleFile = nettle.getSourceFile("comp.ts")!;
+  let nettleFile = nettle.getSourceFile("comp.ts")!;
+  nettleFile = ts.getMutableClone(nettleFile);
   original.getTypeChecker();
   const nettleChecker = nettle.getTypeChecker();
 
