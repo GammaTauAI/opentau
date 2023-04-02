@@ -114,11 +114,7 @@ export const weavePrograms = (
   nettleLevel: number // the level of the nettle in the tree, 0 is the root.
 ): string => {
   let sourceFile = original.getSourceFile("comp.ts")!;
-  // clone, so LRU cache doesn't get messed up
-  sourceFile = getDeepMutableClone(sourceFile);
-
   let nettleFile = nettle.getSourceFile("comp.ts")!;
-  nettleFile = getDeepMutableClone(nettleFile);
   original.getTypeChecker();
   const nettleChecker = nettle.getTypeChecker();
 
