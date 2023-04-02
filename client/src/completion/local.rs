@@ -102,6 +102,19 @@ impl CompletionModel for LocalModelClient {
         let num_holes = code.matches("_hole_").count();
 
         tokio::task::spawn(async move {
+            if num_holes == 0 {
+                // nothing to do..
+                return filter_comps(
+                    filtered_completions.clone(),
+                    lang_client.clone(),
+                    &code,
+                    code.clone(),
+                    problem_whitelist.clone(),
+                    max_type_score,
+                )
+                .await;
+            }
+
             let mut completions = Vec::with_capacity(num_comps);
 
             // first run, consider all that work
