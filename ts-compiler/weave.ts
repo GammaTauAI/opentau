@@ -110,16 +110,14 @@ export const resolveType = (
 //
 export const weavePrograms = (
   original: ts.Program,
-  originalPath: string, // the path of the original file
   nettle: ts.Program,
-  nettlePath: string, // filepath of the temp file
   nettleLevel: number // the level of the nettle in the tree, 0 is the root.
 ): string => {
-  let sourceFile = original.getSourceFile(originalPath)!;
+  let sourceFile = original.getSourceFile("comp.ts")!;
   // clone, so LRU cache doesn't get messed up
   sourceFile = ts.getMutableClone(sourceFile);
 
-  const nettleFile = nettle.getSourceFile(nettlePath)!;
+  const nettleFile = nettle.getSourceFile("comp.ts")!;
   original.getTypeChecker();
   const nettleChecker = nettle.getTypeChecker();
 

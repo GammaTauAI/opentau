@@ -74,11 +74,11 @@ const makeCompilerHost = (
 // ts.Program creation is expensive, so we cache them.
 // IMPORTANT INVARIANT: you must not mutate the source file after creating the program.
 // instead, you need to get a mutable clone using ts.getMutableClone.
+// the source file created is called "comp.ts" and is the only file in the program.
 const programCache = new LRUCache<string, ts.Program>({
   max: 100,
 });
 const getCachedOrCreateProgram = (
-  name: string,
   code: string,
   setParentNodes = false
 ): ts.Program => {
@@ -90,12 +90,12 @@ const getCachedOrCreateProgram = (
   console.log("cache miss");
 
   const prog = ts.createProgram({
-    rootNames: [name],
+    rootNames: ["comp.ts"],
     options: compilerOptions,
     host: makeCompilerHost(
-      name,
+      "comp.ts",
       ts.createSourceFile(
-        name,
+        "comp.ts",
         code,
         ts.ScriptTarget.Latest,
         setParentNodes,
@@ -170,7 +170,7 @@ const handleCheck = (decodedText: string, req: any): string => {
     ts.ScriptKind.TS
   );
 
-  const completedProgram = getCachedOrCreateProgram("comp.ts", decodedText);
+  const completedProgram = getCachedOrCreateProgram(decodedText);
   const completedFile = completedProgram.getSourceFile("comp.ts")!;
 
   const res = checkCompleted(
@@ -195,17 +195,12 @@ const handleWeave = (decodedText: string, req: any): string => {
   }
 
   // due to type information, we have to create a program, instead of just a source file
-  const originalName = "original.ts";
-  const nettleName = "nettle.ts";
-
-  const originalProgram = getCachedOrCreateProgram(originalName, decodedText, true);
-  const nettleProgram = getCachedOrCreateProgram(nettleName, decodedNettle, true);
+  const originalProgram = getCachedOrCreateProgram(decodedText, true);
+  const nettleProgram = getCachedOrCreateProgram(decodedNettle, true);
 
   const res = weavePrograms(
     originalProgram,
-    originalName,
     nettleProgram,
-    nettleName,
     req.level
   );
 
@@ -293,7 +288,7 @@ const handleTypedefGen = (decodedText: string): string => {
 };
 
 const handleTypeCheck = (decodedText: string): string => {
-  const completedProgram = getCachedOrCreateProgram("comp.ts", decodedText, false);
+  const completedProgram = getCachedOrCreateProgram(decodedText, false);
   const completedFile = completedProgram.getSourceFile("comp.ts")!;
   const diag = ts.getPreEmitDiagnostics(completedProgram, completedFile);
   return JSON.stringify({
