@@ -1,10 +1,9 @@
 use std::{
     cmp::Ordering,
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, VecDeque},
     sync::Arc,
 };
 
-use rand_distr::Poisson;
 use serde::{Deserialize, Serialize};
 use tokio::task::JoinHandle;
 
@@ -79,8 +78,7 @@ pub struct PreparedState;
 pub struct CompletedState;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct CompletionLevels<State = NewState> {
-    levels: Vec<CompLevel>,
+struct HyperParams {
     // we propagate these query params to the completion queries
     retries: usize,
     num_comps: usize,
@@ -91,6 +89,12 @@ pub struct CompletionLevels<State = NewState> {
     stop_at: usize,
     // the kind of types that need to be annotated
     types: Vec<AnnotateType>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct CompletionLevels<State = NewState> {
+    levels: Vec<CompLevel>,
+    params: HyperParams,
     // this is the state of the completion levels
     state: std::marker::PhantomData<State>,
 }
@@ -108,12 +112,14 @@ impl CompletionLevels<NewState> {
     ) -> Self {
         Self {
             levels: vec![],
-            retries,
-            num_comps,
-            fallback,
-            usages,
-            stop_at,
-            types,
+            params: HyperParams {
+                retries,
+                num_comps,
+                fallback,
+                usages,
+                stop_at,
+                types,
+            },
             state: std::marker::PhantomData,
         }
     }
@@ -161,7 +167,7 @@ impl CompletionLevels<NewState> {
                     parent.children_idxs.push(idx);
 
                     // we get the usages of this node, from the parent
-                    let usages = if self.usages && !child.name.starts_with("topnode") {
+                    let usages = if self.params.usages && !child.name.starts_with("topnode") {
                         langsever.usages(&parent.code, &child.code).await?
                     } else {
                         String::new()
@@ -184,12 +190,7 @@ impl CompletionLevels<NewState> {
         }
         Ok(CompletionLevels {
             levels,
-            retries: self.retries,
-            num_comps: self.num_comps,
-            fallback: self.fallback,
-            usages: self.usages,
-            stop_at: self.stop_at,
-            types: self.types,
+            params: self.params,
             state: std::marker::PhantomData,
         })
     }
@@ -228,10 +229,38 @@ async fn merge_below_all_combs(
     *prompts_set = new_prompts;
 }
 
-fn count_all_possible_combs(level_below: &Vec<CompNode>) -> usize {
+fn count_all_possible_combs(child: &CompNode, curr_prompts: usize) -> usize {
     let mut res = 1;
-    for child in level_below {
+    for _ in 0..curr_prompts {
         res *= child.completed.len();
+    }
+    res
+}
+
+// evenly distribute the stop_at parameter across a given number of children.
+// Uses dynamic programming to find the optimal distribution.
+// For example, if we have stop_at 10, and 3 children, we want to distribute
+// [4, 3, 3] completions to each child.
+// Another example, if we have stop_at 10, and 4 children, we want to distribute
+// [3, 3, 2, 2] completions to each child.
+fn distribute_stop_at(stop_at: usize, num_children: usize) -> Vec<usize> {
+    let mut res = vec![0; num_children];
+    let mut stop_at = stop_at;
+    let mut i = 0;
+    while stop_at > 0 {
+        res[i] += 1;
+        stop_at -= 1;
+        i = (i + 1) % num_children;
+    }
+    res
+}
+
+fn all_combs(prompts: &HashSet<String>, comps: &[String]) -> Vec<(String, String)> {
+    let mut res = Vec::new();
+    for prompt in prompts.iter() {
+        for comp in comps.iter() {
+            res.push((prompt.clone(), comp.clone()));
+        }
     }
     res
 }
@@ -259,49 +288,179 @@ async fn merge_below_random_poisson(
     // 3: 3%
     // 4: 0.5%
     // ...
-    let poi = Poisson::new(0.7).unwrap();
+    let poi = rand_distr::Poisson::new(0.7).unwrap();
 
-    // make a copy of prompts and child
-    let mut prompts_copy = prompts_set.clone();
-    let mut child_copy = child.completed.clone();
+    // NOTE: this is exponential, but it is contained in here, and the state
+    // explosion does not travel up the tree, so it should be fine.
+    let mut all_combs = all_combs(prompts_set, &child.completed);
 
-    while new_prompts.len() < upper {
-        todo!("finish this")
+    while new_prompts.len() < upper && !all_combs.is_empty() {
+        let mut idx = {
+            // need to make sure we drop this before an await
+            // https://stackoverflow.com/questions/67443847/how-to-generate-random-numbers-in-async-rust
+            let mut rng = rand::thread_rng();
+            rand_distr::Distribution::sample(&poi, &mut rng) as usize
+        };
+        // adjust if we are out of bounds
+        if idx >= all_combs.len() {
+            idx = all_combs.len() - 1;
+        }
+
+        let (prompt, comp) = all_combs.remove(idx);
+        let comp = ls
+            // we take the min because at level 0 we have the root node
+            // and we want to weave at nettle_level 0
+            .weave(&prompt, &comp, std::cmp::min(1, level))
+            .await
+            .unwrap();
+        new_prompts.insert(comp);
     }
 
     *prompts_set = new_prompts;
 }
 
 impl CompletionLevels<PreparedState> {
+    async fn retry_query_until_ok(
+        engine: &ArcCompletionEngine,
+        q: CompletionQuery,
+    ) -> Option<Vec<Completion>> {
+        let mut res = engine.complete(q.clone()).await;
+        let mut retries = 0;
+        while res.is_err() {
+            // if it's a rate limit, print out to stderr
+            if let CompletionError::RateLimit(r) = res.unwrap_err() {
+                eprintln!(
+                    "Rate limited, but got {} canditate completions before.",
+                    r.len()
+                );
+            }
+            if retries > 5 {
+                return None;
+            }
+            retries += 1;
+            let q = q.clone();
+            res = engine.complete(q).await;
+        }
+        Some(res.unwrap())
+    }
+
+    fn spawn_parallel_comp(
+        params: &HyperParams,
+        engine: ArcCompletionEngine,
+        level: usize,
+        prev_level: Arc<Option<Vec<CompNode>>>,
+        node: CompNode,
+    ) -> JoinHandle<(String, Vec<String>)> {
+        let num_comps = params.num_comps;
+        let retries = params.retries;
+        let fallback = params.fallback;
+        // we use stop_at as our upper bound for the number of completions
+        let stop_at = params.stop_at;
+        let types_to_annot = params.types.clone();
+
+        tokio::task::spawn(async move {
+            let mut prompts_set: HashSet<String> = HashSet::from([node.code.clone()]);
+            // if we are not at a leaf, we need to patch the node with the children
+            if !node.children_idxs.is_empty() {
+                let level_below: &Vec<CompNode> = prev_level.as_ref().as_ref().unwrap();
+                let num_children = node.children_idxs.len();
+
+                // we need at least 1 completion for each child, so we
+                // adjust the stop_at parameter accordingly
+                let stop_at = std::cmp::max(stop_at, num_children);
+                let stop_at_dist = distribute_stop_at(stop_at, num_children);
+                for (child_idx, upper) in node.children_idxs.iter().zip(stop_at_dist) {
+                    let child = level_below.get(*child_idx).unwrap_or_else(|| {
+                        panic!(
+                            "child_idx {} should be in level_below, which has len {}",
+                            child_idx,
+                            level_below.len()
+                        )
+                    });
+                    let all_combs_num = count_all_possible_combs(child, prompts_set.len());
+                    if all_combs_num > upper {
+                        debug!(
+                            "all_combs_num {} > upper {}, so we use random poisson",
+                            all_combs_num, upper
+                        );
+                        merge_below_random_poisson(
+                            child,
+                            level,
+                            upper,
+                            &mut prompts_set,
+                            &engine.get_ls(),
+                        )
+                        .await;
+                    } else {
+                        debug!(
+                            "all_combs_num {} <= upper {}, so we use all combinations",
+                            all_combs_num, upper
+                        );
+                        merge_below_all_combs(child, level, &mut prompts_set, &engine.get_ls())
+                            .await;
+                    }
+                }
+            }
+
+            let prompts: Vec<String> = prompts_set.into_iter().collect();
+            debug!("number of level prompts: {}", prompts.len());
+            match level.cmp(&0) {
+                Ordering::Greater => {
+                    let ls = engine.get_ls();
+                    let mut new_comps = HashSet::new(); // we don't care about duplicates
+                    for prompt in prompts.iter() {
+                        let stubbed = ls.stub(prompt).await.unwrap();
+                        let mut printed = ls
+                            .pretty_print(&stubbed, "_hole_", &types_to_annot)
+                            .await
+                            .unwrap();
+
+                        // we add usages to the prompt
+                        if !node.usages.is_empty() {
+                            printed = format!("{}\n{}", printed, node.usages);
+                        }
+
+                        let q = CompletionQueryBuilder::new(printed)
+                            .num_comps(num_comps)
+                            .retries(retries)
+                            .fallback(fallback)
+                            // added comments are safe, we type-weave after
+                            .problem_whitelist(vec![CheckProblem::ChangedComments])
+                            .build();
+
+                        debug!("query: {}", q.input);
+                        let comps = Self::retry_query_until_ok(&engine, q).await;
+                        match comps {
+                            Some(comps) => {
+                                for comp in comps {
+                                    debug!("level comp: \n{}", comp.code);
+                                    let rewoven = ls
+                                        .weave(prompt, &comp.code, 0)
+                                        .await
+                                        .unwrap_or_else(|_| comp.code.clone());
+                                    debug!("type-woven completion: \n{}", rewoven);
+                                    new_comps.insert(rewoven);
+                                }
+                            }
+                            None => {
+                                debug!("Failed to get completions for query, skipping prompt.",);
+                            }
+                        }
+                    }
+                    (node.name, new_comps.into_iter().collect())
+                }
+                // if we are at root, we just want to disassemble the tree, no comps
+                Ordering::Equal => (node.name, prompts),
+                Ordering::Less => unreachable!(),
+            }
+        })
+    }
+
     /// Completes the code block tree, mutating the tree in place.
     pub async fn tree_complete(
         mut self,
         engine: ArcCompletionEngine,
     ) -> CompletionLevels<CompletedState> {
-        async fn retry_query_until_ok(
-            engine: &ArcCompletionEngine,
-            q: CompletionQuery,
-        ) -> Option<Vec<Completion>> {
-            let mut res = engine.complete(q.clone()).await;
-            let mut retries = 0;
-            while res.is_err() {
-                // if it's a rate limit, print out to stderr
-                if let CompletionError::RateLimit(r) = res.unwrap_err() {
-                    eprintln!(
-                        "Rate limited, but got {} canditate completions before.",
-                        r.len()
-                    );
-                }
-                if retries > 5 {
-                    return None;
-                }
-                retries += 1;
-                let q = q.clone();
-                res = engine.complete(q).await;
-            }
-            Some(res.unwrap())
-        }
-
         // we start at the deepest level of the array, and we complete the code blocks
         // at the level.
         let num_levels = self.levels.len();
@@ -315,99 +474,20 @@ impl CompletionLevels<PreparedState> {
             for (i, node) in nodes.iter().enumerate() {
                 // copy stuff for the async closure
                 let node = node.clone();
-                let prev_level = prev_level.clone();
-                let num_comps = self.num_comps;
-                let retries = self.retries;
-                let fallback = self.fallback;
-                // we use stop_at as our upper bound for the number of completions
-                let stop_at = self.stop_at;
                 let engine = engine.clone();
-                let types_to_annot = self.types.clone();
+                let prev_level = prev_level.clone();
 
                 // we store the idx of the node in the lookup table
                 lookup.insert(node.name.clone(), i);
 
                 // we concurrently complete the code blocks at the level.
-                handles.push(tokio::task::spawn(async move {
-                    let mut prompts_set: HashSet<String> = HashSet::from([node.code.clone()]);
-                    // if we are not at a leaf, we need to patch the node with the children
-                    if !node.children_idxs.is_empty() {
-                        let level_below: &Vec<CompNode> = prev_level.as_ref().as_ref().unwrap();
-                        let all_combs_num = count_all_possible_combs(level_below);
-                        debug!(
-                            "level below has {} nodes, and we have {} possible combinations",
-                            level_below.len(),
-                            all_combs_num
-                        );
-                        for child_idx in node.children_idxs.iter() {
-                            let child = level_below.get(*child_idx).unwrap_or_else(|| {
-                                panic!(
-                                    "child_idx {} should be in level_below, which has len {}",
-                                    child_idx,
-                                    level_below.len()
-                                )
-                            });
-                            // TODO: implement an heuristic to avoid state explosion.
-                            // more than 50 combinations is too much?
-                            merge_below_all_combs(child, level, &mut prompts_set, &engine.get_ls())
-                                .await;
-                        }
-                    }
-
-                    let prompts: Vec<String> = prompts_set.into_iter().collect();
-                    debug!("number of level prompts: {}", prompts.len());
-                    match level.cmp(&0) {
-                        Ordering::Greater => {
-                            let ls = engine.get_ls();
-                            let mut new_comps = HashSet::new(); // we don't care about duplicates
-                            for prompt in prompts.iter() {
-                                let stubbed = ls.stub(prompt).await.unwrap();
-                                let mut printed = ls
-                                    .pretty_print(&stubbed, "_hole_", &types_to_annot)
-                                    .await
-                                    .unwrap();
-
-                                // we add usages to the prompt
-                                if !node.usages.is_empty() {
-                                    printed = format!("{}\n{}", printed, node.usages);
-                                }
-
-                                let q = CompletionQueryBuilder::new(printed)
-                                    .num_comps(num_comps)
-                                    .retries(retries)
-                                    .fallback(fallback)
-                                    // added comments are safe, we type-weave after
-                                    .problem_whitelist(vec![CheckProblem::ChangedComments])
-                                    .build();
-
-                                debug!("query: {}", q.input);
-                                let comps = retry_query_until_ok(&engine, q).await;
-                                match comps {
-                                    Some(comps) => {
-                                        for comp in comps {
-                                            debug!("level comp: \n{}", comp.code);
-                                            let rewoven = ls
-                                                .weave(prompt, &comp.code, 0)
-                                                .await
-                                                .unwrap_or_else(|_| comp.code.clone());
-                                            debug!("type-woven completion: \n{}", rewoven);
-                                            new_comps.insert(rewoven);
-                                        }
-                                    }
-                                    None => {
-                                        debug!(
-                                            "Failed to get completions for query, skipping prompt.",
-                                        );
-                                    }
-                                }
-                            }
-                            (node.name, new_comps.into_iter().collect())
-                        }
-                        // if we are at root, we just want to disassemble the tree, no comps
-                        Ordering::Equal => (node.name, prompts),
-                        Ordering::Less => unreachable!(),
-                    }
-                }));
+                handles.push(Self::spawn_parallel_comp(
+                    &self.params,
+                    engine,
+                    level,
+                    prev_level,
+                    node,
+                ));
             }
             for (i, handle) in handles.into_iter().enumerate() {
                 let (name, comps) = handle.await.unwrap();
@@ -425,12 +505,7 @@ impl CompletionLevels<PreparedState> {
 
         CompletionLevels {
             levels: self.levels,
-            retries: self.retries,
-            num_comps: self.num_comps,
-            fallback: self.fallback,
-            usages: self.usages,
-            stop_at: self.stop_at,
-            types: self.types,
+            params: self.params,
             state: std::marker::PhantomData,
         }
     }
