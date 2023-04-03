@@ -78,6 +78,7 @@ async fn main() {
                 ResultElement {
                     dataset_elem: element,
                     failed_message: None,
+                    eval_spec: Some(eval.clone()),
                     completions: res_comps,
                 }
             }
@@ -86,6 +87,7 @@ async fn main() {
                 ResultElement {
                     dataset_elem: element,
                     failed_message: Some(e.to_string()),
+                    eval_spec: Some(eval.clone()),
                     completions: vec![],
                 }
             }
