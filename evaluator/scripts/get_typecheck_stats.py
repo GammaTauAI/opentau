@@ -1,5 +1,6 @@
 from utils import read_jsonl
 
+
 def get_num_typecheck(data_path):
     num_elems = 0
     num_typecheck = 0
