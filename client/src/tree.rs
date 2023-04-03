@@ -4,6 +4,7 @@ use std::{
     sync::Arc,
 };
 
+use rand_distr::Poisson;
 use serde::{Deserialize, Serialize};
 use tokio::task::JoinHandle;
 
@@ -86,6 +87,8 @@ pub struct CompletionLevels<State = NewState> {
     fallback: bool,
     // if we want to create usages block or not
     usages: bool,
+    // stop_at hyperparam
+    stop_at: usize,
     // the kind of types that need to be annotated
     types: Vec<AnnotateType>,
     // this is the state of the completion levels
@@ -100,6 +103,7 @@ impl CompletionLevels<NewState> {
         num_comps: usize,
         fallback: bool,
         usages: bool,
+        stop_at: usize,
         types: Vec<AnnotateType>,
     ) -> Self {
         Self {
@@ -108,6 +112,7 @@ impl CompletionLevels<NewState> {
             num_comps,
             fallback,
             usages,
+            stop_at,
             types,
             state: std::marker::PhantomData,
         }
@@ -183,6 +188,7 @@ impl CompletionLevels<NewState> {
             num_comps: self.num_comps,
             fallback: self.fallback,
             usages: self.usages,
+            stop_at: self.stop_at,
             types: self.types,
             state: std::marker::PhantomData,
         })
@@ -193,26 +199,19 @@ impl CompletionLevels<NewState> {
 /// between the level below and the level above.
 /// NOTE: This could lead to a lot of permutations, and a state explosion. We need to be careful with this.
 async fn merge_below_all_combs(
-    level_below: &Vec<CompNode>,
+    child: &CompNode,
     level: usize,
-    child_idx: usize,
     prompts_set: &mut HashSet<String>,
     ls: &ArcLangServer,
 ) {
-    let child = level_below.get(child_idx).unwrap_or_else(|| {
-        panic!(
-            "child_idx {} should be in level_below, which has len {}",
-            child_idx,
-            level_below.len()
-        )
-    });
-    // make all possible permutations between prompt elements and
+    // make all possible combinations between prompt elements and
     // child.completed elements
     let mut new_prompts = HashSet::new();
     for (p_i, parent_code) in prompts_set.iter().enumerate() {
         for (c_i, child_code) in child.completed.iter().enumerate() {
             debug!(
-                "weaving child {c_i} into parent {p_i} (max p: {}, max c: {})",
+                "weaving child({}) {c_i} into parent {p_i} (max p: {}, max c: {})",
+                child.name,
                 prompts_set.len(),
                 child.completed.len()
             );
@@ -235,6 +234,42 @@ fn count_all_possible_combs(level_below: &Vec<CompNode>) -> usize {
         res *= child.completed.len();
     }
     res
+}
+
+/// Strategy for merging the level below into the level above. Utilizes a random permutation
+/// between the level below and the level above. Where earlier indexes in the children
+/// are more likely to be chosen. This is because they are typically better completions.
+///
+/// # Panics
+/// ASSUMES that the total number of combinations is greater than upper.
+async fn merge_below_random_poisson(
+    child: &CompNode,
+    level: usize,
+    // is our upper bound for the number of completions
+    upper: usize,
+    prompts_set: &mut HashSet<String>,
+    ls: &ArcLangServer,
+) {
+    let mut new_prompts = HashSet::new();
+
+    // 0.7 converges to this distribution:
+    // 0: 50%
+    // 1: 35%
+    // 2: 12.5%
+    // 3: 3%
+    // 4: 0.5%
+    // ...
+    let poi = Poisson::new(0.7).unwrap();
+
+    // make a copy of prompts and child
+    let mut prompts_copy = prompts_set.clone();
+    let mut child_copy = child.completed.clone();
+
+    while new_prompts.len() < upper {
+        todo!("finish this")
+    }
+
+    *prompts_set = new_prompts;
 }
 
 impl CompletionLevels<PreparedState> {
@@ -284,6 +319,8 @@ impl CompletionLevels<PreparedState> {
                 let num_comps = self.num_comps;
                 let retries = self.retries;
                 let fallback = self.fallback;
+                // we use stop_at as our upper bound for the number of completions
+                let stop_at = self.stop_at;
                 let engine = engine.clone();
                 let types_to_annot = self.types.clone();
 
@@ -303,16 +340,17 @@ impl CompletionLevels<PreparedState> {
                             all_combs_num
                         );
                         for child_idx in node.children_idxs.iter() {
+                            let child = level_below.get(*child_idx).unwrap_or_else(|| {
+                                panic!(
+                                    "child_idx {} should be in level_below, which has len {}",
+                                    child_idx,
+                                    level_below.len()
+                                )
+                            });
                             // TODO: implement an heuristic to avoid state explosion.
                             // more than 50 combinations is too much?
-                            merge_below_all_combs(
-                                level_below,
-                                level,
-                                *child_idx,
-                                &mut prompts_set,
-                                &engine.get_ls(),
-                            )
-                            .await;
+                            merge_below_all_combs(child, level, &mut prompts_set, &engine.get_ls())
+                                .await;
                         }
                     }
 
@@ -391,6 +429,7 @@ impl CompletionLevels<PreparedState> {
             num_comps: self.num_comps,
             fallback: self.fallback,
             usages: self.usages,
+            stop_at: self.stop_at,
             types: self.types,
             state: std::marker::PhantomData,
         }

@@ -89,6 +89,7 @@ impl MainStrategy for TreeStrategy {
             context.num_comps,
             context.fallback,
             context.enable_usages,
+            context.stop_at,
             context.types.clone(),
         );
 
