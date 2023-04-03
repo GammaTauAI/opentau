@@ -294,6 +294,7 @@ async fn merge_below_random_poisson(
     // explosion does not travel up the tree, so it should be fine.
     let mut all_combs = all_combs(prompts_set, &child.completed);
 
+    let mut dbg_i = 0;
     while new_prompts.len() < upper && !all_combs.is_empty() {
         let mut idx = {
             // need to make sure we drop this before an await
@@ -305,6 +306,10 @@ async fn merge_below_random_poisson(
         if idx >= all_combs.len() {
             idx = all_combs.len() - 1;
         }
+        debug!(
+            "random weaving child({}) - iter {dbg_i}, picked idx {idx} (max iter: {upper})",
+            child.name
+        );
 
         let (prompt, comp) = all_combs.remove(idx);
         let comp = ls
@@ -314,6 +319,7 @@ async fn merge_below_random_poisson(
             .await
             .unwrap();
         new_prompts.insert(comp);
+        dbg_i += 1;
     }
 
     *prompts_set = new_prompts;
