@@ -189,6 +189,54 @@ impl CompletionLevels<NewState> {
     }
 }
 
+/// Strategy for merging the level below into the level above. Utilizes all possible combinations
+/// between the level below and the level above.
+/// NOTE: This could lead to a lot of permutations, and a state explosion. We need to be careful with this.
+async fn merge_below_all_combs(
+    level_below: &Vec<CompNode>,
+    level: usize,
+    child_idx: usize,
+    prompts_set: &mut HashSet<String>,
+    ls: &ArcLangServer,
+) {
+    let child = level_below.get(child_idx).unwrap_or_else(|| {
+        panic!(
+            "child_idx {} should be in level_below, which has len {}",
+            child_idx,
+            level_below.len()
+        )
+    });
+    // make all possible permutations between prompt elements and
+    // child.completed elements
+    let mut new_prompts = HashSet::new();
+    for (p_i, parent_code) in prompts_set.iter().enumerate() {
+        for (c_i, child_code) in child.completed.iter().enumerate() {
+            debug!(
+                "weaving child {c_i} into parent {p_i} (max p: {}, max c: {})",
+                prompts_set.len(),
+                child.completed.len()
+            );
+            let comp = ls
+                // we take the min because at level 0 we have the root node
+                // and we want to weave at nettle_level 0
+                .weave(parent_code, child_code, std::cmp::min(1, level))
+                .await
+                .unwrap();
+            new_prompts.insert(comp);
+        }
+    }
+
+    *prompts_set = new_prompts;
+}
+
+fn count_all_possible_combs(level_below: &Vec<CompNode>) -> usize {
+    let mut res = 1;
+    for child in level_below {
+        res *= child.completed.len();
+    }
+    res
+}
+
 impl CompletionLevels<PreparedState> {
     /// Completes the code block tree, mutating the tree in place.
     pub async fn tree_complete(
@@ -248,36 +296,23 @@ impl CompletionLevels<PreparedState> {
                     // if we are not at a leaf, we need to patch the node with the children
                     if !node.children_idxs.is_empty() {
                         let level_below: &Vec<CompNode> = prev_level.as_ref().as_ref().unwrap();
+                        let all_combs_num = count_all_possible_combs(level_below);
+                        debug!(
+                            "level below has {} nodes, and we have {} possible combinations",
+                            level_below.len(),
+                            all_combs_num
+                        );
                         for child_idx in node.children_idxs.iter() {
-                            let child = level_below.get(*child_idx).unwrap_or_else(|| {
-                                panic!(
-                                    "child_idx {} should be in level_below, which has len {}",
-                                    child_idx,
-                                    level_below.len()
-                                )
-                            });
-                            // make all possible permutations between prompt elements and
-                            // child.completed elements
-                            let mut new_prompts = HashSet::new();
-                            for (p_i, parent_code) in prompts_set.iter().enumerate() {
-                                for (c_i, child_code) in child.completed.iter().enumerate() {
-                                    debug!(
-                                        "weaving child {c_i} into parent {p_i} (max p: {}, max c: {})",
-                                        prompts_set.len(),
-                                        child.completed.len()
-                                        );
-                                    let comp = engine
-                                        .get_ls()
-                                        // we take the min because at level 0 we have the root node
-                                        // and we want to weave at nettle_level 0
-                                        .weave(parent_code, child_code, std::cmp::min(1, level))
-                                        .await
-                                        .unwrap();
-                                    new_prompts.insert(comp);
-                                }
-                            }
-
-                            prompts_set = new_prompts;
+                            // TODO: implement an heuristic to avoid state explosion.
+                            // more than 50 combinations is too much?
+                            merge_below_all_combs(
+                                level_below,
+                                level,
+                                *child_idx,
+                                &mut prompts_set,
+                                &engine.get_ls(),
+                            )
+                            .await;
                         }
                     }
 
@@ -313,10 +348,10 @@ impl CompletionLevels<PreparedState> {
                                     Some(comps) => {
                                         for comp in comps {
                                             debug!("level comp: \n{}", comp.code);
-                                            let rewoven =
-                                                ls.weave(prompt, &comp.code, 0).await.unwrap_or_else(
-                                                    |_| comp.code.clone(),
-                                                );
+                                            let rewoven = ls
+                                                .weave(prompt, &comp.code, 0)
+                                                .await
+                                                .unwrap_or_else(|_| comp.code.clone());
                                             debug!("type-woven completion: \n{}", rewoven);
                                             new_comps.insert(rewoven);
                                         }
