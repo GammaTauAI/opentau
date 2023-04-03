@@ -5,7 +5,7 @@ use crate::{
     langserver::{AnnotateType, LangServerError},
     tree::CompletionLevels,
 };
-use tokio::task::JoinHandle;
+use tokio::{sync::Semaphore, task::JoinHandle};
 
 /// The context for the program.
 /// Splits into different strategies.
@@ -32,8 +32,12 @@ impl MainCtx {
         for (i, candidate) in candidates.into_iter().enumerate() {
             debug!("candidate {}:\n{}", i, candidate.code);
             let lang_client = self.engine.get_ls();
+            // don't overload it, max 5 at a time
+            let sem = Semaphore::new(5);
             handles.push(tokio::task::spawn(async move {
+                let _permit = sem.acquire().await.unwrap();
                 let type_checks = lang_client.type_check(&candidate.code).await.unwrap();
+                drop(_permit);
                 if type_checks {
                     Some(candidate)
                 } else {
