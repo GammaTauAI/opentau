@@ -1,4 +1,4 @@
-# OpenTau: Using OpenAI Codex for Gradual Type Inference
+# OpenTau: Using Code Language Models for Gradual Type Inference
 
 Type inference for gradually-typed languages such as TypeScript and Python has become increasingly prevalent in the field of programming languages.
 However, current approaches often struggle with inferring descriptive types in cases in which user-defined type annotations are absent,
