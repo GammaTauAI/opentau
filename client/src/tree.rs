@@ -255,11 +255,23 @@ fn distribute_stop_at(stop_at: usize, num_children: usize) -> Vec<usize> {
     res
 }
 
-fn all_combs(prompts: &HashSet<String>, comps: &[String]) -> Vec<(String, String)> {
+/// Generates all possible combinations between the prompts and the completions in pairs
+/// of (prompt, completion). The given upper bound is the maximum number of combinations
+/// that we want to generate, if any.
+fn all_combs(
+    prompts: &HashSet<String>,
+    comps: &[String],
+    upper: Option<usize>,
+) -> Vec<(String, String)> {
+    let mut upper = upper.unwrap_or(usize::MAX);
     let mut res = Vec::new();
     for prompt in prompts.iter() {
         for comp in comps.iter() {
+            if upper == 0 {
+                return res;
+            }
             res.push((prompt.clone(), comp.clone()));
+            upper -= 1;
         }
     }
     res
@@ -290,9 +302,11 @@ async fn merge_below_random_poisson(
     // ...
     let poi = rand_distr::Poisson::new(0.7).unwrap();
 
-    // NOTE: this is exponential, but it is contained in here, and the state
-    // explosion does not travel up the tree, so it should be fine.
-    let mut all_combs = all_combs(prompts_set, &child.completed);
+    // we set the maximum upper bound of completions to upper * 5. it is extremely unlikely
+    // that we will ever reach this upper bound, but it is a safety net for 
+    // state explosion.
+    let combs_upper = upper * 5;
+    let mut all_combs = all_combs(prompts_set, &child.completed, Some(combs_upper));
 
     let mut dbg_i = 0;
     while new_prompts.len() < upper && !all_combs.is_empty() {
