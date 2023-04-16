@@ -1,5 +1,10 @@
 import ts from "typescript";
-import { codePrinter, getDeepMutableClone, isVarDeclBoundFunction } from "./utils";
+import {
+  codePrinter,
+  getDeepMutableClone,
+  isVarDeclBoundFunction,
+  printNodeToStderr,
+} from "./utils";
 
 // for debugging
 const typeMapPrint = (
@@ -13,6 +18,25 @@ const typeMapPrint = (
     str += "\n";
   });
   return str;
+};
+
+// clone parameters. this is so stupid, but we have to do this
+// in the case that a parameter has initializers, because the
+// initializers are mapped to text...
+const cloneParameters = (node: ts.FunctionLike): ts.ParameterDeclaration[] => {
+  const parameters = node.parameters.map((param) => {
+    if (!param.initializer) {
+      // ez, skip
+      return param;
+    }
+
+    const clone = getDeepMutableClone(param);
+    if (ts.isIdentifier(clone.name)) {
+      clone.name = ts.createIdentifier(clone.name.text);
+    }
+    return clone;
+  });
+  return parameters;
 };
 
 // resolves the type of the node.
@@ -41,6 +65,9 @@ export const resolveType = (
       }
 
       if (inferredTypeNode.parameters) {
+        const parameters = cloneParameters(node);
+        inferredTypeNode.parameters = ts.createNodeArray(parameters);
+
         for (let i = 0; i < inferredTypeNode.parameters.length; i++) {
           const param = inferredTypeNode.parameters[i];
           if (
@@ -66,6 +93,9 @@ export const resolveType = (
       }
 
       if (inferredTypeNode.parameters) {
+        const parameters = cloneParameters(varNodeType);
+        inferredTypeNode.parameters = ts.createNodeArray(parameters);
+
         for (let i = 0; i < inferredTypeNode.parameters.length; i++) {
           const param = inferredTypeNode.parameters[i];
           if (
@@ -79,11 +109,13 @@ export const resolveType = (
       }
     }
   } else if (ts.isConstructorDeclaration(node)) {
+    const parameters = cloneParameters(node);
+
     // dirty hack to transform a constructor to a ConstructorTypeNode
     // this is needed because the type checker will return a AnyKeyword?!?!?
     const constructorTypeNode = ts.createConstructorTypeNode(
       node.typeParameters,
-      node.parameters,
+      parameters,
       node.type
     );
     return constructorTypeNode;
