@@ -65,9 +65,6 @@ export const resolveType = (
       }
 
       if (inferredTypeNode.parameters) {
-        const parameters = cloneParameters(node);
-        inferredTypeNode.parameters = ts.createNodeArray(parameters);
-
         for (let i = 0; i < inferredTypeNode.parameters.length; i++) {
           const param = inferredTypeNode.parameters[i];
           if (
@@ -93,9 +90,6 @@ export const resolveType = (
       }
 
       if (inferredTypeNode.parameters) {
-        const parameters = cloneParameters(varNodeType);
-        inferredTypeNode.parameters = ts.createNodeArray(parameters);
-
         for (let i = 0; i < inferredTypeNode.parameters.length; i++) {
           const param = inferredTypeNode.parameters[i];
           if (
