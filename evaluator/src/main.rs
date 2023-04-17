@@ -39,18 +39,26 @@ async fn main() {
     }
 
     for (i, element) in dataset.into_iter().enumerate() {
-        if i < results.len() { // already done from previous run
+        if i < results.len() {
+            // already done from previous run
             continue;
         }
-        println!("###### RUNNING {} ({i}/{max_idx}) ######", element.hexsha);
-        let context =
-            eval.make_main_ctx(element.content_without_annotations.clone(), engine.clone());
+        println!(
+            "###### RUNNING {} ({i}/{max_idx}) ######",
+            element["hexsha"]
+                .as_str()
+                .unwrap_or_else(|| element["name"].as_str().unwrap()),
+        );
+
+        let content = element["content_without_annotations"]
+            .as_str()
+            .unwrap_or_else(|| element["content"].as_str().unwrap());
+        let context = eval.make_main_ctx(content.to_string(), engine.clone());
         let comps = strategy.run(context).await;
         let elem = match comps {
             Ok(comps) => {
                 // hack, but whatever
-                let context =
-                    eval.make_main_ctx(element.content_without_annotations.clone(), engine.clone());
+                let context = eval.make_main_ctx(content.to_string(), engine.clone());
                 let typechecked = context.type_check_candidates(comps.clone()).await;
 
                 // get a diff of the ones that don't typecheck

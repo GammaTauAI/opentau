@@ -108,30 +108,8 @@ impl EvalSpec {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct DatasetElement {
-    pub hexsha: String,
-    pub size: usize,
-    pub ext: String,
-    pub lang: String,
-    pub avg_line_length: f64,
-    pub max_line_length: usize,
-    pub loc: usize,
-    pub functions: usize,
-    pub function_parameters: usize,
-    pub variable_declarations: usize,
-    pub property_declarations: usize,
-    pub trivial_types: usize,
-    pub predefined_types: usize,
-    pub type_definitions: usize,
-    pub dynamism_heuristic: usize,
-    pub estimated_tokens: usize,
-    pub content: String,
-    pub content_without_annotations: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ResultElement {
-    pub dataset_elem: DatasetElement,
+    pub dataset_elem: serde_json::Value,
     /// This is just for debugging purposes. If the system for some reason
     /// fails, we can see what the error was.
     pub failed_message: Option<String>,
@@ -149,7 +127,7 @@ pub struct ResultCompletion {
     pub heuristic: u16,
 }
 
-pub async fn read_dataset(path: &str) -> Vec<DatasetElement> {
+pub async fn read_dataset(path: &str) -> Vec<serde_json::Value> {
     let dataset_path = if path.starts_with('/') {
         path.to_string()
     } else {
@@ -165,7 +143,7 @@ pub async fn read_dataset(path: &str) -> Vec<DatasetElement> {
         });
     let mut dataset = Vec::new();
     for line in dataset_file.lines() {
-        let element: DatasetElement = serde_json::from_str(line).unwrap_or_else(|_| {
+        let element = serde_json::from_str(line).unwrap_or_else(|_| {
             eprintln!("Failed to parse input file");
             std::process::exit(1);
         });
