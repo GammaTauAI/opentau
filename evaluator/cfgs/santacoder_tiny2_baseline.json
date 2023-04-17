@@ -1,0 +1,21 @@
+{
+  "model": "santacoder",
+  "local_model_socket": "/tmp/santa0.sock,/tmp/santa1.sock,/tmp/santa2.sock,/tmp/santa3.sock",
+  "language": "ts",
+  "results_path": "results/santacoder_tiny2_baseline.json",
+  "dataset_path": "data/ts-dataset-tiny2.jsonl",
+  "num_comps": 3,
+  "retries": 1,
+  "fallback": false,
+  "stop_at": 50,
+  "enable_defgen": false,
+  "enable_usages": false,
+  "strategy": "tree",
+  "max_type_quality": 1000,
+  "temperature": 0.75,
+  "depth_limit": 1,
+  "types": [
+    "FuncDecl",
+    "ClassMethod"
+  ]
+}
