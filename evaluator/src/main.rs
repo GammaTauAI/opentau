@@ -60,7 +60,12 @@ async fn main() {
                 // put the ones with num_type_errors == 0 first
                 let mut zero_err_comps: Vec<TypecheckedCompletion> = Vec::new();
                 let mut non_zero_err_comps: Vec<TypecheckedCompletion> = Vec::new();
-                for comp in comps {
+                println!("#### Got {} completions! ####", comps.len());
+                for (i, comp) in comps.into_iter().enumerate() {
+                    println!(
+                        "{}: errors = {}, score = {}, fallbacked = {}",
+                        i, comp.num_type_errors, comp.score, comp.fallbacked
+                    );
                     if comp.num_type_errors == 0 {
                         zero_err_comps.push(comp);
                     } else {
