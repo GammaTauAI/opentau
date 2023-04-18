@@ -1,7 +1,7 @@
 use evaluator::{
-    append_result, check_file_delete, read_dataset, write_results, EvalSpec, ResultCompletion,
-    ResultElement,
+    append_result, check_file_delete, read_dataset, write_results, EvalSpec, ResultElement,
 };
+use opentau::completion::TypecheckedCompletion;
 
 #[tokio::main]
 async fn main() {
@@ -57,31 +57,19 @@ async fn main() {
         let comps = strategy.run(context).await;
         let elem = match comps {
             Ok(comps) => {
-                // hack, but whatever
-                let context = eval.make_main_ctx(content.to_string(), engine.clone());
-                let typechecked = context.type_check_candidates(comps.clone()).await;
-
-                // get a diff of the ones that don't typecheck
-                let dont_typecheck = comps
-                    .into_iter()
-                    .filter(|c| !typechecked.contains(c))
-                    .collect::<Vec<_>>();
-
-                let mut res_comps = Vec::new();
-                for comp in typechecked {
-                    res_comps.push(ResultCompletion {
-                        completion: comp.code,
-                        does_typecheck: true,
-                        heuristic: comp.score,
-                    });
+                // put the ones with num_type_errors == 0 first
+                let mut zero_err_comps: Vec<TypecheckedCompletion> = Vec::new();
+                let mut non_zero_err_comps: Vec<TypecheckedCompletion> = Vec::new();
+                for comp in comps {
+                    if comp.num_type_errors == 0 {
+                        zero_err_comps.push(comp);
+                    } else {
+                        non_zero_err_comps.push(comp);
+                    }
                 }
-                for comp in dont_typecheck {
-                    res_comps.push(ResultCompletion {
-                        completion: comp.code,
-                        does_typecheck: false,
-                        heuristic: comp.score,
-                    });
-                }
+
+                let mut res_comps = zero_err_comps;
+                res_comps.append(&mut non_zero_err_comps);
 
                 ResultElement {
                     dataset_elem: element,

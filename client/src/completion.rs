@@ -7,7 +7,8 @@ use tokio::{sync::Mutex, task::JoinHandle};
 use crate::{
     cache::Cache,
     debug,
-    langserver::{ArcLangServer, CheckProblem, LangServer, LangServerError}, socket::SocketError,
+    langserver::{ArcLangServer, CheckProblem, LangServer, LangServerError},
+    socket::SocketError,
 };
 
 pub mod codex;
@@ -150,6 +151,39 @@ pub struct Completion {
     pub score: u16,
     /// is this completion from fallback?
     pub fallbacked: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct TypecheckedCompletion {
+    /// the completed code
+    pub code: String,
+    /// heuristic score of the completion, [0, 1000], lower is better
+    pub score: u16,
+    /// is this completion from fallback?
+    pub fallbacked: bool,
+    /// the number of type errors in the completion. if 0, no type errors.
+    pub num_type_errors: usize,
+}
+
+impl TypecheckedCompletion {
+    pub fn new(completion: Completion, num_type_errors: usize) -> Self {
+        Self {
+            code: completion.code,
+            score: completion.score,
+            fallbacked: completion.fallbacked,
+            num_type_errors,
+        }
+    }
+}
+
+impl From<TypecheckedCompletion> for Completion {
+    fn from(tc: TypecheckedCompletion) -> Self {
+        Self {
+            code: tc.code,
+            score: tc.score,
+            fallbacked: tc.fallbacked,
+        }
+    }
 }
 
 #[derive(Debug, Error)]

@@ -19,7 +19,7 @@ impl LangServer for TsServer {
         Ok(Self { socket })
     }
 
-    async fn type_check(&self, code: &str) -> Result<bool, LangServerError> {
+    async fn type_check(&self, code: &str) -> Result<usize, LangServerError> {
         // for typescript, we use the language server for typechecking
         let req = LSReq {
             cmd: "typecheck".to_string(),
@@ -30,8 +30,7 @@ impl LangServer for TsServer {
             .send_req(serde_json::to_value(&req).unwrap())
             .await?;
 
-        let errors: usize = resp["errors"].as_u64().unwrap() as usize;
-        Ok(errors == 0)
+        Ok(resp["errors"].as_u64().unwrap() as usize)
     }
 
     fn any_type(&self) -> String {

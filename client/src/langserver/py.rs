@@ -53,7 +53,7 @@ impl LangServer for PyServer {
         todo!()
     }
 
-    async fn type_check(&self, _code: &str) -> Result<bool, LangServerError> {
+    async fn type_check(&self, _code: &str) -> Result<usize, LangServerError> {
         todo!()
     }
 

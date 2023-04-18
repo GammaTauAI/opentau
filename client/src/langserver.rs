@@ -221,9 +221,9 @@ pub trait LangServer: LangServerCommands {
     where
         Self: std::marker::Sized;
 
-    /// type checks the given code. returns true if it type checks, false otherwise.
-    /// may return an error.
-    async fn type_check(&self, code: &str) -> Result<bool, LangServerError>;
+    /// type checks the given code. returns 0 if there are no errors, returns the 
+    /// number of errors otherwise.
+    async fn type_check(&self, code: &str) -> Result<usize, LangServerError>;
 
     /// produces the Any type for the given language.
     /// for example, in TypeScript, this would be `any`.

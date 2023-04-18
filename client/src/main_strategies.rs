@@ -1,6 +1,6 @@
 use crate::{
     completion::ArcCompletionEngine,
-    completion::{Completion, CompletionError, CompletionQueryBuilder},
+    completion::{Completion, CompletionError, CompletionQueryBuilder, TypecheckedCompletion},
     debug,
     langserver::{AnnotateType, LangServerError},
     tree::CompletionLevels,
@@ -25,10 +25,13 @@ pub struct MainCtx {
 
 impl MainCtx {
     /// Returns the subset of completions that type check from the given set of completions
-    pub async fn type_check_candidates(&self, candidates: Vec<Completion>) -> Vec<Completion> {
+    pub async fn type_check_candidates(
+        &self,
+        candidates: Vec<Completion>,
+    ) -> Vec<TypecheckedCompletion> {
         println!(" --- Type Checking {} Candidates ---", candidates.len());
-        let mut comps: Vec<Completion> = vec![];
-        let mut handles: Vec<JoinHandle<Option<Completion>>> = vec![];
+        let mut comps: Vec<TypecheckedCompletion> = vec![];
+        let mut handles: Vec<JoinHandle<TypecheckedCompletion>> = vec![];
         for (i, candidate) in candidates.into_iter().enumerate() {
             debug!("candidate {}:\n{}", i, candidate.code);
             let lang_client = self.engine.get_ls();
@@ -38,18 +41,12 @@ impl MainCtx {
                 let _permit = sem.acquire().await.unwrap();
                 let type_checks = lang_client.type_check(&candidate.code).await.unwrap();
                 drop(_permit);
-                if type_checks {
-                    Some(candidate)
-                } else {
-                    None
-                }
+                TypecheckedCompletion::new(candidate, type_checks)
             }));
         }
 
         for handle in handles {
-            if let Some(comp) = handle.await.unwrap() {
-                comps.push(comp);
-            }
+            comps.push(handle.await.unwrap());
             if comps.len() >= self.stop_at {
                 break;
             }
@@ -62,7 +59,7 @@ impl MainCtx {
 #[async_trait::async_trait]
 pub trait MainStrategy {
     /// Run the strategy on the given context.
-    async fn run(&self, context: MainCtx) -> Result<Vec<Completion>, LangServerError>;
+    async fn run(&self, context: MainCtx) -> Result<Vec<TypecheckedCompletion>, LangServerError>;
 }
 
 pub struct TreeStrategy;
@@ -73,7 +70,7 @@ impl MainStrategy for TreeStrategy {
     /// Runs the tree completion strategy. Documentation on the strategy is in the `tree.rs` file.
     ///
     /// TODO: somehow add caching to this strategy, maybe go up the tree?
-    async fn run(&self, context: MainCtx) -> Result<Vec<Completion>, LangServerError> {
+    async fn run(&self, context: MainCtx) -> Result<Vec<TypecheckedCompletion>, LangServerError> {
         let mut tree = context
             .engine
             .get_ls()
@@ -125,7 +122,7 @@ impl MainStrategy for TreeStrategy {
         Ok(if context.enable_type_check {
             context.type_check_candidates(candidates).await
         } else {
-            candidates
+            candidates.into_iter().map(|c| TypecheckedCompletion::new(c, 0)).collect()
         })
     }
 }
@@ -134,7 +131,7 @@ impl MainStrategy for TreeStrategy {
 impl MainStrategy for SimpleStrategy {
     /// Runs the simple completion strategy, which just runs the completion on the given file
     /// without any transformation, other than adding "_hole_" to each unknwon type
-    async fn run(&self, context: MainCtx) -> Result<Vec<Completion>, LangServerError> {
+    async fn run(&self, context: MainCtx) -> Result<Vec<TypecheckedCompletion>, LangServerError> {
         let initial_input = if context.enable_defgen {
             context
                 .engine
@@ -179,10 +176,10 @@ impl MainStrategy for SimpleStrategy {
             }
         };
 
-        let comps: Vec<Completion> = if context.enable_type_check {
+        let comps: Vec<TypecheckedCompletion> = if context.enable_type_check {
             context.type_check_candidates(candidates).await
         } else {
-            candidates
+            candidates.into_iter().map(|c| TypecheckedCompletion::new(c, 0)).collect()
         };
 
         // cache the type-checked completions if we have a cache

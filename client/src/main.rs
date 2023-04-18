@@ -3,7 +3,7 @@ use std::{str::FromStr, sync::Arc};
 use clap::Parser;
 use opentau::{
     cache::Cache,
-    completion::Completion,
+    completion::{Completion, TypecheckedCompletion},
     langserver::AnnotateType,
     main_strategies::{MainCtx, MainStrategy},
 };
@@ -56,7 +56,7 @@ async fn main() {
     };
 
     // the typechecked and completed code(s). here if we get errors we exit with 1
-    let good_ones: Vec<Completion> = match strategy.run(ctx).await {
+    let good_ones: Vec<TypecheckedCompletion> = match strategy.run(ctx).await {
         Ok(good_ones) => good_ones,
         Err(e) => {
             eprintln!("Fatal error while running strategy: {e}");
@@ -81,8 +81,8 @@ async fn main() {
     for (i, comp) in good_ones.into_iter().enumerate() {
         let fallback = if comp.fallbacked { "_fallback" } else { "" };
         let output_path = format!(
-            "{}/{}_score_{}{}.{}",
-            args.output, i, comp.score, fallback, args.lang
+            "{}/{}_errors_{}_score_{}{}.{}",
+            args.output, i, comp.num_type_errors, comp.score, fallback, args.lang
         );
         tokio::fs::write(&output_path, comp.code).await.unwrap();
     }
