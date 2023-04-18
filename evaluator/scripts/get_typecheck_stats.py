@@ -27,7 +27,7 @@ def get_num_typecheck(data_path):
     print("Number of elements that typecheck: {}".format(num_typecheck))
     print("Number of elements that don't typecheck: {}".format(num_dont_typecheck))
     print("Average number of errors in the ones that don't typecheck: {}".format(avg_errors))
-    print("Average heuristic (lower is better): {}".format(avg_heuristic))
+    print("Average best heuristic of ones that typecheck (lower is better): {}".format(avg_heuristic))
 
 if __name__ == "__main__":
     import argparse
