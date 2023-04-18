@@ -97,8 +97,7 @@ impl EvalSpec {
             retries: self.retries,
             fallback: self.fallback,
             stop_at: self.stop_at,
-            // we do this separately.
-            enable_type_check: false,
+            enable_type_check: true,
             enable_defgen: self.enable_defgen,
             enable_usages: self.enable_usages,
             depth_limit: self.depth_limit,
