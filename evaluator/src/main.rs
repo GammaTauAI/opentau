@@ -56,31 +56,28 @@ async fn main() {
         let context = eval.make_main_ctx(content.to_string(), engine.clone());
         let comps = strategy.run(context).await;
         let elem = match comps {
-            Ok(comps) => {
-                // put the ones with num_type_errors == 0 first
-                let mut zero_err_comps: Vec<TypecheckedCompletion> = Vec::new();
-                let mut non_zero_err_comps: Vec<TypecheckedCompletion> = Vec::new();
+            Ok(mut comps) => {
                 println!("#### Got {} completions! ####", comps.len());
-                for (i, comp) in comps.into_iter().enumerate() {
+                for (i, comp) in comps.iter().enumerate() {
                     println!(
                         "{}: errors = {}, score = {}, fallbacked = {}",
                         i, comp.num_type_errors, comp.score, comp.fallbacked
                     );
-                    if comp.num_type_errors == 0 {
-                        zero_err_comps.push(comp);
-                    } else {
-                        non_zero_err_comps.push(comp);
-                    }
                 }
 
-                let mut res_comps = zero_err_comps;
-                res_comps.append(&mut non_zero_err_comps);
+                // sort based on number of type errors. if the number of type errors is the same,
+                // sort based on score (lower score is better)
+                comps.sort_by(|a, b| {
+                    a.num_type_errors
+                        .cmp(&b.num_type_errors)
+                        .then_with(|| a.score.cmp(&b.score))
+                });
 
                 ResultElement {
                     dataset_elem: element,
                     failed_message: None,
                     eval_spec: Some(eval.clone()),
-                    completions: res_comps,
+                    completions: comps,
                 }
             }
             Err(e) => {
