@@ -7,9 +7,17 @@ def get_num_typecheck(data_path):
     num_dont_typecheck = 0
     avg_errors = 0
     avg_heuristic = 0
-    for elem in read_jsonl(data_path):
+    num_panic = 0
+    for i, elem in enumerate(read_jsonl(data_path)):
         num_elems += 1
         had_one_typecheck = False
+        # check if failed_message is not null
+        if elem["failed_message"] is not None:
+            num_panic += 1
+            print(f"WARNING: Element at line {i+1} panicked. Message:")
+            print(elem["failed_message"])
+            continue
+
         for comp in elem["completions"]:
             num_errors = comp["num_type_errors"]
             if num_errors == 0 and not had_one_typecheck:
@@ -26,8 +34,11 @@ def get_num_typecheck(data_path):
     print("Number of elements: {}".format(num_elems))
     print("Number of elements that typecheck: {}".format(num_typecheck))
     print("Number of elements that don't typecheck: {}".format(num_dont_typecheck))
+    print("Number of elements that panicked: {}".format(num_panic))
     print("Average number of errors in the ones that don't typecheck: {}".format(avg_errors))
-    print("Average best heuristic of ones that typecheck (lower is better): {}".format(avg_heuristic))
+    print("Average best heuristic of ones that typecheck (lower is better): {}".format(
+        avg_heuristic))
+
 
 if __name__ == "__main__":
     import argparse
