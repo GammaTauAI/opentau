@@ -1,7 +1,6 @@
 use evaluator::{
     append_result, check_file_delete, read_dataset, write_results, EvalSpec, ResultElement,
 };
-use opentau::completion::TypecheckedCompletion;
 
 #[tokio::main]
 async fn main() {
@@ -27,8 +26,7 @@ async fn main() {
     let dataset = read_dataset(&eval.dataset_path).await;
     println!("Read {} input files", dataset.len());
 
-    let engine = eval.get_completion_engine().await;
-    let strategy = eval.get_strategy();
+    let mut engine = eval.get_completion_engine().await;
 
     let mut results: Vec<ResultElement> = Vec::new();
     let max_idx = dataset.len() - 1;
@@ -54,9 +52,13 @@ async fn main() {
             .as_str()
             .unwrap_or_else(|| element["content"].as_str().unwrap());
         let context = eval.make_main_ctx(content.to_string(), engine.clone());
-        let comps = strategy.run(context).await;
-        let elem = match comps {
-            Ok(mut comps) => {
+        let strategy = eval.get_strategy();
+
+        // wrap in a task so that we can catch panics
+        let run_result = tokio::task::spawn(async move { strategy.run(context).await }).await;
+
+        let elem = match run_result {
+            Ok(Ok(mut comps)) => {
                 println!("#### Got {} completions! ####", comps.len());
                 for (i, comp) in comps.iter().enumerate() {
                     println!(
@@ -80,8 +82,22 @@ async fn main() {
                     completions: comps,
                 }
             }
-            Err(e) => {
+            Ok(Err(e)) => {
                 eprintln!("Error while running strategy: {e}");
+                ResultElement {
+                    dataset_elem: element,
+                    failed_message: Some(e.to_string()),
+                    eval_spec: Some(eval.clone()),
+                    completions: vec![],
+                }
+            }
+            // Panic caught
+            Err(e) => {
+                eprintln!("Panic while running strategy: {e}");
+
+                // restore state by re-creating the engine
+                engine = eval.get_completion_engine().await;
+
                 ResultElement {
                     dataset_elem: element,
                     failed_message: Some(e.to_string()),

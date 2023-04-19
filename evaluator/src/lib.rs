@@ -78,7 +78,7 @@ impl EvalSpec {
         Arc::new(engine.build())
     }
 
-    pub fn get_strategy(&self) -> Box<dyn MainStrategy> {
+    pub fn get_strategy(&self) -> Box<dyn MainStrategy + Send + Sync> {
         match self.strategy.as_str() {
             "tree" => Box::new(TreeStrategy {}),
             "simple" => Box::new(SimpleStrategy {}),
