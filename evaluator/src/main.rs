@@ -52,12 +52,21 @@ async fn main() {
             .as_str()
             .unwrap_or_else(|| element["content"].as_str().unwrap());
         let context = eval.make_main_ctx(content.to_string(), engine.clone());
-        let strategy = eval.get_strategy();
+        let (strategy, maybe_arc_stats) = eval.get_strategy();
 
         // wrap in a task so that we can catch panics
         let run_result = tokio::task::spawn(async move { strategy.run(context).await }).await;
 
-        let elem = match run_result {
+        // get inner stats from the Arc Mutex
+        let stats_unarc = match maybe_arc_stats {
+            Some(arc_stats) => {
+                let stats = arc_stats.lock().await.clone();
+                Some(stats)
+            }
+            None => None,
+        };
+
+        let (comps, maybe_error) = match run_result {
             Ok(Ok(mut comps)) => {
                 println!("#### Got {} completions! ####", comps.len());
                 for (i, comp) in comps.iter().enumerate() {
@@ -67,29 +76,21 @@ async fn main() {
                     );
                 }
 
-                // sort based on number of type errors. if the number of type errors is the same,
-                // sort based on score (lower score is better)
+                // sort based on number of type errors (increasing). if the number of type errors is the same,
+                // sort based on score (lower score is better, so increasing)
                 comps.sort_by(|a, b| {
-                    a.num_type_errors
-                        .cmp(&b.num_type_errors)
-                        .then_with(|| a.score.cmp(&b.score))
+                    if a.num_type_errors == b.num_type_errors {
+                        a.score.cmp(&b.score)
+                    } else {
+                        a.num_type_errors.cmp(&b.num_type_errors)
+                    }
                 });
 
-                ResultElement {
-                    dataset_elem: element,
-                    failed_message: None,
-                    eval_spec: Some(eval.clone()),
-                    completions: comps,
-                }
+                (comps, None)
             }
             Ok(Err(e)) => {
                 eprintln!("Error while running strategy: {e}");
-                ResultElement {
-                    dataset_elem: element,
-                    failed_message: Some(e.to_string()),
-                    eval_spec: Some(eval.clone()),
-                    completions: vec![],
-                }
+                (vec![], Some(e.to_string()))
             }
             // Panic caught
             Err(e) => {
@@ -98,13 +99,16 @@ async fn main() {
                 // restore state by re-creating the engine
                 engine = eval.get_completion_engine().await;
 
-                ResultElement {
-                    dataset_elem: element,
-                    failed_message: Some(e.to_string()),
-                    eval_spec: Some(eval.clone()),
-                    completions: vec![],
-                }
+                (vec![], Some(e.to_string()))
             }
+        };
+
+        let elem = ResultElement {
+            dataset_elem: element,
+            failed_message: maybe_error,
+            eval_spec: eval.clone(),
+            stats: stats_unarc,
+            completions: comps,
         };
 
         append_result(&elem, &eval.results_path).await;

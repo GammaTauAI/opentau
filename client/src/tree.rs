@@ -5,7 +5,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use tokio::task::JoinHandle;
+use tokio::{sync::Mutex, task::JoinHandle};
 
 use crate::{
     completion::{
@@ -17,6 +17,63 @@ use crate::{
     debug,
     langserver::{ArcLangServer, LangServerError},
 };
+
+use self::stats::ArcTreeAlgoStats;
+
+pub mod stats {
+    use std::{collections::HashMap, sync::Arc};
+
+    use serde::{Deserialize, Serialize};
+    use tokio::sync::Mutex;
+
+    /// Keeps some statistics about the tree algorithm being run
+    #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+    pub struct TreeAlgoStats {
+        pub num_nodes: usize,
+        pub num_usages_per_node: HashMap<String, usize>,
+        pub num_comps_per_node: HashMap<String, usize>,
+    }
+
+    /// A mutexed and arced version of TreeAlgoStats
+    pub type ArcTreeAlgoStats = Arc<Mutex<TreeAlgoStats>>;
+
+    // below are helpers to deal with a Option<ArcTreeAlgoStats>
+
+    async fn if_some_modify<T, F>(opt: &Option<ArcTreeAlgoStats>, f: F)
+    where
+        F: FnOnce(&mut TreeAlgoStats) -> T,
+    {
+        if let Some(stats) = opt {
+            let mut stats = stats.lock().await;
+            f(&mut stats);
+        }
+    }
+
+    /// Increases the number of nodes by 1
+    pub(super) async fn increase_node_count(stats: &Option<ArcTreeAlgoStats>) {
+        if_some_modify(stats, |stats| stats.num_nodes += 1).await
+    }
+
+    /// Sets the given node's usages statements to the given number
+    pub(super) async fn insert_usages(stats: &Option<ArcTreeAlgoStats>, name: &str, usages: usize) {
+        if_some_modify(stats, |stats| {
+            stats.num_usages_per_node.insert(name.to_string(), usages);
+        })
+        .await
+    }
+
+    /// Sets the given node's number of completions to the given number
+    pub(super) async fn insert_num_comps(
+        stats: &Option<ArcTreeAlgoStats>,
+        name: &str,
+        num_comps: usize,
+    ) {
+        if_some_modify(stats, |stats| {
+            stats.num_comps_per_node.insert(name.to_string(), num_comps);
+        })
+        .await
+    }
+}
 
 /// A codeblock tree, taken from the `tree` command of the language server
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -78,23 +135,24 @@ pub struct PreparedState;
 pub struct CompletedState;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-struct HyperParams {
+pub struct HyperParams {
     // we propagate these query params to the completion queries
-    retries: usize,
-    num_comps: usize,
-    fallback: bool,
+    pub retries: usize,
+    pub num_comps: usize,
+    pub fallback: bool,
     // if we want to create usages block or not
-    usages: bool,
+    pub usages: bool,
     // stop_at hyperparam
-    stop_at: usize,
+    pub stop_at: usize,
     // the kind of types that need to be annotated
-    types: Vec<AnnotateType>,
+    pub types: Vec<AnnotateType>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct CompletionLevels<State = NewState> {
     levels: Vec<CompLevel>,
     params: HyperParams,
+    stats: Option<ArcTreeAlgoStats>,
     // this is the state of the completion levels
     state: std::marker::PhantomData<State>,
 }
@@ -102,24 +160,11 @@ pub struct CompletionLevels<State = NewState> {
 impl CompletionLevels<NewState> {
     /// Creates a new completion levels, with the given number of retries, number of completions,
     /// and whether to fallback to the `any` type.
-    pub fn new(
-        retries: usize,
-        num_comps: usize,
-        fallback: bool,
-        usages: bool,
-        stop_at: usize,
-        types: Vec<AnnotateType>,
-    ) -> Self {
+    pub fn new(hyperparams: HyperParams, stats: Option<ArcTreeAlgoStats>) -> Self {
         Self {
             levels: vec![],
-            params: HyperParams {
-                retries,
-                num_comps,
-                fallback,
-                usages,
-                stop_at,
-                types,
-            },
+            params: hyperparams,
+            stats,
             state: std::marker::PhantomData,
         }
     }
@@ -166,9 +211,16 @@ impl CompletionLevels<NewState> {
                     let parent = levels.get_mut(level).unwrap().nodes.get_mut(p_idx).unwrap();
                     parent.children_idxs.push(idx);
 
+                    // increase the node count
+                    stats::increase_node_count(&self.stats).await;
+
                     // we get the usages of this node, from the parent
                     let usages = if self.params.usages && !child.name.starts_with("topnode") {
-                        langsever.usages(&parent.code, &child.code).await?
+                        let (usages, num_usages) =
+                            langsever.usages(&parent.code, &child.code).await?;
+                        // inserts the usages into a possible stats
+                        stats::insert_usages(&self.stats, &child.name, num_usages).await;
+                        usages
                     } else {
                         String::new()
                     };
@@ -191,6 +243,7 @@ impl CompletionLevels<NewState> {
         Ok(CompletionLevels {
             levels,
             params: self.params,
+            stats: self.stats,
             state: std::marker::PhantomData,
         })
     }
@@ -303,7 +356,7 @@ async fn merge_below_random_poisson(
     let poi = rand_distr::Poisson::new(0.7).unwrap();
 
     // we set the maximum upper bound of completions to upper * 5. it is extremely unlikely
-    // that we will ever reach this upper bound, but it is a safety net for 
+    // that we will ever reach this upper bound, but it is a safety net for
     // state explosion.
     let combs_upper = upper * 5;
     let mut all_combs = all_combs(prompts_set, &child.completed, Some(combs_upper));
@@ -491,6 +544,7 @@ impl CompletionLevels<PreparedState> {
             let num_nodes = nodes.len();
             let mut handles: Vec<JoinHandle<(String, Vec<String>)>> = vec![]; // node's (name, code)
             let mut lookup: HashMap<String, usize> = HashMap::new(); // node's name -> idx
+
             for (i, node) in nodes.iter().enumerate() {
                 // copy stuff for the async closure
                 let node = node.clone();
@@ -509,13 +563,20 @@ impl CompletionLevels<PreparedState> {
                     node,
                 ));
             }
+
             for (i, handle) in handles.into_iter().enumerate() {
                 let (name, comps) = handle.await.unwrap();
+
+                let num_final_comps = comps.len();
                 println!(
-                    " - Completed {name}, Progress: {}/{} Nodes At Level {level} - ",
+                    " - Completed \"{name}\" with {num_final_comps} completions. Progress: {}/{} Nodes At Level {level} -",
                     i + 1,
                     num_nodes
                 );
+
+                // insert stats into a possible stats object
+                stats::insert_num_comps(&self.stats, &name, num_final_comps).await;
+
                 let idx = lookup.get(&name).unwrap();
                 nodes.get_mut(*idx).unwrap().completed = comps;
             }
@@ -526,6 +587,7 @@ impl CompletionLevels<PreparedState> {
         CompletionLevels {
             levels: self.levels,
             params: self.params,
+            stats: self.stats,
             state: std::marker::PhantomData,
         }
     }

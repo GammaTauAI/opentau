@@ -158,7 +158,8 @@ pub trait LangServerCommands {
         level: usize,
     ) -> Result<String, LangServerError>;
 
-    /// Produces a code block of usages of the given code block.
+    /// Produces a code block of usages of the given code block, and the number of usages in the
+    /// usage block.
     ///
     /// # Example
     /// if you have the following `outer_block`:
@@ -181,8 +182,12 @@ pub trait LangServerCommands {
     /// console.log(hello("world"));
     /// console.log(hello("Federico"));
     /// ```
-    async fn usages(&self, outer_block: &str, inner_block: &str)
-        -> Result<String, LangServerError>;
+    /// with the number of usages being 2.
+    async fn usages(
+        &self,
+        outer_block: &str,
+        inner_block: &str,
+    ) -> Result<(String, usize), LangServerError>;
 
     /// Produces the object information map for the given code.
     /// The input should be the full code of the file. The produced
@@ -221,7 +226,7 @@ pub trait LangServer: LangServerCommands {
     where
         Self: std::marker::Sized;
 
-    /// type checks the given code. returns 0 if there are no errors, returns the 
+    /// type checks the given code. returns 0 if there are no errors, returns the
     /// number of errors otherwise.
     async fn type_check(&self, code: &str) -> Result<usize, LangServerError>;
 
@@ -440,7 +445,7 @@ macro_rules! impl_langserver_commands {
                 &self,
                 outer_block: &str,
                 inner_block: &str,
-            ) -> Result<String, $crate::langserver::LangServerError> {
+            ) -> Result<(String, usize), $crate::langserver::LangServerError> {
                 let req = $crate::langserver::LSUsagesReq {
                     cmd: "usages".to_string(),
                     text: base64::encode(outer_block),
@@ -453,9 +458,13 @@ macro_rules! impl_langserver_commands {
                     .send_req(serde_json::to_value(&req).unwrap())
                     .await?;
                 // decode the response
+                let num_usages = resp["numUsages"].as_u64().unwrap();
                 let resp = base64::decode(resp["text"].as_str().unwrap()).unwrap();
 
-                Ok(String::from_utf8(resp).unwrap())
+                Ok((
+                    String::from_utf8(resp).unwrap(),
+                    num_usages.try_into().unwrap(),
+                ))
             }
 
             async fn object_info(

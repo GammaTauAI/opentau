@@ -188,7 +188,7 @@ impl Args {
     pub fn stategy_factory(&self) -> Box<dyn MainStrategy> {
         match self.strategy.as_str() {
             "simple" => Box::new(SimpleStrategy {}),
-            "tree" => Box::new(TreeStrategy {}),
+            "tree" => Box::new(TreeStrategy { stats: None }),
             _ => {
                 eprintln!("Unknown strategy, {}", self.strategy);
                 std::process::exit(1);

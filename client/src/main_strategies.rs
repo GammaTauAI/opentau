@@ -3,7 +3,7 @@ use crate::{
     completion::{Completion, CompletionError, CompletionQueryBuilder, TypecheckedCompletion},
     debug,
     langserver::{AnnotateType, LangServerError},
-    tree::CompletionLevels,
+    tree::{stats::ArcTreeAlgoStats, CompletionLevels, HyperParams},
 };
 use tokio::{sync::Semaphore, task::JoinHandle};
 
@@ -62,7 +62,9 @@ pub trait MainStrategy {
     async fn run(&self, context: MainCtx) -> Result<Vec<TypecheckedCompletion>, LangServerError>;
 }
 
-pub struct TreeStrategy;
+pub struct TreeStrategy {
+    pub stats: Option<ArcTreeAlgoStats>,
+}
 pub struct SimpleStrategy;
 
 #[async_trait::async_trait]
@@ -81,14 +83,16 @@ impl MainStrategy for TreeStrategy {
             tree.depth_limit(limit);
         }
 
-        let levels = CompletionLevels::new(
-            context.retries,
-            context.num_comps,
-            context.fallback,
-            context.enable_usages,
-            context.stop_at,
-            context.types.clone(),
-        );
+        let hyper_params = HyperParams {
+            retries: context.retries,
+            fallback: context.fallback,
+            num_comps: context.num_comps,
+            usages: context.enable_usages,
+            stop_at: context.stop_at,
+            types: context.types.clone(),
+        };
+
+        let levels = CompletionLevels::new(hyper_params, self.stats.clone());
 
         let prepared = levels.prepare(tree, context.engine.get_ls()).await?;
         let completed = prepared.tree_complete(context.engine.clone()).await;
@@ -122,7 +126,10 @@ impl MainStrategy for TreeStrategy {
         Ok(if context.enable_type_check {
             context.type_check_candidates(candidates).await
         } else {
-            candidates.into_iter().map(|c| TypecheckedCompletion::new(c, 0)).collect()
+            candidates
+                .into_iter()
+                .map(|c| TypecheckedCompletion::new(c, 0))
+                .collect()
         })
     }
 }
@@ -179,7 +186,10 @@ impl MainStrategy for SimpleStrategy {
         let comps: Vec<TypecheckedCompletion> = if context.enable_type_check {
             context.type_check_candidates(candidates).await
         } else {
-            candidates.into_iter().map(|c| TypecheckedCompletion::new(c, 0)).collect()
+            candidates
+                .into_iter()
+                .map(|c| TypecheckedCompletion::new(c, 0))
+                .collect()
         };
 
         // cache the type-checked completions if we have a cache
