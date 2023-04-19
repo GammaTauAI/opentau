@@ -4,7 +4,7 @@ import { codePrinter } from "./utils";
 export const findUsages = (
   outerBlock: ts.SourceFile,
   innerBlock: ts.SourceFile
-): string => {
+): [string, number] => {
   const usagesStmts: ts.Statement[] = [];
 
   // finds the first identifier in the inner block
@@ -20,7 +20,7 @@ export const findUsages = (
   const ident = identFinder(innerBlock);
 
   if (!ident) {
-    return "";
+    return ["", 0];
   }
 
   // find all usages of the identifier in the outer block, and append them to the usagesStmts
@@ -78,8 +78,10 @@ export const findUsages = (
   usageFinder(outerBlock);
 
   if (usagesStmts.length === 0) {
-    return "";
+    return ["", 0];
   }
+
+  const numUsages = usagesStmts.length;
 
   const usagesStr = codePrinter.printList(
     ts.ListFormat.MultiLine,
@@ -88,5 +90,5 @@ export const findUsages = (
   );
 
   const prelude = "// Usages of '" + ident?.text + "' are shown below:\n";
-  return prelude + usagesStr;
+  return [prelude + usagesStr, numUsages];
 };

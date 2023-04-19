@@ -70,10 +70,7 @@ const makeCompilerHost = (
   readFile: () => "",
 });
 
-const createProgram = (
-  code: string,
-  setParentNodes = false
-): ts.Program => {
+const createProgram = (code: string, setParentNodes = false): ts.Program => {
   const prog = ts.createProgram({
     rootNames: ["comp.ts"],
     options: compilerOptions,
@@ -182,11 +179,7 @@ const handleWeave = (decodedText: string, req: any): string => {
   const originalProgram = createProgram(decodedText, true);
   const nettleProgram = createProgram(decodedNettle, true);
 
-  const res = weavePrograms(
-    originalProgram,
-    nettleProgram,
-    req.level
-  );
+  const res = weavePrograms(originalProgram, nettleProgram, req.level);
 
   const base64 = Buffer.from(res).toString("base64");
 
@@ -216,13 +209,14 @@ const handleUsages = (decodedText: string, req: any): string => {
     ts.ScriptKind.TS
   );
 
-  const res = findUsages(outerFile, innerFile);
+  const [usagesString, numUsages] = findUsages(outerFile, innerFile);
 
-  const base64 = Buffer.from(res).toString("base64");
+  const base64 = Buffer.from(usagesString).toString("base64");
 
   return JSON.stringify({
     type: "usagesResponse",
     text: base64,
+    numUsages: numUsages,
   });
 };
 
