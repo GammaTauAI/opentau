@@ -11,6 +11,7 @@ def get_num_typecheck(data_path):
     for i, elem in enumerate(read_jsonl(data_path)):
         num_elems += 1
         had_one_typecheck = False
+        had_one_dont_typecheck = False
         # check if failed_message is not null
         if elem["failed_message"] is not None:
             num_panic += 1
@@ -24,9 +25,10 @@ def get_num_typecheck(data_path):
                 num_typecheck += 1
                 avg_heuristic += comp["score"]
                 had_one_typecheck = True
-            elif num_errors > 0:
+            elif num_errors > 0 and not had_one_dont_typecheck:
                 num_dont_typecheck += 1
                 avg_errors += num_errors
+                had_one_dont_typecheck = True
 
     avg_heuristic /= num_typecheck
     avg_errors /= num_dont_typecheck
