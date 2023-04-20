@@ -34,10 +34,10 @@ def get_num_typecheck(data_path):
     avg_errors /= num_dont_typecheck
 
     print("Number of elements: {}".format(num_elems))
-    print("Number of elements that typecheck: {}".format(num_typecheck))
-    print("Number of elements that don't typecheck: {}".format(num_dont_typecheck))
+    print("Number of elements with a completion that typechecks: {}".format(num_typecheck))
+    print("Number of elements with a completion that doesn't typecheck: {}".format(num_dont_typecheck))
     print("Number of elements that panicked: {}".format(num_panic))
-    print("Average number of errors in the ones that don't typecheck: {}".format(avg_errors))
+    print("Average best number of errors in the ones that don't typecheck: {}".format(avg_errors))
     print("Average best heuristic of ones that typecheck (lower is better): {}".format(
         avg_heuristic))
 
