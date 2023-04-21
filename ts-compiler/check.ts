@@ -117,8 +117,8 @@ export const checkCompleted = (
           // console.log("got unknown");
           rawScore += 1;
           numTypeNodes += 1;
-        } else if (typeFlags & ts.TypeFlags.Undefined) {
-          // console.log("got undefined");
+        } else if (typeFlags & ts.TypeFlags.Undefined || typeFlags & ts.TypeFlags.Null) {
+          // console.log("got undefined or null");
           rawScore += 0.2;
           numTypeNodes += 1;
         } else if (typeFlags & ts.TypeFlags.Object) {
