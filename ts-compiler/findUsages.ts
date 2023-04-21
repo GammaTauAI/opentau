@@ -47,8 +47,22 @@ export const findUsages = (
         ts.isElementAccessExpression(e.parent) ||
         ts.isPrefixUnaryExpression(e.parent) ||
         ts.isPostfixUnaryExpression(e.parent) ||
-        ts.isNewExpression(e.parent)
+        ts.isNewExpression(e.parent) ||
+        ts.isConditionalExpression(e.parent)
       );
+    };
+
+    // turns a node into a statement
+    const makeIntoStatement = (node: ts.Node): ts.Statement => {
+      if (
+        ts.isExpressionStatement(node) ||
+        ts.isReturnStatement(node) ||
+        ts.isVariableStatement(node)
+      ) {
+        return node;
+      }
+
+      return ts.createExpressionStatement(node as ts.Expression);
     };
 
     const inner = (node: ts.Node): void => {
@@ -60,9 +74,25 @@ export const findUsages = (
             stmt = stmt.parent;
           }
 
+          let exprStmt = makeIntoStatement(stmt);
+
           // if the usagesStmts already contains this statement, don't add it again
-          if (!usagesStmts.some((s) => s === stmt)) {
-            usagesStmts.push(ts.createExpressionStatement(stmt as ts.Expression));
+          if (
+            !usagesStmts.some((s) => {
+              let s1 = codePrinter.printNode(
+                ts.EmitHint.Unspecified,
+                s,
+                outerBlock
+              );
+              let s2 = codePrinter.printNode(
+                ts.EmitHint.Unspecified,
+                exprStmt,
+                outerBlock
+              );
+              return s1 === s2;
+            })
+          ) {
+            usagesStmts.push(exprStmt);
           }
         } else {
           // we don't want to add the declaration to the usages
@@ -89,6 +119,8 @@ export const findUsages = (
     outerBlock
   );
 
-  const prelude = "// Usages of '" + ident?.text + "' are shown below:\n";
-  return [prelude + usagesStr, numUsages];
+  const prelude =
+    "/* Example usages of '" + ident?.text + "' are shown below:\n";
+  const postlude = "*/\n";
+  return [prelude + usagesStr + postlude, numUsages];
 };
