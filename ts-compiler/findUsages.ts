@@ -129,5 +129,9 @@ export const findUsages = (
   const prelude =
     "/* Example usages of '" + ident?.text + "' are shown below:\n";
   const postlude = "*/\n";
-  return [prelude + usagesStr + postlude, numUsages];
+
+  // indent usagesStr
+  const indentedUsagesStr = usagesStr.replace(/^/gm, " ".repeat(2));
+
+  return [prelude + indentedUsagesStr + postlude, numUsages];
 };
