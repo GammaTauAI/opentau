@@ -103,7 +103,6 @@ export const checkCompleted = (
           const isUnresolved = (tsType: ts.Type) => {
             const casted = tsType as any;
             if (casted.intrinsicName && casted.intrinsicName === "error") {
-              console.log("got unresolved");
               return true;
             }
 
@@ -111,9 +110,6 @@ export const checkCompleted = (
           };
 
           if (printed === "any" && !isUnresolved(tsType)) {
-            console.log("got any");
-            console.log(tsType);
-            console.log(completedChecker.typeToTypeNode(tsType));
             rawScore += 0.5;
           }
           numTypeNodes += 1;
@@ -153,7 +149,6 @@ export const checkCompleted = (
             // console.log("got anonymous");
             // anonymous objects are usually functions, so we need to check return and argument types
             const funcType = objType as ts.ObjectType;
-            console.log("funcType: ", funcType);
             const callSignatures = funcType.getCallSignatures();
             try {
               const returnType = callSignatures[0].getReturnType();
