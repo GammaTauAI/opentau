@@ -1,4 +1,5 @@
 const hello = (message: string) => {
+  hello('Infinite loop!!');
   console.log(message);
 }
 

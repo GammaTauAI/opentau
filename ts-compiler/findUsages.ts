@@ -1,5 +1,5 @@
 import ts from "typescript";
-import { codePrinter } from "./utils";
+import { codePrinter, isVarDeclBoundFunction } from "./utils";
 
 export const findUsages = (
   outerBlock: ts.SourceFile,
@@ -29,7 +29,7 @@ export const findUsages = (
     // checks if the parent of this id is some sort of declaration
     const isDecl = (id: ts.Identifier): boolean => {
       return (
-        ts.isVariableDeclaration(id.parent) ||
+        isVarDeclBoundFunction(id.parent) ||
         ts.isFunctionDeclaration(id.parent) ||
         ts.isMethodDeclaration(id.parent) ||
         ts.isClassDeclaration(id.parent)
@@ -60,6 +60,13 @@ export const findUsages = (
         ts.isVariableStatement(node)
       ) {
         return node;
+      }
+
+      if (ts.isVariableDeclaration(node)) {
+        return ts.createVariableStatement(
+          node.modifiers,
+          ts.createVariableDeclarationList([node], node.flags)
+        );
       }
 
       return ts.createExpressionStatement(node as ts.Expression);
