@@ -6,7 +6,7 @@ const hello = (message: string) => {
 console.log(hello('Hello World!'));
 
 function ctx1() {
-  return hello('Hello World!');
+  return hello('Hello World Returned!');
 }
 
 function ctx2() {
