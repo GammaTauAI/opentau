@@ -51,7 +51,7 @@ impl LocalModelClientBuilder {
             "{}/main.py",
             get_path_from_rootdir(format!("{}-server", self.kind))
         );
-        let server_command_prefix = vec!["python3", &model_path];
+        let server_command_prefix = vec!["python3", &model_path, "--socket_path"];
         let socket = Arc::new(SingleThreadedSocket::new(
             SocketAbstraction::spawn_server(&self.kind, &server_command_prefix, false)
                 .await
@@ -149,7 +149,9 @@ impl CompletionModel for LocalModelClient {
                 for _ in 1..num_holes {
                     let req = LocalModelSocketReq {
                         code: completion.clone(),
-                        num_samples: 5,
+                        // we don't use num_comps because here we only pick the first
+                        // one that parses
+                        num_samples: 3,
                         temperature,
                     };
 

@@ -490,7 +490,7 @@ impl CompletionLevels<PreparedState> {
 
                         // we add usages to the prompt
                         if !node.usages.is_empty() {
-                            printed = format!("{}\n{}", printed, node.usages);
+                            printed = format!("{}\n{}", node.usages, printed);
                         }
 
                         let q = CompletionQueryBuilder::new(printed)
