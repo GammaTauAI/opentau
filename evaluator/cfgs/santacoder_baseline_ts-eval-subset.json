@@ -1,0 +1,20 @@
+{
+  "model": "santacoder",
+  "local_model_socket": "/tmp/santa1.sock,/tmp/santa2.sock,/tmp/santa3.sock",
+  "language": "ts",
+  "results_path": "results/santacoder_baseline_ts-eval-subset.json",
+  "dataset_path": "data/ts-eval-subset.jsonl",
+  "num_comps": 3,
+  "retries": 1,
+  "fallback": false,
+  "stop_at": 400,
+  "enable_defgen": false,
+  "enable_usages": true,
+  "enable_stubbing": false,
+  "strategy": "tree",
+  "max_type_quality": 1000,
+  "temperature": 0.75,
+  "types": [
+          "VarDecl", "FuncDecl", "FuncExpr", "ClassProp", "ClassMethod", "TypeDecl"
+  ]
+}
