@@ -30,8 +30,8 @@ def get_num_typecheck(data_path):
                 avg_errors += num_errors
                 had_one_dont_typecheck = True
 
-    avg_heuristic /= num_typecheck
-    avg_errors /= num_dont_typecheck
+    avg_heuristic /= max(num_typecheck, 1)
+    avg_errors /= max(num_dont_typecheck, 1)
 
     print("Number of elements: {}".format(num_elems))
     print("Number of elements with a completion that typechecks: {}".format(num_typecheck))
