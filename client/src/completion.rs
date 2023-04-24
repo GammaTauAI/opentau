@@ -186,6 +186,18 @@ impl From<TypecheckedCompletion> for Completion {
     }
 }
 
+/// sort based on number of type errors (increasing). if the number of type errors is the same,
+/// sort based on score (lower score is better, so increasing)
+pub fn sort_completions(comps: &mut [TypecheckedCompletion]) {
+    comps.sort_by(|a, b| {
+        if a.num_type_errors == b.num_type_errors {
+            a.score.cmp(&b.score)
+        } else {
+            a.num_type_errors.cmp(&b.num_type_errors)
+        }
+    });
+}
+
 #[derive(Debug, Error)]
 pub enum CompletionError {
     // where the Vec<String> is the list of completions we got before the rate limit

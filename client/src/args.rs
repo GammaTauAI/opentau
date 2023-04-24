@@ -98,6 +98,10 @@ pub struct Args {
     #[clap(long, value_parser, default_value_t = false)]
     pub disable_usages: bool,
 
+    /// Disables stubbing inner code blocks in the tree strategy prompts
+    #[clap(long, value_parser, default_value_t = false)]
+    pub disable_stubbing: bool,
+
     /// List of statements to exclude from being annotated (comma-separated).
     /// You can exclude the following types: {"VarDecl", "FuncDecl", "FuncExpr", "ClassProp", "ClassMethod", "TypeDecl"}
     #[clap(long, value_parser)]
@@ -196,4 +200,3 @@ impl Args {
         }
     }
 }
-

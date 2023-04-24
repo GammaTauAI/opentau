@@ -10,6 +10,7 @@
   "stop_at": 50,
   "enable_defgen": false,
   "enable_usages": false,
+  "enable_stubbing": false,
   "strategy": "simple",
   "max_type_quality": 1000,
   "temperature": 0.75,

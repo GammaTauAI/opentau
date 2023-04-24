@@ -142,6 +142,8 @@ pub struct HyperParams {
     pub fallback: bool,
     // if we want to create usages block or not
     pub usages: bool,
+    // if we want to stub inner code blocks or not
+    pub stub: bool,
     // stop_at hyperparam
     pub stop_at: usize,
     // the kind of types that need to be annotated
@@ -426,7 +428,8 @@ impl CompletionLevels<PreparedState> {
     ) -> JoinHandle<(String, Vec<String>)> {
         let num_comps = params.num_comps;
         let retries = params.retries;
-        let fallback = params.fallback;
+        let do_fallback = params.fallback;
+        let do_stub = params.stub;
         // we use stop_at as our upper bound for the number of completions
         let stop_at = params.stop_at;
         let types_to_annot = params.types.clone();
@@ -482,7 +485,12 @@ impl CompletionLevels<PreparedState> {
                     let ls = engine.get_ls();
                     let mut new_comps = HashSet::new(); // we don't care about duplicates
                     for prompt in prompts.iter() {
-                        let stubbed = ls.stub(prompt).await.unwrap();
+                        let stubbed = if do_stub {
+                            ls.stub(prompt).await.unwrap()
+                        } else {
+                            prompt.clone()
+                        };
+
                         let mut printed = ls
                             .pretty_print(&stubbed, "_hole_", &types_to_annot)
                             .await
@@ -496,12 +504,12 @@ impl CompletionLevels<PreparedState> {
                         let q = CompletionQueryBuilder::new(printed)
                             .num_comps(num_comps)
                             .retries(retries)
-                            .fallback(fallback)
+                            .fallback(do_fallback)
                             // added comments are safe, we type-weave after
                             .problem_whitelist(vec![CheckProblem::ChangedComments])
                             .build();
 
-                        debug!("query: {}", q.input);
+                        debug!("query: \n{}", q.input);
                         let comps = Self::retry_query_until_ok(&engine, q).await;
                         match comps {
                             Some(comps) => {

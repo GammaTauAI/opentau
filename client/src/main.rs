@@ -3,7 +3,7 @@ use std::{str::FromStr, sync::Arc};
 use clap::Parser;
 use opentau::{
     cache::Cache,
-    completion::{Completion, TypecheckedCompletion},
+    completion::{sort_completions, Completion, TypecheckedCompletion},
     langserver::AnnotateType,
     main_strategies::{MainCtx, MainStrategy},
 };
@@ -52,17 +52,21 @@ async fn main() {
         enable_defgen: args.enable_defgen,
         depth_limit: args.depth_limit,
         enable_usages: !args.disable_usages,
+        enable_stubbing: !args.disable_stubbing,
         types: types_to_annot,
     };
 
     // the typechecked and completed code(s). here if we get errors we exit with 1
-    let good_ones: Vec<TypecheckedCompletion> = match strategy.run(ctx).await {
+    let mut good_ones: Vec<TypecheckedCompletion> = match strategy.run(ctx).await {
         Ok(good_ones) => good_ones,
         Err(e) => {
             eprintln!("Fatal error while running strategy: {e}");
             std::process::exit(1);
         }
     };
+
+    // sort by error count, then score
+    sort_completions(&mut good_ones);
 
     if good_ones.is_empty() {
         eprintln!("No completions type checked");

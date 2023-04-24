@@ -28,6 +28,7 @@ pub struct EvalSpec {
     pub stop_at: usize,
     pub enable_defgen: bool,
     pub enable_usages: bool,
+    pub enable_stubbing: bool,
     pub depth_limit: Option<usize>,
     pub max_type_quality: u16,
     pub temperature: f64,
@@ -117,6 +118,7 @@ impl EvalSpec {
             enable_type_check: true,
             enable_defgen: self.enable_defgen,
             enable_usages: self.enable_usages,
+            enable_stubbing: self.enable_stubbing,
             depth_limit: self.depth_limit,
             types: self.types.clone(),
         }

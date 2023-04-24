@@ -1,6 +1,7 @@
 use evaluator::{
     append_result, check_file_delete, read_dataset, write_results, EvalSpec, ResultElement,
 };
+use opentau::completion::sort_completions;
 
 #[tokio::main]
 async fn main() {
@@ -76,15 +77,7 @@ async fn main() {
                     );
                 }
 
-                // sort based on number of type errors (increasing). if the number of type errors is the same,
-                // sort based on score (lower score is better, so increasing)
-                comps.sort_by(|a, b| {
-                    if a.num_type_errors == b.num_type_errors {
-                        a.score.cmp(&b.score)
-                    } else {
-                        a.num_type_errors.cmp(&b.num_type_errors)
-                    }
-                });
+                sort_completions(&mut comps);
 
                 (comps, None)
             }

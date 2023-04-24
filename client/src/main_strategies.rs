@@ -19,6 +19,7 @@ pub struct MainCtx {
     pub enable_type_check: bool,
     pub enable_defgen: bool,
     pub enable_usages: bool,
+    pub enable_stubbing: bool,
     pub depth_limit: Option<usize>,
     pub types: Vec<AnnotateType>,
 }
@@ -88,6 +89,7 @@ impl MainStrategy for TreeStrategy {
             fallback: context.fallback,
             num_comps: context.num_comps,
             usages: context.enable_usages,
+            stub: context.enable_stubbing,
             stop_at: context.stop_at,
             types: context.types.clone(),
         };
