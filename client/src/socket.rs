@@ -1,5 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
+use lazy_static::lazy_static;
 use serde::Serialize;
 use thiserror::Error;
 use tokio::{
@@ -102,6 +103,11 @@ pub enum SocketError {
     Service(String),
 }
 
+lazy_static!(
+    // atomic socket counter, for generating unique socket names.
+    static ref SOCKET_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+);
+
 impl SocketAbstraction {
     /// Creates a new socket abstraction, does not spawn a process for it.
     /// The socket path is the path to the socket file, so we assume a
@@ -124,12 +130,9 @@ impl SocketAbstraction {
         pid_coordination: bool,
     ) -> Result<SocketAbstraction, SocketError> {
         let pid = std::process::id();
-        let time = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+        let s_i = SOCKET_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let tmp_dir = std::env::temp_dir();
-        let tmp_socket_file = tmp_dir.join(format!("{name}-{pid}-{time}.sock"));
+        let tmp_socket_file = tmp_dir.join(format!("{name}-{pid}-{s_i}.sock"));
         debug!("tmp_socket_file: {:?}", tmp_socket_file);
 
         let argv0 = server_command_prefix[0];
