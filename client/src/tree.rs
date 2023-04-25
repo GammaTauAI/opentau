@@ -284,10 +284,17 @@ async fn merge_below_all_combs(
     *prompts_set = new_prompts;
 }
 
+/// Counts the number of possible combinations between the level below and the level above.
+/// If the number of combinations is too large for an usize, we return usize::MAX.
 fn count_all_possible_combs(child: &CompNode, curr_prompts: usize) -> usize {
-    let mut res = 1;
+    let mut res: usize = 1;
     for _ in 0..curr_prompts {
-        res *= child.completed.len();
+        // make sure we don't overflow. return usize::MAX if we do
+        // and return early
+        res = match res.checked_mul(child.completed.len()) {
+            Some(mul) => mul,
+            None => return usize::MAX,
+        };
     }
     res
 }
