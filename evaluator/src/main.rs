@@ -3,6 +3,20 @@ use evaluator::{
 };
 use opentau::completion::sort_completions;
 
+fn get_content(element: &serde_json::Value) -> String {
+    element["content_without_annotations"]
+        .as_str()
+        .unwrap_or_else(|| element["content"].as_str().unwrap())
+        .to_string()
+}
+
+fn get_name(element: &serde_json::Value) -> String {
+    element["hexsha"]
+        .as_str()
+        .unwrap_or_else(|| element["name"].as_str().unwrap())
+        .to_string()
+}
+
 #[tokio::main]
 async fn main() {
     let args = std::env::args().collect::<Vec<_>>();
@@ -63,14 +77,10 @@ async fn main() {
 
             println!(
                 "###### RUNNING {} ({i}/{max_idx}) ######",
-                element["hexsha"]
-                    .as_str()
-                    .unwrap_or_else(|| element["name"].as_str().unwrap()),
+                get_name(element)
             );
 
-            let content = element["content_without_annotations"]
-                .as_str()
-                .unwrap_or_else(|| element["content"].as_str().unwrap());
+            let content = get_content(element);
             let context = eval.make_main_ctx(content.to_string(), engine.clone());
             let (strategy, maybe_arc_stats) = eval.get_strategy();
 
@@ -80,8 +90,12 @@ async fn main() {
         }
 
         for (e_i, maybe_arc_stats, element, handle) in tasks_results {
+            // calculate real index
+            let i = c_i * endpoints.len() + e_i;
+
             let (comps, maybe_error) = match handle.await {
                 Ok(Ok(mut comps)) => {
+                    println!("###### DONE {} ({i}/{max_idx}) ######", get_name(&element));
                     println!("#### Got {} completions! ####", comps.len());
                     for (i, comp) in comps.iter().enumerate() {
                         println!(
