@@ -15,6 +15,6 @@
   "max_type_quality": 1000,
   "temperature": 0.75,
   "types": [
-          "VarDecl", "FuncDecl", "FuncExpr", "ClassProp", "ClassMethod", "TypeDecl"
+          "FuncDecl", "FuncExpr", "ClassProp", "ClassMethod", "TypeDecl"
   ]
 }
