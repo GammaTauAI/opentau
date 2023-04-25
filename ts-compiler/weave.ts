@@ -135,17 +135,17 @@ export const resolveType = (
 //  - we then print the unwoven AST, after being transformed
 //
 export const weavePrograms = (
-  original: ts.Program,
+  target: ts.Program,
   nettle: ts.Program,
   nettleLevel: number // the level of the nettle in the tree, 0 is the root.
 ): string => {
-  let sourceFile = original.getSourceFile("comp.ts")!;
+  let sourceFile = target.getSourceFile("comp.ts")!;
   let nettleFile = nettle.getSourceFile("comp.ts")!;
-  original.getTypeChecker();
+  target.getTypeChecker();
   const nettleChecker = nettle.getTypeChecker();
 
   // we want a map of identifier names to types, such that we can transplant
-  // the types from the nettle AST to the original AST
+  // the types from the nettle AST to the target AST
   const typeMap = new Map<string, ts.TypeNode>();
 
   function buildTypeMap(node: ts.Node, scope: string) {
@@ -218,7 +218,7 @@ export const weavePrograms = (
 
   // console.log("typeMap:\n" + typeMapPrint(typeMap, nettleFile));
 
-  // we weave the types into the original AST
+  // we weave the types into the target AST
   function weaveNode(node: ts.Node, scope: string, level: number) {
     if (ts.isVariableDeclaration(node) && !isVarDeclBoundFunction(node)) {
       const name = node.name.getText();
