@@ -124,8 +124,12 @@ impl SocketAbstraction {
         pid_coordination: bool,
     ) -> Result<SocketAbstraction, SocketError> {
         let pid = std::process::id();
+        let time = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
         let tmp_dir = std::env::temp_dir();
-        let tmp_socket_file = tmp_dir.join(format!("{name}-{pid}.sock"));
+        let tmp_socket_file = tmp_dir.join(format!("{name}-{pid}-{time}.sock"));
         debug!("tmp_socket_file: {:?}", tmp_socket_file);
 
         let argv0 = server_command_prefix[0];
