@@ -53,14 +53,12 @@ impl EvalSpec {
         }
     }
 
-    pub async fn get_completion_engine(&self) -> ArcCompletionEngine {
+    pub async fn get_completion_engine(&self, endpoint: String) -> ArcCompletionEngine {
         let langserver = self.get_langserver().await;
         let model: ArcCompletionModel = match self.model.as_str() {
             "santacoder" | "incoder" => {
                 let mut builder = LocalModelClientBuilder::new(self.model.clone());
-                if let Some(endpoint) = &self.local_model_socket {
-                    builder = builder.socket_path(endpoint.clone());
-                }
+                builder = builder.socket_path(endpoint.clone());
 
                 Arc::new(
                     builder
