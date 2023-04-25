@@ -61,6 +61,10 @@ async fn main() {
         engines.push(engine.clone());
     }
 
+    // NOTE: a better way to do this would be to use channels and a resource pool for the engines.
+    // how we are doing it right now has one issue: if one result takes
+    // a long time to complete, it will block the other results from being
+    // written to disk.
     for (c_i, chunk) in dataset.chunks(endpoints.len()).enumerate() {
         let mut tasks_results = Vec::new();
 
