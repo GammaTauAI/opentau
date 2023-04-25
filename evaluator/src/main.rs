@@ -80,15 +80,6 @@ async fn main() {
         }
 
         for (e_i, maybe_arc_stats, element, handle) in tasks_results {
-            // get inner stats from the Arc Mutex
-            let stats_unarc = match maybe_arc_stats {
-                Some(arc_stats) => {
-                    let stats = arc_stats.lock().await.clone();
-                    Some(stats)
-                }
-                None => None,
-            };
-
             let (comps, maybe_error) = match handle.await {
                 Ok(Ok(mut comps)) => {
                     println!("#### Got {} completions! ####", comps.len());
@@ -116,6 +107,15 @@ async fn main() {
 
                     (vec![], Some(e.to_string()))
                 }
+            };
+
+            // get inner stats from the Arc Mutex
+            let stats_unarc = match maybe_arc_stats {
+                Some(arc_stats) => {
+                    let stats = arc_stats.lock().await.clone();
+                    Some(stats)
+                }
+                None => None,
             };
 
             let elem = ResultElement {
