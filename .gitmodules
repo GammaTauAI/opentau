@@ -1,6 +1,3 @@
-[submodule "opentau-test"]
-	path = opentau-test
-	url = https://github.com/GammaTauAI/opentau-test
 [submodule "incoder-server"]
 	path = incoder-server
 	url = git@github.com:gammatauai/incoder-server
