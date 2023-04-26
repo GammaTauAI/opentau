@@ -3,7 +3,7 @@ use std::sync::Arc;
 use evaluator::{
     append_result, check_file_delete, read_dataset, write_results, EvalSpec, ResultElement,
 };
-use opentau::completion::{sort_completions, ArcCompletionEngine, CompletionEngine};
+use opentau::completion::{sort_completions, ArcCompletionEngine};
 use tokio::sync::Mutex;
 
 fn get_content(element: &serde_json::Value) -> String {
@@ -58,16 +58,15 @@ async fn main() {
     };
     assert!(!endpoints.is_empty());
 
-    let (e_tx, e_rx): (
-        tokio::sync::mpsc::Sender<Arc<Mutex<ArcCompletionEngine>>>,
-        _,
-    ) = tokio::sync::mpsc::channel(endpoints.len());
+    type MutexEngine = Arc<Mutex<ArcCompletionEngine>>;
+    let (e_tx, e_rx): (tokio::sync::mpsc::Sender<(usize, MutexEngine)>, _) =
+        tokio::sync::mpsc::channel(endpoints.len());
     let e_rx = Arc::new(Mutex::new(e_rx));
 
-    for endpoint in endpoints.iter() {
+    for (e_i, endpoint) in endpoints.iter().enumerate() {
         let engine = eval.get_completion_engine(endpoint.to_string()).await;
         let mutex_engine = Arc::new(Mutex::new(engine.clone()));
-        e_tx.send(mutex_engine).await.unwrap();
+        e_tx.send((e_i, mutex_engine)).await.unwrap();
     }
 
     let mut handles = Vec::new();
@@ -82,13 +81,16 @@ async fn main() {
         let e_tx = e_tx.clone();
         let e_rx = e_rx.clone();
         let eval = eval.clone();
+        let endpoints = endpoints.clone();
 
         let outer_task = tokio::task::spawn(async move {
             // ask the channel for an engine
-            let mutex_engine = {
+            let engine_pair = {
                 let mut e_rx = e_rx.lock().await;
                 e_rx.recv().await.unwrap()
             };
+            let (e_i, ref mutex_engine) = engine_pair;
+
             println!(
                 "###### RUNNING {} ({i}/{max_idx}) ######",
                 get_name(&element)
@@ -125,7 +127,7 @@ async fn main() {
                 Err(e) => {
                     eprintln!("Panic while running strategy: {e}");
 
-                    let endpoint = mutex_engine.lock().await.get_endpoint().unwrap();
+                    let endpoint = endpoints[e_i].clone();
 
                     // restore state by re-creating the engine
                     *mutex_engine.lock().await = eval.get_completion_engine(endpoint).await;
@@ -135,7 +137,7 @@ async fn main() {
             };
 
             // send the engine back to the channel
-            e_tx.send(mutex_engine).await.unwrap();
+            e_tx.send(engine_pair).await.unwrap();
 
             (comps, maybe_error, maybe_arc_stats, element)
         });
