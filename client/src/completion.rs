@@ -17,7 +17,7 @@ pub mod local;
 /// This is the trait that defines operations on the completion engine (Codex, incoder, santacoder,
 /// etc..). The completion engine is coupled with the language server.
 #[async_trait::async_trait]
-pub trait CompletionEngine {
+pub trait CompletionEngine: std::fmt::Debug {
     /// Completes the given query using the completion engine.
     /// Query structure:
     /// - num_comps is the number of completions to return per request.
@@ -49,7 +49,7 @@ pub trait CompletionEngine {
 pub type ArcCompletionEngine = Arc<dyn CompletionEngine + Send + Sync>;
 
 /// This is a trait that defines operations for a model that can be used to complete code.
-pub trait CompletionModel {
+pub trait CompletionModel: std::fmt::Debug {
     /// Spawns a completion thread, and populates the filtered_completion vector with
     /// the completions of the query.
     fn spawn_comp(
@@ -260,7 +260,7 @@ async fn filter_comps(
 }
 
 /// Represents a client to the completion API.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CompletionClient {
     // the language server
     lang_server: ArcLangServer,

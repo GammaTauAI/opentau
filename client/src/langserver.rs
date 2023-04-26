@@ -220,7 +220,7 @@ pub trait LangServerCommands {
 
 /// This is the trait that defines operations on the language server.
 #[async_trait]
-pub trait LangServer: LangServerCommands {
+pub trait LangServer: LangServerCommands + std::fmt::Debug {
     /// create a new server socket connection, given a path to the language server executable
     async fn make(path: &str) -> Result<Self, LangServerError>
     where

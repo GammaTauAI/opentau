@@ -10,6 +10,7 @@ use crate::{
 
 use super::{filter_comps, CompletionEngine, CompletionModel, CompletionQuery, ModelResponseError};
 
+#[derive(Debug, Clone)]
 pub struct LocalModelClient {
     /// Unix socket to communicate with the model server
     socket: Arc<dyn SendToSocket>,

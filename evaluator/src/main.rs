@@ -1,7 +1,10 @@
+use std::sync::Arc;
+
 use evaluator::{
     append_result, check_file_delete, read_dataset, write_results, EvalSpec, ResultElement,
 };
-use opentau::completion::sort_completions;
+use opentau::completion::{sort_completions, ArcCompletionEngine, CompletionEngine};
+use tokio::sync::Mutex;
 
 fn get_content(element: &serde_json::Value) -> String {
     element["content_without_annotations"]
@@ -55,49 +58,51 @@ async fn main() {
     };
     assert!(!endpoints.is_empty());
 
-    let mut engines = vec![];
+    let (e_tx, e_rx): (
+        tokio::sync::mpsc::Sender<Arc<Mutex<ArcCompletionEngine>>>,
+        _,
+    ) = tokio::sync::mpsc::channel(endpoints.len());
+    let e_rx = Arc::new(Mutex::new(e_rx));
+
     for endpoint in endpoints.iter() {
         let engine = eval.get_completion_engine(endpoint.to_string()).await;
-        engines.push(engine.clone());
+        let mutex_engine = Arc::new(Mutex::new(engine.clone()));
+        e_tx.send(mutex_engine).await.unwrap();
     }
 
-    // NOTE: a better way to do this would be to use channels and a resource pool for the engines.
-    // how we are doing it right now has one issue: if one result takes
-    // a long time to complete, it will block the other results from being
-    // written to disk.
-    for (c_i, chunk) in dataset.chunks(endpoints.len()).enumerate() {
-        let mut tasks_results = Vec::new();
+    let mut handles = Vec::new();
 
-        for (e_i, element) in chunk.iter().enumerate() {
-            // calculate real index
-            let i = c_i * endpoints.len() + e_i;
+    for (i, element) in dataset.into_iter().enumerate() {
+        if i < results.len() {
+            // already done from previous run
+            continue;
+        }
 
-            if i < results.len() {
-                // already done from previous run
-                continue;
-            }
+        // a good healthy dose of cloning
+        let e_tx = e_tx.clone();
+        let e_rx = e_rx.clone();
+        let eval = eval.clone();
 
-            let engine = engines[e_i].clone();
-
+        let outer_task = tokio::task::spawn(async move {
+            // ask the channel for an engine
+            let mutex_engine = {
+                let mut e_rx = e_rx.lock().await;
+                e_rx.recv().await.unwrap()
+            };
             println!(
                 "###### RUNNING {} ({i}/{max_idx}) ######",
-                get_name(element)
+                get_name(&element)
             );
 
-            let content = get_content(element);
-            let context = eval.make_main_ctx(content.to_string(), engine.clone());
+            let content = get_content(&element);
+            let context =
+                eval.make_main_ctx(content.to_string(), mutex_engine.lock().await.clone());
             let (strategy, maybe_arc_stats) = eval.get_strategy();
 
             // wrap in a task so that we can catch panics
-            let task = tokio::task::spawn(async move { strategy.run(context).await });
-            tasks_results.push((e_i, maybe_arc_stats, element.clone(), task));
-        }
+            let inner_task = tokio::task::spawn(async move { strategy.run(context).await });
 
-        for (e_i, maybe_arc_stats, element, handle) in tasks_results {
-            // calculate real index
-            let i = c_i * endpoints.len() + e_i;
-
-            let (comps, maybe_error) = match handle.await {
+            let (comps, maybe_error) = match inner_task.await {
                 Ok(Ok(mut comps)) => {
                     println!("###### DONE {} ({i}/{max_idx}) ######", get_name(&element));
                     println!("#### Got {} completions! ####", comps.len());
@@ -120,33 +125,44 @@ async fn main() {
                 Err(e) => {
                     eprintln!("Panic while running strategy: {e}");
 
+                    let endpoint = mutex_engine.lock().await.get_endpoint().unwrap();
+
                     // restore state by re-creating the engine
-                    engines[e_i] = eval.get_completion_engine(endpoints[e_i].to_string()).await;
+                    *mutex_engine.lock().await = eval.get_completion_engine(endpoint).await;
 
                     (vec![], Some(e.to_string()))
                 }
             };
 
-            // get inner stats from the Arc Mutex
-            let stats_unarc = match maybe_arc_stats {
-                Some(arc_stats) => {
-                    let stats = arc_stats.lock().await.clone();
-                    Some(stats)
-                }
-                None => None,
-            };
+            // send the engine back to the channel
+            e_tx.send(mutex_engine).await.unwrap();
 
-            let elem = ResultElement {
-                dataset_elem: element.clone(),
-                failed_message: maybe_error,
-                eval_spec: eval.clone(),
-                stats: stats_unarc,
-                completions: comps,
-            };
+            (comps, maybe_error, maybe_arc_stats, element)
+        });
+        handles.push(outer_task);
+    }
 
-            append_result(&elem, &eval.results_path).await;
-            results.push(elem);
-        }
+    for handle in handles {
+        let (comps, maybe_error, maybe_arc_stats, element) = handle.await.unwrap();
+        // get inner stats from the Arc Mutex
+        let stats_unarc = match maybe_arc_stats {
+            Some(arc_stats) => {
+                let stats = arc_stats.lock().await.clone();
+                Some(stats)
+            }
+            None => None,
+        };
+
+        let elem = ResultElement {
+            dataset_elem: element.clone(),
+            failed_message: maybe_error,
+            eval_spec: eval.clone(),
+            stats: stats_unarc,
+            completions: comps,
+        };
+
+        append_result(&elem, &eval.results_path).await;
+        results.push(elem);
     }
 
     // rewrite results, just in case

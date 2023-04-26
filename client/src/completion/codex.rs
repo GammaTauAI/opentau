@@ -82,7 +82,7 @@ mod rl {
 
 /// Represents a client to the codex API. Safe to clone as most of the fields are
 /// wrapped in an Arc.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CodexClient {
     // the reqwest client used to send requests to codex
     client: reqwest::Client,

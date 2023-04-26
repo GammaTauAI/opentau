@@ -7,6 +7,17 @@ pub struct Cache {
     redis: redis::Connection,
 }
 
+impl std::fmt::Debug for Cache {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Cache")
+            .field("stop_at", &self.stop_at)
+            // redis::Connection doesn't implement Debug, so we have to
+            // do this manually
+            .field("redis", &"redis::Connection")
+            .finish()
+    }
+}
+
 impl Cache {
     pub fn new(redis_url: &str, stop_at: usize) -> Result<Self, Box<dyn std::error::Error>> {
         let client = redis::Client::open(redis_url)?;

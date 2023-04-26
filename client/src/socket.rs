@@ -25,6 +25,7 @@ pub struct SingleThreadedSocket {
     socket: Mutex<SocketAbstraction>,
 }
 
+#[derive(Debug)]
 struct Worker {
     socket: Arc<SocketAbstraction>,
     avail_tx: Sender<String>,
@@ -32,6 +33,7 @@ struct Worker {
 
 /// A socket pool that can be used to delegate requests to multiple servers,
 /// asynchronously.
+#[derive(Debug)]
 pub struct SocketPool {
     workers: Arc<Mutex<HashMap<String, Worker>>>,
     avail_rx: Mutex<Receiver<String>>,
@@ -41,7 +43,7 @@ pub struct SocketPool {
 pub const END_TOKEN: &str = "??END??";
 
 #[async_trait::async_trait]
-pub trait SendToSocket: Send + Sync {
+pub trait SendToSocket: Send + Sync + std::fmt::Debug {
     /// Sends the given request to the server and returns the response as a JSON object.
     /// Expects the response to have a `type` field, and if it is `error`, returns an error.
     async fn send_req(&self, req: serde_json::Value) -> Result<serde_json::Value, SocketError>;
