@@ -1,12 +1,10 @@
-use std::collections::HashSet;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
-use tokio::{io::AsyncBufReadExt, net::UnixStream, sync::Mutex, task::JoinHandle};
+use tokio::{sync::Mutex, task::JoinHandle};
 
 use crate::{
     debug, get_path_from_rootdir,
-    langserver::{self, ts::ts_parse_type},
     socket::{SendToSocket, SingleThreadedSocket, SocketAbstraction, SocketPool},
 };
 
