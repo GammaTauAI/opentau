@@ -1,0 +1,204 @@
+<html>
+  <body>
+    <input type="file" id="file-input" />
+    <button id="read-button">Read results file</button>
+    <br />
+    <p>Input element index: <input type="text" id="element-idx" /></p>
+    <div style="display: flex; flex-direction: row; margin: 10px">
+      <!-- button for previous element -->
+      <button id="prev-elem-button" style="margin-left: 10px">
+        Previous Element
+      </button>
+      <!-- button for next element -->
+      <button id="next-elem-button" style="margin-right: 10px">
+        Next Element
+      </button>
+    </div>
+    <div style="display: flex; flex-direction: row; margin: 10px">
+      <!-- button for previous completion -->
+      <button id="prev-comp-button" style="margin-left: 10px">
+        Previous Completion
+      </button>
+      <!-- button for next completion -->
+      <button id="next-comp-button" style="margin-right: 10px">
+        Next Completion
+      </button>
+    </div>
+    <div id="results-pane" style="display: flex; flex-direction: column">
+      <div id="elem-stats-pane" style="flex: 1">
+        <h1>Element Stats</h1>
+        <p>Element index: <span id="elem-idx"></span></p>
+        <p>Number of completions: <span id="num-completions"></span></p>
+        <!-- TODO: more stats -->
+      </div>
+      <div id="comp-stats-pane" style="flex: 1">
+        <h1>Completion Stats</h1>
+        <p>Completion index: <span id="comp-idx"></span></p>
+        <p>Type errors: <span id="type-errors"></span></p>
+        <p>Heuristic score: <span id="heuristic-score"></span></p>
+      </div>
+      <div id="result-pane" style="flex: 1">
+        <h1>Completion Code</h1>
+        <pre id="result" style="white-space: pre-wrap"></pre>
+      </div>
+    </div>
+    <script charset="utf-8">
+      let currentFile = null;
+      let currentCompletion = null;
+      let currentElement = null;
+
+      function stringUnescape(s) {
+        return s
+          .replace(/\\n/g, "\\n")
+          .replace(/\\'/g, "\\'")
+          .replace(/\\"/g, '\\"')
+          .replace(/\\&/g, "\\&")
+          .replace(/\\r/g, "\\r")
+          .replace(/\\t/g, "\\t")
+          .replace(/\\b/g, "\\b")
+          .replace(/\\f/g, "\\f");
+      }
+
+      function updateCompletion(index) {
+        let newComp = currentFile[currentElement].completions[index];
+        if (!newComp) {
+          alert("Completion not found!");
+          return;
+        }
+
+        let code = stringUnescape(newComp.code);
+        document.getElementById("result").innerHTML = code;
+        document.getElementById("type-errors").innerHTML =
+          newComp.num_type_errors;
+        document.getElementById("heuristic-score").innerHTML = newComp.score;
+        document.getElementById("comp-idx").innerHTML = `${index}/${
+          currentFile[currentElement].completions.length - 1
+        } (starting from 0)`;
+      }
+
+      function updateElement(index) {
+        let newElem = currentFile[Number(index)];
+        if (!newElem) {
+          alert("Element not found!");
+          return;
+        }
+        currentElement = Number(index);
+        console.log(currentFile[currentElement]);
+        document.getElementById("elem-idx").innerHTML = `${index}/${
+          currentFile.length - 1
+        } (starting from 0)`;
+        if (newElem.completions.length !== 0) {
+          currentCompletion = 0;
+          updateCompletion(currentCompletion);
+        } else {
+          currentCompletion = null;
+        }
+        document.getElementById("num-completions").innerHTML =
+          newElem.completions.length;
+      }
+
+      document
+        .getElementById("read-button")
+        .addEventListener("click", function () {
+          const reader = new FileReader();
+          let files = document.getElementById("file-input").files;
+          if (!files || files.length < 0 || files.length > 1) {
+            alert("Please select one file!");
+            return;
+          }
+
+          reader.onload = function () {
+            currentFile = reader.result
+              .split("\n")
+              .filter((line) => line)
+              .map((line) => JSON.parse(line));
+            if (currentFile.lenth === 0) {
+              alert("File is empty!");
+              return;
+            }
+            console.log(1);
+            updateElement(0);
+          };
+          reader.readAsText(files[0]);
+        });
+
+      document
+        .getElementById("element-idx")
+        .addEventListener("change", function () {
+          if (!currentFile) {
+            alert("Please select a file first!");
+            return;
+          }
+          const elementIdx = document.getElementById("element-idx").value;
+          if (!elementIdx) {
+            alert("Please enter an element index!");
+            return;
+          }
+          updateElement(elementIdx);
+        });
+
+      document
+        .getElementById("next-comp-button") // next comp
+        .addEventListener("click", function () {
+          if (!currentElement) {
+            alert("Please select an element first!");
+            return;
+          }
+          if (
+            currentCompletion + 1 >=
+            currentFile[currentElement].completions.length
+          ) {
+            alert("No more completions!");
+            return;
+          }
+          currentCompletion++;
+          updateCompletion(currentCompletion);
+        });
+
+      document
+        .getElementById("prev-comp-button") // prev comp
+        .addEventListener("click", function () {
+          if (!currentElement) {
+            alert("Please select an element first!");
+            return;
+          }
+          if (currentCompletion - 1 < 0) {
+            alert("No more completions!");
+            return;
+          }
+          currentCompletion--;
+          updateCompletion(currentCompletion);
+        });
+
+      document
+        .getElementById("next-elem-button") // next elem
+        .addEventListener("click", function () {
+          if (!currentFile) {
+            alert("Please select a file first!");
+            return;
+          }
+          if (currentElement + 1 >= currentFile.length) {
+            alert("No more elements!");
+            return;
+          }
+          currentElement++;
+          updateElement(currentElement);
+        });
+
+      document
+        .getElementById("prev-elem-button") // prev elem
+        .addEventListener("click", function () {
+          if (!currentFile) {
+            alert("Please select a file first!");
+            return;
+          }
+          if (currentElement - 1 < 0) {
+            alert("No more elements!");
+            return;
+          }
+          currentElement--;
+          updateElement(currentElement);
+        });
+    </script>
+  </body>
+</html>
