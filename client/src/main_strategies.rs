@@ -181,7 +181,7 @@ impl MainStrategy for SimpleStrategy {
             }
             Err(e) => {
                 eprintln!("Fatal error: {e}");
-                std::process::exit(1);
+                return Err(LangServerError::LC(e.to_string()));
             }
         };
 

@@ -46,6 +46,7 @@ async fn main() {
 
     let mut results: Vec<ResultElement> = Vec::new();
     let max_idx = dataset.len() - 1;
+
     let maybe_resume = check_file_delete(&eval.results_path).await;
     if let Some(resume) = maybe_resume {
         results = resume;
