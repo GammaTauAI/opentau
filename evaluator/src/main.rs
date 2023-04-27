@@ -3,7 +3,7 @@ use std::sync::Arc;
 use evaluator::{
     append_result, check_file_delete, read_dataset, write_results, EvalSpec, ResultElement,
 };
-use opentau::completion::{sort_completions, ArcCompletionEngine};
+use opentau::completion::{sort_completions, ArcCompletionEngine, CompletionError};
 use tokio::sync::Mutex;
 
 fn get_content(element: &serde_json::Value) -> String {
@@ -119,6 +119,11 @@ async fn main() {
                     sort_completions(&mut comps);
 
                     (comps, None)
+                }
+                Ok(Err(CompletionError::CouldNotComplete)) => {
+                    println!("###### DONE {} ({i}/{max_idx}) ######", get_name(&element));
+                    println!("#### Could not complete ####");
+                    (vec![], None)
                 }
                 Ok(Err(e)) => {
                     eprintln!("Error while running strategy: {e}");

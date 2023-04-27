@@ -137,14 +137,17 @@ pub struct ResultElement {
     pub completions: Vec<TypecheckedCompletion>,
 }
 
-pub async fn read_dataset(path: &str) -> Vec<serde_json::Value> {
-    let dataset_path = if path.starts_with('/') {
+fn resolve_path(path: &str) -> String {
+    if path.starts_with('/') {
         path.to_string()
     } else {
         let cargo_path = std::env::var("CARGO_MANIFEST_DIR").unwrap();
         format!("{cargo_path}/{path}")
-    };
+    }
+}
 
+pub async fn read_dataset(path: &str) -> Vec<serde_json::Value> {
+    let dataset_path = resolve_path(path);
     let dataset_file = tokio::fs::read_to_string(dataset_path)
         .await
         .unwrap_or_else(|_| {
@@ -164,13 +167,7 @@ pub async fn read_dataset(path: &str) -> Vec<serde_json::Value> {
 
 /// Checks if the file exists, and asks the user if they want to delete it or resume from it.
 pub async fn check_file_delete(path: &str) -> Option<Vec<ResultElement>> {
-    let results_path = if path.starts_with('/') {
-        path.to_string()
-    } else {
-        let cargo_path = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-        format!("{cargo_path}/{path}")
-    };
-
+    let results_path = resolve_path(path);
     if tokio::fs::metadata(results_path.clone()).await.is_ok() {
         println!("File {results_path} already exists, do you want to delete it or resume?\n\td: delete\n\tr: resume\n\tc: cancel");
         let mut buf = [0; 1];
@@ -205,13 +202,7 @@ pub async fn check_file_delete(path: &str) -> Option<Vec<ResultElement>> {
 }
 
 pub async fn write_results(results: &Vec<ResultElement>, path: &str) {
-    let results_path = if path.starts_with('/') {
-        path.to_string()
-    } else {
-        let cargo_path = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-        format!("{cargo_path}/{path}")
-    };
-
+    let results_path = resolve_path(path);
     let mut lines = String::new();
     for result in results {
         let line = serde_json::to_string(&result).unwrap_or_else(|_| {
@@ -230,13 +221,7 @@ pub async fn write_results(results: &Vec<ResultElement>, path: &str) {
 }
 
 pub async fn append_result(result: &ResultElement, path: &str) {
-    let results_path = if path.starts_with('/') {
-        path.to_string()
-    } else {
-        let cargo_path = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-        format!("{cargo_path}/{path}")
-    };
-
+    let results_path = resolve_path(path);
     let line = serde_json::to_string(&result).unwrap_or_else(|_| {
         eprintln!("Failed to serialize result");
         std::process::exit(1);
