@@ -60,7 +60,7 @@ impl MainCtx {
 #[async_trait::async_trait]
 pub trait MainStrategy {
     /// Run the strategy on the given context.
-    async fn run(&self, context: MainCtx) -> Result<Vec<TypecheckedCompletion>, LangServerError>;
+    async fn run(&self, context: MainCtx) -> Result<Vec<TypecheckedCompletion>, CompletionError>;
 }
 
 pub struct TreeStrategy {
@@ -73,7 +73,7 @@ impl MainStrategy for TreeStrategy {
     /// Runs the tree completion strategy. Documentation on the strategy is in the `tree.rs` file.
     ///
     /// TODO: somehow add caching to this strategy, maybe go up the tree?
-    async fn run(&self, context: MainCtx) -> Result<Vec<TypecheckedCompletion>, LangServerError> {
+    async fn run(&self, context: MainCtx) -> Result<Vec<TypecheckedCompletion>, CompletionError> {
         let mut tree = context
             .engine
             .get_ls()
@@ -140,7 +140,7 @@ impl MainStrategy for TreeStrategy {
 impl MainStrategy for SimpleStrategy {
     /// Runs the simple completion strategy, which just runs the completion on the given file
     /// without any transformation, other than adding "_hole_" to each unknwon type
-    async fn run(&self, context: MainCtx) -> Result<Vec<TypecheckedCompletion>, LangServerError> {
+    async fn run(&self, context: MainCtx) -> Result<Vec<TypecheckedCompletion>, CompletionError> {
         let initial_input = if context.enable_defgen {
             context
                 .engine
@@ -180,8 +180,7 @@ impl MainStrategy for SimpleStrategy {
                 r
             }
             Err(e) => {
-                eprintln!("Fatal error: {e}");
-                return Err(LangServerError::LC(e.to_string()));
+                return Err(e);
             }
         };
 

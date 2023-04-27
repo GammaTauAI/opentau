@@ -204,7 +204,7 @@ pub enum CompletionError {
     #[error("Rate limit. Got {} completions", .0.len())]
     RateLimit(Vec<Completion>),
     #[error("Language server error: {0}")]
-    LangServer(LangServerError),
+    LangServer(#[from] LangServerError),
     #[error("Completion engine could not complete")]
     CouldNotComplete,
 }
