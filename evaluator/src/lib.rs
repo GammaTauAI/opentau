@@ -198,8 +198,9 @@ pub async fn check_file_delete(path: &str) -> Option<Vec<ResultElement>> {
                     std::process::exit(1);
                 });
 
-                // if we are rerunning panicked, we only want to run the panicked ones
-                if choice == b'p' && element.failed_message.is_none() {
+                // if we are rerunning panicked, we only want to run the panicked ones,
+                // so we only add the one that didn't panic
+                if choice == b'p' && element.failed_message.is_some() {
                     continue;
                 }
 
