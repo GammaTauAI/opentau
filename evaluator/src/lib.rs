@@ -146,6 +146,12 @@ fn resolve_path(path: &str) -> String {
     }
 }
 
+fn result_to_line(result: &ResultElement) -> String {
+    let mut line = serde_json::to_string(result).unwrap();
+    line.push('\n');
+    line
+}
+
 pub async fn read_dataset(path: &str) -> Vec<serde_json::Value> {
     let dataset_path = resolve_path(path);
     let dataset_file = tokio::fs::read_to_string(dataset_path)
@@ -169,14 +175,16 @@ pub async fn read_dataset(path: &str) -> Vec<serde_json::Value> {
 pub async fn check_file_delete(path: &str) -> Option<Vec<ResultElement>> {
     let results_path = resolve_path(path);
     if tokio::fs::metadata(results_path.clone()).await.is_ok() {
-        println!("File {results_path} already exists, do you want to delete it or resume?\n\td: delete\n\tr: resume\n\tc: cancel");
+        println!("File {results_path} already exists, do you want to delete it or resume?");
+        println!("\td: delete\n\tr: resume\n\tp: rerun panicked\n\tc: cancel");
         let mut buf = [0; 1];
         let mut stdin = tokio::io::stdin();
         stdin.read_exact(&mut buf).await.unwrap();
-        if buf[0] == b'd' {
+        let choice = buf[0];
+        if choice == b'd' {
             tokio::fs::remove_file(results_path).await.unwrap();
             None
-        } else if buf[0] == b'r' {
+        } else if choice == b'r' || choice == b'p' {
             let results_file = tokio::fs::read_to_string(results_path)
                 .await
                 .unwrap_or_else(|_| {
@@ -189,10 +197,17 @@ pub async fn check_file_delete(path: &str) -> Option<Vec<ResultElement>> {
                     eprintln!("Failed to parse input file");
                     std::process::exit(1);
                 });
+
+                // if we are rerunning panicked, we only want to run the panicked ones
+                if choice == b'p' && element.failed_message.is_none() {
+                    continue;
+                }
+
                 results.push(element);
             }
             Some(results)
         } else {
+            // something else or c
             println!("Exiting");
             std::process::exit(0);
         }
@@ -205,12 +220,8 @@ pub async fn write_results(results: &Vec<ResultElement>, path: &str) {
     let results_path = resolve_path(path);
     let mut lines = String::new();
     for result in results {
-        let line = serde_json::to_string(&result).unwrap_or_else(|_| {
-            eprintln!("Failed to serialize result");
-            std::process::exit(1);
-        });
+        let line = result_to_line(result);
         lines.push_str(&line);
-        lines.push('\n');
     }
     tokio::fs::write(results_path, lines)
         .await
@@ -222,10 +233,7 @@ pub async fn write_results(results: &Vec<ResultElement>, path: &str) {
 
 pub async fn append_result(result: &ResultElement, path: &str) {
     let results_path = resolve_path(path);
-    let line = serde_json::to_string(&result).unwrap_or_else(|_| {
-        eprintln!("Failed to serialize result");
-        std::process::exit(1);
-    });
+    let line = result_to_line(result);
     let mut file = tokio::fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -236,10 +244,6 @@ pub async fn append_result(result: &ResultElement, path: &str) {
             std::process::exit(1);
         });
     file.write_all(line.as_bytes()).await.unwrap_or_else(|_| {
-        eprintln!("Failed to write to results file");
-        std::process::exit(1);
-    });
-    file.write_all(b"\n").await.unwrap_or_else(|_| {
         eprintln!("Failed to write to results file");
         std::process::exit(1);
     });

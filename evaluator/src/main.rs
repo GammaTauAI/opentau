@@ -73,8 +73,8 @@ async fn main() {
     let mut handles = Vec::new();
 
     for (i, element) in dataset.into_iter().enumerate() {
-        if i < results.len() {
-            // already done from previous run
+        // if the element exists in the results, skip it
+        if results.iter().any(|r| r.dataset_elem == element) {
             continue;
         }
 
@@ -169,10 +169,9 @@ async fn main() {
             completions: comps,
         };
 
-        append_result(&elem, &eval.results_path).await;
         results.push(elem);
-    }
 
-    // rewrite results, just in case
-    write_results(&results, &eval.results_path).await;
+        // rewrite results. i know, inefficient. whatever.
+        write_results(&results, &eval.results_path).await;
+    }
 }
