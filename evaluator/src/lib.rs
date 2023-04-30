@@ -13,6 +13,8 @@ use opentau::{
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+pub mod runner;
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct EvalSpec {
     pub model: String,
@@ -120,6 +122,15 @@ impl EvalSpec {
             depth_limit: self.depth_limit,
             types: self.types.clone(),
         }
+    }
+
+    pub fn get_endpoints(&self) -> Vec<String> {
+        let endpoints = match self.local_model_socket {
+            Some(ref sockets) => sockets.split(',').map(|s| s.to_string()).collect(),
+            None => vec![self.remote_model_key.as_ref().unwrap().to_string()],
+        };
+        assert!(!endpoints.is_empty());
+        endpoints
     }
 }
 
@@ -248,4 +259,18 @@ pub async fn append_result(result: &ResultElement, path: &str) {
         eprintln!("Failed to write to results file");
         std::process::exit(1);
     });
+}
+
+pub fn get_content(element: &serde_json::Value) -> String {
+    element["content_without_annotations"]
+        .as_str()
+        .unwrap_or_else(|| element["content"].as_str().unwrap())
+        .to_string()
+}
+
+pub fn get_name(element: &serde_json::Value) -> String {
+    element["hexsha"]
+        .as_str()
+        .unwrap_or_else(|| element["name"].as_str().unwrap())
+        .to_string()
 }
