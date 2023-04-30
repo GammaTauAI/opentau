@@ -1,9 +1,6 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
-use crate::{
-    append_result, check_file_delete, get_content, get_name, read_dataset, write_results, EvalSpec,
-    ResultElement,
-};
+use crate::{check_file_delete, get_content, get_name, write_results, EvalSpec, ResultElement};
 use opentau::{
     completion::{sort_completions, ArcCompletionEngine, CompletionError, TypecheckedCompletion},
     tree::stats::ArcTreeAlgoStats,
@@ -32,6 +29,8 @@ pub struct RunnerState {
     pub endpoints: Vec<String>,
     pub e_tx: MutexEngineSender,
     pub e_rx: MutexEngineReceiver,
+    pub done_tx: Sender<usize>,
+    pub done_rx: Receiver<usize>,
 }
 
 /// Creates the engine channel, and populates it with the engines.
@@ -72,6 +71,9 @@ impl RunnerState {
         let endpoints = eval.get_endpoints();
 
         let (e_tx, e_rx) = create_engine_ch(&eval, &endpoints).await;
+
+        let (done_tx, done_rx) = tokio::sync::mpsc::channel(1);
+
         RunnerState {
             results,
             eval,
@@ -79,6 +81,8 @@ impl RunnerState {
             endpoints,
             e_tx,
             e_rx,
+            done_tx,
+            done_rx,
         }
     }
 
@@ -91,6 +95,7 @@ impl RunnerState {
         // a good healthy dose of cloning
         let e_tx = self.e_tx.clone();
         let e_rx = self.e_rx.clone();
+        let done_tx = self.done_tx.clone();
         let eval = self.eval.clone();
         let endpoints = self.endpoints.clone();
 
@@ -165,6 +170,9 @@ impl RunnerState {
                 e_tx.send(engine_pair).await.unwrap();
             }
 
+            // announce that this task is done
+            done_tx.send(i).await.unwrap();
+
             TaskResult {
                 comps,
                 maybe_error,
@@ -176,7 +184,10 @@ impl RunnerState {
 
     pub async fn run(mut self) {
         let max_idx = self.dataset.len() - 1;
-        let mut handles = Vec::new();
+
+        // we use a hashmap because we need to gradually remove elements from it,
+        // keeping the indices in order
+        let mut handles: HashMap<usize, JoinHandle<TaskResult>> = HashMap::new();
 
         for (i, element) in self.dataset.iter().enumerate() {
             // if the element exists in the results, skip it
@@ -184,16 +195,20 @@ impl RunnerState {
                 continue;
             }
 
-            handles.push(self.spawn_eval_task(element.to_owned(), i, max_idx));
+            handles.insert(i, self.spawn_eval_task(element.to_owned(), i, max_idx));
         }
 
-        for handle in handles {
+        while !handles.is_empty() {
+            let done_i = self.done_rx.recv().await.unwrap();
+            let handle = handles.remove(&done_i).unwrap();
+
             let TaskResult {
                 comps,
                 maybe_error,
                 maybe_arc_stats,
                 element,
             } = handle.await.unwrap();
+
             // get inner stats from the Arc Mutex
             let maybe_stats = match maybe_arc_stats {
                 Some(arc_stats) => {

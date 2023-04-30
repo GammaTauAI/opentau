@@ -261,7 +261,7 @@ pub async fn append_result(result: &ResultElement, path: &str) {
     });
 }
 
-pub fn get_content(element: &serde_json::Value) -> String {
+fn get_content(element: &serde_json::Value) -> String {
     element["content_without_annotations"]
         .as_str()
         .unwrap_or_else(|| element["content"].as_str().unwrap())
