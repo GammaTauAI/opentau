@@ -104,6 +104,7 @@ async fn main() {
 
             // wrap in a task so that we can catch panics
             let inner_task = tokio::task::spawn(async move { strategy.run(context).await });
+            let mut send_back = true;
 
             let (comps, maybe_error) = match inner_task.await {
                 Ok(Ok(mut comps)) => {
@@ -125,6 +126,13 @@ async fn main() {
                     println!("#### Could not complete ####");
                     (vec![], None)
                 }
+                Ok(Err(CompletionError::Socket(e))) => {
+                    eprintln!("Error while running strategy: {e}");
+                    // don't send the engine back to the channel, these errors are typically
+                    // irrecoverable
+                    send_back = false;
+                    (vec![], Some(e.to_string()))
+                }
                 Ok(Err(e)) => {
                     eprintln!("Error while running strategy: {e}");
                     (vec![], Some(e.to_string()))
@@ -143,7 +151,9 @@ async fn main() {
             };
 
             // send the engine back to the channel
-            e_tx.send(engine_pair).await.unwrap();
+            if send_back {
+                e_tx.send(engine_pair).await.unwrap();
+            }
 
             (comps, maybe_error, maybe_arc_stats, element)
         });

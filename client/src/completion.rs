@@ -205,6 +205,8 @@ pub enum CompletionError {
     RateLimit(Vec<Completion>),
     #[error("Language server error: {0}")]
     LangServer(#[from] LangServerError),
+    #[error("Socket error: {0}")]
+    Socket(#[from] SocketError),
     #[error("Completion engine could not complete")]
     CouldNotComplete,
 }
@@ -325,12 +327,20 @@ impl CompletionEngine for CompletionClient {
         for handle in handles {
             let res = handle.await.unwrap();
             if let Err(e) = res {
-                if let ModelResponseError::RateLimited(_) = &e {
-                    println!("{e}");
-                    rate_limit = true;
-                } else {
-                    println!("Error in completion thread: {e:?}");
-                }
+                match e {
+                    ModelResponseError::RateLimited(_) => {
+                        println!("{e}");
+                        rate_limit = true;
+                    }
+                    ModelResponseError::Socket(e) if matches!(e, SocketError::Io(_)) => {
+                        // socket IO errors are usually irrecoverable, return error
+                        println!("Socket IO error in completion thread: {e:?}");
+                        return Err(CompletionError::Socket(e));
+                    }
+                    _ => {
+                        println!("Error in completion thread: {e:?}");
+                    }
+                };
             }
         }
 
