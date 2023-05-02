@@ -1,5 +1,13 @@
+<!DOCTYPE html>
 <html>
   <body>
+    <!-- highlight.js for syntax highlighting -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/default.min.css"
+    />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+
     <input type="file" id="file-input" />
     <button id="read-button">Read results file</button>
     <br />
@@ -29,7 +37,10 @@
         <h1>Element Stats</h1>
         <p>Element index: <span id="elem-idx"></span></p>
         <p>Number of completions: <span id="num-completions"></span></p>
-        <!-- TODO: more stats -->
+        <!-- input code, make foldable -->
+        <h2>Input Code</h2>
+        <button id="fold-input">Toggle Show</button>
+        <pre><code id="input-code" class="language-typescript" style="display: none"></code></pre>
       </div>
       <div id="comp-stats-pane" style="flex: 1">
         <h1>Completion Stats</h1>
@@ -39,7 +50,7 @@
       </div>
       <div id="result-pane" style="flex: 1">
         <h1>Completion Code</h1>
-        <pre id="result" style="white-space: pre-wrap"></pre>
+        <pre><code id="result" class="language-typescript"></code></pre>
       </div>
     </div>
     <script charset="utf-8">
@@ -74,6 +85,7 @@
         document.getElementById("comp-idx").innerHTML = `${index}/${
           currentFile[currentElement].completions.length - 1
         } (starting from 0)`;
+        hljs.highlightAll();
       }
 
       function updateElement(index) {
@@ -95,7 +107,29 @@
         }
         document.getElementById("num-completions").innerHTML =
           newElem.completions.length;
+        let input;
+        if (newElem.dataset_elem.content_without_annotations) {
+          input = newElem.dataset_elem.content_without_annotations;
+        } else if (newElem.dataset_elem.content) {
+          input = newElem.dataset_elem.content;
+        }
+        if (input) {
+          document.getElementById("input-code").innerHTML =
+            stringUnescape(input);
+          hljs.highlightAll();
+        }
       }
+
+      document
+        .getElementById("fold-input")
+        .addEventListener("click", function () {
+          let inputCode = document.getElementById("input-code");
+          if (inputCode.style.display === "none") {
+            inputCode.style.display = "block";
+          } else {
+            inputCode.style.display = "none";
+          }
+        });
 
       document
         .getElementById("read-button")
