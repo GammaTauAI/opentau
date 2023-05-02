@@ -4,3 +4,6 @@
 [submodule "santacoder-server"]
 	path = santacoder-server
 	url = https://github.com/gammatauai/santacoder-server
+[submodule "evaluator/results"]
+	path = evaluator/results
+	url = https://github.com/gammatauai/opentau-results
