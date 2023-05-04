@@ -180,7 +180,7 @@ export const weavePrograms = (
       // we change the scope
       ts.forEachChild(node, (child) => buildTypeMap(child, scope + name + "$"));
       return;
-    } else if (ts.isFunctionDeclaration(node)) {
+    } else if (ts.isFunctionDeclaration(node) && node.name) {
       const name = node.name!.getText();
       const typeNode = resolveType(node, nettleChecker);
       typeMap.set(scope + name, typeNode);
