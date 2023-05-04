@@ -236,7 +236,7 @@ export const weavePrograms = (
         node.parameters = type.parameters;
         node.type = type.type;
       }
-    } else if (ts.isFunctionDeclaration(node)) {
+    } else if (ts.isFunctionDeclaration(node) && node.name) {
       const name = node.name!.getText();
       const type = typeMap.get(scope + name) as ts.FunctionTypeNode;
       if (type) {
