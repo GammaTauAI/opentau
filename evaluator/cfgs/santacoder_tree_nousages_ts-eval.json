@@ -1,6 +1,6 @@
 {
   "model": "santacoder",
-  "local_model_socket": "/tmp/santa0.sock,/tmp/santa1.sock,/tmp/santa2.sock,/tmp/santa3.sock,/tmp/santa4.sock,/tmp/santa5.sock,/tmp/santa6.sock,/tmp/santa7.sock,/tmp/santa8.sock,/tmp/santa9.sock",
+  "local_model_socket": "/tmp/santa0.sock,/tmp/santa1.sock,/tmp/santa2.sock,/tmp/santa3.sock,/tmp/santa4.sock,/tmp/santa5.sock,/tmp/santa6.sock,/tmp/santa7.sock",
   "language": "ts",
   "results_path": "results/santacoder_tree_nousages_ts-eval.json",
   "dataset_path": "data/ts-eval.jsonl",
