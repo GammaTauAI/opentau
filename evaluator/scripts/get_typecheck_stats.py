@@ -10,8 +10,6 @@ def get_num_typecheck(data_path):
     num_panic = 0
     for i, elem in enumerate(read_jsonl(data_path)):
         num_elems += 1
-        had_one_typecheck = False
-        had_one_dont_typecheck = False
         # check if failed_message is not null
         if elem["failed_message"] is not None:
             num_panic += 1
@@ -19,16 +17,19 @@ def get_num_typecheck(data_path):
             print(elem["failed_message"])
             continue
 
-        for comp in elem["completions"]:
-            num_errors = comp["num_type_errors"]
-            if num_errors == 0 and not had_one_typecheck:
-                num_typecheck += 1
-                avg_heuristic += comp["score"]
-                had_one_typecheck = True
-            elif num_errors > 0 and not had_one_dont_typecheck:
-                num_dont_typecheck += 1
-                avg_errors += num_errors
-                had_one_dont_typecheck = True
+        # the first completion is always the best one
+        if len(elem["completions"]) == 0:
+            print(f"WARNING: Element at line {i+1} has no completions. Skipping.")
+            continue
+
+        comp = elem["completions"][0]
+        num_errors = comp["num_type_errors"]
+        if num_errors == 0:
+            num_typecheck += 1
+            avg_heuristic += comp["score"]
+        else:
+            num_dont_typecheck += 1
+            avg_errors += num_errors
 
     avg_heuristic /= max(num_typecheck, 1)
     avg_errors /= max(num_dont_typecheck, 1)
