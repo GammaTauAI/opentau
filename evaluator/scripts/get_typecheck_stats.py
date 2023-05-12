@@ -3,8 +3,8 @@ from utils import read_jsonl
 
 def get_num_typecheck(data_path):
     num_elems = 0
+    num_elems_with_completion = 0
     num_typecheck = 0
-    num_dont_typecheck = 0
     avg_errors = 0
     avg_heuristic = 0
     num_panic = 0
@@ -22,23 +22,23 @@ def get_num_typecheck(data_path):
             print(f"WARNING: Element at line {i+1} has no completions. Skipping.")
             continue
 
+        num_elems_with_completion += 1
         comp = elem["completions"][0]
         num_errors = comp["num_type_errors"]
         if num_errors == 0:
             num_typecheck += 1
             avg_heuristic += comp["score"]
-        else:
-            num_dont_typecheck += 1
-            avg_errors += num_errors
+
+        avg_errors += num_errors
 
     avg_heuristic /= max(num_typecheck, 1)
-    avg_errors /= max(num_dont_typecheck, 1)
+    avg_errors /= max(num_elems_with_completion, 1)
 
     print("Number of elements: {}".format(num_elems))
+    print("Number of elements with a completion: {}".format(num_elems_with_completion))
     print("Number of elements with a completion that typechecks: {}".format(num_typecheck))
-    print("Number of elements with a completion that doesn't typecheck: {}".format(num_dont_typecheck))
     print("Number of elements that panicked: {}".format(num_panic))
-    print("Average best number of errors in the ones that don't typecheck: {}".format(avg_errors))
+    print("Average best number of errors: {}".format(avg_errors))
     print("Average best heuristic of ones that typecheck (lower is better): {}".format(
         avg_heuristic))
 
