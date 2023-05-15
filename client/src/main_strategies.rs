@@ -2,7 +2,7 @@ use crate::{
     completion::ArcCompletionEngine,
     completion::{Completion, CompletionError, CompletionQueryBuilder, TypecheckedCompletion},
     debug,
-    langserver::{AnnotateType, LangServerError},
+    langserver::{AnnotateType, CheckProblem, LangServerError},
     tree::{stats::ArcTreeAlgoStats, CompletionLevels, HyperParams},
 };
 use tokio::{sync::Semaphore, task::JoinHandle};
@@ -20,6 +20,8 @@ pub struct MainCtx {
     pub enable_defgen: bool,
     pub enable_usages: bool,
     pub enable_stubbing: bool,
+    pub enable_parser: bool,
+    pub enable_checkproblems: bool,
     pub depth_limit: Option<usize>,
     pub types: Vec<AnnotateType>,
 }
@@ -73,6 +75,8 @@ impl MainStrategy for TreeStrategy {
     /// Runs the tree completion strategy. Documentation on the strategy is in the `tree.rs` file.
     ///
     /// TODO: somehow add caching to this strategy, maybe go up the tree?
+    ///
+    /// TODO: implement enable_type_parser and enable_checkproblems options
     async fn run(&self, context: MainCtx) -> Result<Vec<TypecheckedCompletion>, CompletionError> {
         let mut tree = context
             .engine
@@ -163,6 +167,14 @@ impl MainStrategy for SimpleStrategy {
             .num_comps(context.num_comps)
             .retries(context.retries)
             .fallback(context.fallback);
+
+        if !context.enable_checkproblems {
+            query_builder = query_builder.problem_whitelist(CheckProblem::all());
+        }
+
+        if !context.enable_parser {
+            query_builder = query_builder.enable_type_parser(false);
+        }
 
         if context.enable_defgen {
             query_builder = query_builder.instructions(crate::typedef_gen::TYPEDEF_INSTRUCTIONS);

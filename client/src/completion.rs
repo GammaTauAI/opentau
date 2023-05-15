@@ -77,6 +77,8 @@ pub struct CompletionQuery {
     pub instructions: Option<String>,
     /// Whitelist of CheckProblems that are allowed to happen in the completion.
     pub problem_whitelist: Vec<CheckProblem>,
+    /// Whether to enable the type parser or not.
+    pub enable_type_parser: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -92,6 +94,8 @@ pub struct CompletionQueryBuilder {
     instructions: Option<String>,
     /// defaults to vec![]
     problem_whitelist: Option<Vec<CheckProblem>>,
+    /// defaults to true
+    enable_type_parser: bool,
 }
 
 impl CompletionQueryBuilder {
@@ -103,6 +107,7 @@ impl CompletionQueryBuilder {
             fallback: None,
             instructions: None,
             problem_whitelist: None,
+            enable_type_parser: true,
         }
     }
 
@@ -131,6 +136,11 @@ impl CompletionQueryBuilder {
         self
     }
 
+    pub fn enable_type_parser(mut self, enable_type_parser: bool) -> Self {
+        self.enable_type_parser = enable_type_parser;
+        self
+    }
+
     pub fn build(self) -> CompletionQuery {
         CompletionQuery {
             input: self.input,
@@ -138,6 +148,7 @@ impl CompletionQueryBuilder {
             retries: self.retries.unwrap_or(1),
             instructions: self.instructions,
             fallback: self.fallback.unwrap_or(false),
+            enable_type_parser: self.enable_type_parser,
             problem_whitelist: self.problem_whitelist.unwrap_or(vec![]),
         }
     }

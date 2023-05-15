@@ -20,6 +20,17 @@ pub enum CheckProblem {
     ChangedComments,
 }
 
+impl CheckProblem {
+    /// Returns all the check problems that can occur.
+    pub fn all() -> Vec<CheckProblem> {
+        vec![
+            CheckProblem::NotComplete,
+            CheckProblem::ChangedCode,
+            CheckProblem::ChangedComments,
+        ]
+    }
+}
+
 impl<'a> Deserialize<'a> for CheckProblem {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where

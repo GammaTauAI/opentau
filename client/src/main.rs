@@ -53,6 +53,8 @@ async fn main() {
         depth_limit: args.depth_limit,
         enable_usages: !args.disable_usages,
         enable_stubbing: !args.disable_stubbing,
+        enable_parser: true,
+        enable_checkproblems: true,
         types: types_to_annot,
     };
 
