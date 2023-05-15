@@ -17,24 +17,136 @@ pub mod runner;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct EvalSpec {
+    /// The model to use. e.g. "santacoder"
     pub model: String,
+    /// The strategy to use. "simple" or "tree"
     pub strategy: String,
+    /// For local models, this is a comma-separated list of socket paths to connect to.
+    /// Each socket should be connected to a local model server, e.g. santacoder-server.
     pub local_model_socket: Option<String>,
+    /// This is a key for remote models, e.g. OpenAI key for OpenAI's davinci-edit
     pub remote_model_key: Option<String>,
+    /// This is the language that is being evaluated. e.g. "ts"
     pub language: String,
+    /// This is the path to the results file. This is where the results will be stored.
     pub results_path: String,
+    /// This is the path to the dataset file. This is where the dataset is stored and read from.
     pub dataset_path: String,
+    /// This is the number of completions to generate per node.
+    #[serde(default = "eval_spec_defaults::default_num_comps")]
     pub num_comps: usize,
+    /// This is the number of times to retry querying the model. This
+    /// is a legacy option that is not used much anymore. Set to 1 to disable.
+    #[serde(default = "eval_spec_defaults::default_retries")]
     pub retries: usize,
+    /// This is a boolean that determines whether to generate an extra completion
+    /// that has all type holes filled with the any type.
+    #[serde(default = "eval_spec_defaults::default_fallback")]
     pub fallback: bool,
+    /// This is the hyperparameter that determines the maximum number of completions
+    /// per node. Set to a big number, like 400 for best results.
+    #[serde(default = "eval_spec_defaults::default_stop_at")]
     pub stop_at: usize,
+    /// This is an option to enable definition generation. At this time, this is not
+    /// fully supported.
+    #[serde(default = "eval_spec_defaults::default_enable_defgen")]
     pub enable_defgen: bool,
+    /// This is an option to enable usage statement prompt-engineering in the tree strategy.
+    /// Should be enabled, only disable for ablation.
+    #[serde(default = "eval_spec_defaults::default_enable_usages")]
     pub enable_usages: bool,
+    /// This is an option to enable stubbing of child nodes in the tree strategy.
+    /// We currently evaluate with this disabled, but can be enabled for
+    /// models with tight context windows.
+    #[serde(default = "eval_spec_defaults::default_enable_stubbing")]
     pub enable_stubbing: bool,
+    /// This enables the type parser at the completion generation stage. Types
+    /// that are generated are often malformed, so a parser may help in extracting
+    /// the type information. Enable this for best results.
+    #[serde(default = "eval_spec_defaults::default_enable_parser")]
+    pub enable_parser: bool,
+    /// This enables the syntax checker at the heuristic stage. This is enabled
+    /// most of the times and disabled only for ablation.
+    #[serde(default = "eval_spec_defaults::default_enable_checkproblems")]
+    pub enable_checkproblems: bool,
+    /// This depth-limits the tree strategy. It may be useful for very deep
+    /// trees, but is not recommended for best results. If this is set to 1,
+    /// the tree strategy will behave like the simple strategy but will split
+    /// for every definition; this can speed up evaluation significantly.
+    /// This option is set to None for best results.
+    #[serde(default = "eval_spec_defaults::default_depth_limit")]
     pub depth_limit: Option<usize>,
+    /// This is the maximum type quality that is considered. Type quality here
+    /// is measured by the heuristic, where a lower score is better, and the
+    /// score is in the range of 0 to 1000. This should be set to 1000 for best
+    /// results (disabled essentially).
+    #[serde(default = "eval_spec_defaults::default_max_type_quality")]
     pub max_type_quality: u16,
+    /// This is the temperature for the completion generation that is sent to
+    /// the model. This should be set to 0.75 for best results, as it will
+    /// provide diversity in the completions.
+    #[serde(default = "eval_spec_defaults::default_temperature")]
     pub temperature: f64,
+    /// These are the kind of types that will be inferred. In our evaluation,
+    /// we enabled all types except for VarDecls.
+    #[serde(default = "eval_spec_defaults::default_types")]
     pub types: Vec<AnnotateType>,
+}
+
+/// Default values for the evaluation spec deserializer.
+mod eval_spec_defaults {
+    pub(super) fn default_num_comps() -> usize {
+        3
+    }
+
+    pub(super) fn default_retries() -> usize {
+        1
+    }
+
+    pub(super) fn default_stop_at() -> usize {
+        400
+    }
+
+    pub(super) fn default_enable_defgen() -> bool {
+        false
+    }
+
+    pub(super) fn default_enable_usages() -> bool {
+        true
+    }
+
+    pub(super) fn default_enable_stubbing() -> bool {
+        false
+    }
+
+    pub(super) fn default_enable_parser() -> bool {
+        true
+    }
+
+    pub(super) fn default_enable_checkproblems() -> bool {
+        true
+    }
+
+    pub(super) fn default_max_type_quality() -> u16 {
+        1000
+    }
+
+    pub(super) fn default_temperature() -> f64 {
+        0.75
+    }
+
+    pub(super) fn default_depth_limit() -> Option<usize> {
+        None
+    }
+
+    pub(super) fn default_fallback() -> bool {
+        false
+    }
+
+    use opentau::langserver::AnnotateType;
+    pub(super) fn default_types() -> Vec<AnnotateType> {
+        AnnotateType::all_except(&[AnnotateType::VarDecl])
+    }
 }
 
 impl EvalSpec {
