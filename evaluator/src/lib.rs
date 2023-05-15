@@ -161,8 +161,7 @@ impl EvalSpec {
                 )
             }
             _ => {
-                eprintln!("Unknown language {}", self.language);
-                std::process::exit(1);
+                pue!("Unknown language {}", self.language);
             }
         }
     }
@@ -182,8 +181,7 @@ impl EvalSpec {
                 )
             }
             _ => {
-                eprintln!("Unknown model {}", self.model);
-                std::process::exit(1);
+                pue!("Unknown model {}", self.model);
             }
         };
         let engine = CompletionClientBuilder::new(langserver, model)
@@ -213,8 +211,7 @@ impl EvalSpec {
             }
             "simple" => (Box::new(SimpleStrategy {}), None),
             _ => {
-                eprintln!("Unknown strategy {}", self.strategy);
-                std::process::exit(1);
+                pue!("Unknown strategy {}", self.strategy);
             }
         }
     }
@@ -231,6 +228,8 @@ impl EvalSpec {
             enable_defgen: self.enable_defgen,
             enable_usages: self.enable_usages,
             enable_stubbing: self.enable_stubbing,
+            enable_parser: self.enable_parser,
+            enable_checkproblems: self.enable_checkproblems,
             depth_limit: self.depth_limit,
             types: self.types.clone(),
         }
@@ -279,16 +278,11 @@ pub async fn read_dataset(path: &str) -> Vec<serde_json::Value> {
     let dataset_path = resolve_path(path);
     let dataset_file = tokio::fs::read_to_string(dataset_path)
         .await
-        .unwrap_or_else(|_| {
-            eprintln!("Failed to read input file");
-            std::process::exit(1);
-        });
+        .unwrap_or_else(|_| pue!("Failed to read input file"));
     let mut dataset = Vec::new();
     for line in dataset_file.lines() {
-        let element = serde_json::from_str(line).unwrap_or_else(|_| {
-            eprintln!("Failed to parse input file");
-            std::process::exit(1);
-        });
+        let element =
+            serde_json::from_str(line).unwrap_or_else(|_| pue!("Failed to parse input file"));
         dataset.push(element);
     }
     dataset
@@ -310,16 +304,11 @@ pub async fn check_file_delete(path: &str) -> Option<Vec<ResultElement>> {
         } else if choice == b'r' || choice == b'p' {
             let results_file = tokio::fs::read_to_string(results_path)
                 .await
-                .unwrap_or_else(|_| {
-                    eprintln!("Failed to read input file");
-                    std::process::exit(1);
-                });
+                .unwrap_or_else(|_| pue!("Failed to read input file"));
             let mut results = Vec::new();
             for line in results_file.lines() {
-                let element: ResultElement = serde_json::from_str(line).unwrap_or_else(|_| {
-                    eprintln!("Failed to parse input file");
-                    std::process::exit(1);
-                });
+                let element: ResultElement = serde_json::from_str(line)
+                    .unwrap_or_else(|_| pue!("Failed to parse input file"));
 
                 // if we are rerunning panicked, we only want to run the panicked ones,
                 // so we only add the one that didn't panic
@@ -349,10 +338,7 @@ pub async fn write_results(results: &Vec<ResultElement>, path: &str) {
     }
     tokio::fs::write(results_path, lines)
         .await
-        .unwrap_or_else(|_| {
-            eprintln!("Failed to write results");
-            std::process::exit(1);
-        });
+        .unwrap_or_else(|_| pue!("Failed to write results"));
 }
 
 pub async fn append_result(result: &ResultElement, path: &str) {
@@ -363,14 +349,10 @@ pub async fn append_result(result: &ResultElement, path: &str) {
         .append(true)
         .open(results_path)
         .await
-        .unwrap_or_else(|_| {
-            eprintln!("Failed to open results file");
-            std::process::exit(1);
-        });
-    file.write_all(line.as_bytes()).await.unwrap_or_else(|_| {
-        eprintln!("Failed to write to results file");
-        std::process::exit(1);
-    });
+        .unwrap_or_else(|_| pue!("Failed to open results file"));
+    file.write_all(line.as_bytes())
+        .await
+        .unwrap_or_else(|_| pue!("Failed to write to results file"));
 }
 
 fn get_content(element: &serde_json::Value) -> String {
@@ -385,4 +367,19 @@ pub fn get_name(element: &serde_json::Value) -> String {
         .as_str()
         .unwrap_or_else(|| element["name"].as_str().unwrap())
         .to_string()
+}
+
+pub fn print_usage_exit_fn(extra_msg: Option<String>) -> ! {
+    if let Some(msg) = extra_msg {
+        eprintln!("{}", msg);
+    }
+    eprintln!("Usage: evaluator <eval configuration file>");
+    std::process::exit(1);
+}
+
+#[macro_export]
+/// Prints message, prints usage, and exits with exit code 1.
+macro_rules! pue {
+    () => ($crate::print_usage_exit_fn(None));
+    ($($arg:tt)*) => ($crate::print_usage_exit_fn(Some(format!($($arg)*))));
 }
