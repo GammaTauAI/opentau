@@ -1,0 +1,22 @@
+{
+  "model": "santacoder",
+  "local_model_socket": "/tmp/santa0.sock",
+  "language": "ts",
+  "results_path": "results/santacoder_baseline_noparser_ts-eval-subset.json",
+  "dataset_path": "data/ts-eval-subset.jsonl",
+  "num_comps": 3,
+  "retries": 1,
+  "fallback": false,
+  "stop_at": 400,
+  "enable_defgen": false,
+  "enable_usages": false,
+  "enable_stubbing": false,
+  "enable_parser": false,
+  "enable_checkproblems": false,
+  "strategy": "simple",
+  "max_type_quality": 1000,
+  "temperature": 0.75,
+  "types": [
+          "FuncDecl", "FuncExpr", "ClassProp", "ClassMethod", "TypeDecl"
+  ]
+}
