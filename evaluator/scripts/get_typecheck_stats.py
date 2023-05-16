@@ -9,8 +9,8 @@ def get_syntax_errors(code):
         import os
 
         projdir = os.path.join(os.path.dirname(__file__), "ts-does-parse")
-        # if package-lock.json doesn't exist, run npm install
-        if not os.path.exists(os.path.join(projdir, "package-lock.json")):
+        # if node_modules doesn't exist, run npm install
+        if not os.path.exists(os.path.join(projdir, "node_modules")):
             print("Running npm install...")
             proc = subprocess.Popen(
                 ["npm", "install"],
