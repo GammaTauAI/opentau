@@ -12,12 +12,20 @@ respects the other protocol.
 An optional OpenAI model endpoint also implements the protocol, but it is unmaintained and not recommended for use.
 Implementing the respective protocols is relatively straightforward. More information can be found in our [class final project submission](https://github.com/GammaTauAI/opentau/blob/main/docs/final_report.md) (as this work started as a class project for [CS 4100 at Northeastern University](https://www.khoury.northeastern.edu/home/sholtzen/assets/pdf/cs4100-fall22-syllabus.pdf)).
 
-We are in the review process for our paper: [Type Prediction With Program Decomposition and Fill-in-the-Type Training. Federico Cassano, Ming-Ho Yee, Noah Shinn, Arjun Guha, Steven Holtzen.](https://arxiv.org/abs/2305.17145)
+We have implemented an OpenTau in Rust, which can be utilized in three ways:
+
+1. As a simple CLI client that will type-infer a given program. (more info in `./client`)
+2. As a library, that exposes numerous abstractions for interacting with different compilers, models, and type prediction strategies. (more info in `./client`)
+3. As an evaluation tool, to analyze the performance of the combinations of different models, languages, datasets, and type prediction strategies
+   on the task of type prediction. (more info in `./evaluator`)
+
+We are in the review process for our paper:
+[Type Prediction With Program Decomposition and Fill-in-the-Type Training. Federico Cassano, Ming-Ho Yee, Noah Shinn, Arjun Guha, Steven Holtzen.](https://arxiv.org/abs/2305.17145)
 
 ## Requirements
 
 - `rust`
-- Incoder/SantaCoder model requirements (optional):
+- Incoder/SantaCoder model requirements:
   - `torch`
   - `tokenizers>=0.12`
   - `transformers`
