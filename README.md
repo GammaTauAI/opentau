@@ -12,6 +12,8 @@ respects the other protocol.
 An optional OpenAI model endpoint also implements the protocol, but it is unmaintained and not recommended for use.
 Implementing the respective protocols is relatively straightforward. More information can be found in our [class final project submission](https://github.com/GammaTauAI/opentau/blob/main/docs/final_report.md) (as this work started as a class project for [CS 4100 at Northeastern University](https://www.khoury.northeastern.edu/home/sholtzen/assets/pdf/cs4100-fall22-syllabus.pdf)).
 
+## Usage
+
 We have implemented an OpenTau in Rust, which can be utilized in three ways:
 
 1. As a simple CLI client that will type-infer a given program. (more info in `./client`)
