@@ -1,38 +1,30 @@
-# OpenTau: Using Code Language Models for Gradual Type Inference
+# OpenTau: Using Large Language Models for Gradual Type Inference
 
 Type inference for gradually-typed languages such as TypeScript and Python has become increasingly prevalent in the field of programming languages.
 However, current approaches often struggle with inferring descriptive types in cases in which user-defined type annotations are absent,
 especially when inferring function signatures.
-[In our dataset](https://github.com/GammaTauAI/opentau-test), we found that TypeScript's inference procedure was only able to correctly type-infer 59% of the given files.
-Furthermore, we found that the quality of the type annotations was low, as the types were too permissive (e.g `any`), possibly leading to an increased number of dynamic type errors.
-This finding makes the built-in procedure ineffective in practice.
 
-In this project, we make effective use of large natural language models to aid these type inference procedures.
-Our approach utilizes static insertion of type holes for generating a prompt to be then edited or infilled by a language model.
-Our project mainly used Codex's _code-davinci-edit_ model for TypeScript type inference,
-but our design is general enough to be applied to other language models and
-programming languages. Unfortunately, Codex is now discontinued by OpenAI, therefore we are
-now supporting open source models such as _InCoder_ and _SantaCoder_.
-We have designed our system to be modular and extensible,
-including a language server protocol for the implementation of additional programming languages.
+This has motivated automated type prediction: given an untyped program, produce a well-typed output program. Large language models (LLMs) are promising for type prediction, but there are challenges: fill-in-the-middle performs poorly, programs may not fit into the context window, generated types may not type check, and it is difficult to measure how well-typed the output program is. We address these challenges by building OpenTau, a search-based approach for type prediction that leverages large language models. We propose a new metric for type prediction quality, give a tree-based program decomposition that searches a space of generated types, and present fill-in-the-type fine-tuning for LLMs. We evaluate our work with a new dataset for TypeScript type prediction, and show that 47.4% of files type check (14.5% absolute improvement) with an overall rate of 3.3 type errors per file.
 
-Across our dataset, we were able to type-infer 91% of the files with descriptive, high quality type annotations,
-which is a significant improvement over 59% using TypeScript's built-in inference procedure.
+Additionally, we build two protocols for implementing additional languages and models.
+In our work, we implement a TypeScript compiler that respects the protocol and a SantaCoder server that
+respects the other protocol.
+An optional OpenAI model endpoint also implements the protocol, but it is unmaintained and not recommended for use.
+Implementing the respective protocols is relatively straightforward. More information can be found in our [class final project submission](https://github.com/GammaTauAI/opentau/blob/main/docs/final_report.md) (as this work started as a class project for [CS 4100 at Northeastern University](https://www.khoury.northeastern.edu/home/sholtzen/assets/pdf/cs4100-fall22-syllabus.pdf)).
 
-An extensive report of our findings and implementation is included, and
-can be built by running `make build-report` in the root directory.
+We are in the review process for our paper: [Type Prediction With Program Decomposition and Fill-in-the-Type Training. Federico Cassano, Ming-Ho Yee, Noah Shinn, Arjun Guha, Steven Holtzen.](https://arxiv.org/abs/2305.17145)
 
 ## Requirements
 
 - `rust`
-- Incoder model requirements (optional):
+- Incoder/SantaCoder model requirements (optional):
   - `torch`
   - `tokenizers>=0.12`
   - `transformers`
-- TypeScript inference requirements:
+- TypeScript compiler requirements:
   - `ts-node`
   - `tsc`
-- Python inference requirements (Work in progress):
+- Python compiler requirements (Work in progress):
   - `mypy` | `pyright` for static type checking
   - `redbaron` for AST parsing with comments
 - `pandoc` ONLY for building the report
