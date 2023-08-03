@@ -7,3 +7,6 @@
 [submodule "santacoder-finetuning"]
 	path = santacoder-finetuning
 	url = https://github.com/GammaTauAI/santacoder-finetuning
+[submodule "evaluator/results"]
+	path = evaluator/results
+	url = git@github.com:GammaTauAI/opentau-results
