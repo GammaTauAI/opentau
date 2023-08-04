@@ -1,0 +1,15 @@
+{
+  "model": "builtin",
+  "language": "ts",
+  "results_path": "results/builtin_ts-eval.json",
+  "dataset_path": "data/ts-eval.jsonl",
+  "enable_defgen": false,
+  "enable_usages": false,
+  "enable_stubbing": false,
+  "strategy": "simple",
+  "max_type_quality": 1000,
+  "enable_checkproblems": false,
+  "types": [
+          "VarDecl", "FuncDecl", "FuncExpr", "ClassProp", "ClassMethod", "TypeDecl"
+  ]
+}

@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use opentau::{
     completion::{
-        local::LocalModelClientBuilder, ArcCompletionEngine, ArcCompletionModel,
-        CompletionClientBuilder, TypecheckedCompletion,
+        builtin::BuiltinClient, local::LocalModelClientBuilder, ArcCompletionEngine,
+        ArcCompletionModel, CompletionClientBuilder, TypecheckedCompletion,
     },
     get_path_from_rootdir,
     langserver::{ts::TsServer, AnnotateType, ArcLangServer, LangServer},
@@ -18,6 +18,7 @@ pub mod runner;
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct EvalSpec {
     /// The model to use. e.g. "santacoder"
+    /// "builtin" for using the LSP's type inference
     pub model: String,
     /// The strategy to use. "simple" or "tree"
     pub strategy: String,
@@ -180,6 +181,7 @@ impl EvalSpec {
                         .unwrap_or_else(|_| panic!("failed to make {} client", self.model)),
                 )
             }
+            "builtin" => Arc::new(BuiltinClient::default()),
             _ => {
                 pue!("Unknown model {}", self.model);
             }
@@ -238,6 +240,14 @@ impl EvalSpec {
     pub fn get_endpoints(&self) -> Vec<String> {
         let endpoints = match self.local_model_socket {
             Some(ref sockets) => sockets.split(',').map(|s| s.to_string()).collect(),
+            None if self.model == "builtin" => {
+                vec![
+                    "builtin".to_string(),
+                    "builtin".to_string(),
+                    "builtin".to_string(),
+                    "builtin".to_string(),
+                ]
+            }
             None => vec![self.remote_model_key.as_ref().unwrap().to_string()],
         };
         assert!(!endpoints.is_empty());

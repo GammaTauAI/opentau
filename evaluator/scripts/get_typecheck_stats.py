@@ -45,6 +45,7 @@ def get_num_typecheck(data_path, run_syntax):
     avg_type_errors = 0
     avg_syntax_errors = 0
     avg_heuristic = 0
+    total_num_any = 0
     num_panic = 0
     for i, elem in enumerate(read_jsonl(data_path)):
         print(f"{i}...", end="", flush=True)
@@ -58,7 +59,8 @@ def get_num_typecheck(data_path, run_syntax):
 
         # the first completion is always the best one
         if len(elem["completions"]) == 0:
-            print(f"WARNING: Element at line {i+1} has no completions. Skipping.")
+            print(
+                f"WARNING: Element at line {i+1} has no completions. Skipping.")
             continue
 
         num_elems_with_completion += 1
@@ -71,6 +73,7 @@ def get_num_typecheck(data_path, run_syntax):
         avg_type_errors += num_errors
         if run_syntax:
             avg_syntax_errors += get_syntax_errors(comp["code"])
+        total_num_any += comp["code"].count(": any")
 
     avg_heuristic /= max(num_typecheck, 1)
     avg_type_errors /= max(num_elems_with_completion, 1)
@@ -78,7 +81,8 @@ def get_num_typecheck(data_path, run_syntax):
 
     print()
     print("Number of elements: {}".format(num_elems))
-    print("Number of elements with a completion: {}".format(num_elems_with_completion))
+    print("Number of elements with a completion: {}".format(
+        num_elems_with_completion))
     print("Number of elements with a completion that typechecks: {}".format(num_typecheck))
     print("Number of elements that panicked: {}".format(num_panic))
     print("Average best number of type errors: {}".format(avg_type_errors))
@@ -86,6 +90,8 @@ def get_num_typecheck(data_path, run_syntax):
         print("Average best number of syntax errors: {}".format(avg_syntax_errors))
     print("Average best heuristic of ones that typecheck (lower is better): {}".format(
         avg_heuristic))
+    print("Average number of anys per completion: {}".format(
+        total_num_any / max(num_elems_with_completion, 1)))
 
 
 if __name__ == "__main__":
@@ -93,7 +99,8 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("data_path", type=str, help="Path to data")
-    parser.add_argument("--syntax", action="store_true", help="Run the syntax checker")
+    parser.add_argument("--syntax", action="store_true",
+                        help="Run the syntax checker")
     args = parser.parse_args()
 
     get_num_typecheck(args.data_path, args.syntax)
