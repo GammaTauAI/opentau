@@ -21,6 +21,7 @@ plt.xticks(list(plt.xticks()[0]) + [2000])
 # rotate x-axis labels
 plt.xticks(rotation=45)
 plt.savefig('eval_dataset_analysis_hist.png')
+plt.savefig('eval_dataset_analysis_hist.pdf')
 
 # cdf
 plt.clf()
@@ -35,6 +36,7 @@ plt.xticks(list(plt.xticks()[0]) + [2000])
 # rotate x-axis labels
 plt.xticks(rotation=45)
 plt.savefig('eval_dataset_analysis_cdf.png')
+plt.savefig('eval_dataset_analysis_cdf.pdf')
 
 
 # Print some statistics
