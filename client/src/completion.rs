@@ -13,6 +13,7 @@ use crate::{
 
 pub mod codex;
 pub mod local;
+pub mod builtin;
 
 /// This is the trait that defines operations on the completion engine (Codex, incoder, santacoder,
 /// etc..). The completion engine is coupled with the language server.
@@ -30,7 +31,7 @@ pub trait CompletionEngine: std::fmt::Debug {
     ) -> Result<Vec<Completion>, CompletionError>;
 
     /// Gets the language server object from the completion engine object.
-    fn get_ls(&self) -> Arc<dyn LangServer + Send + Sync>;
+    fn get_ls(&self) -> ArcLangServer;
 
     /// Gets an endpoint url for the model, if there is one.
     fn get_endpoint(&self) -> Option<String>;
@@ -408,7 +409,7 @@ impl CompletionEngine for CompletionClient {
     }
 
     /// Gets the language server object from the codex client
-    fn get_ls(&self) -> Arc<dyn LangServer + Send + Sync> {
+    fn get_ls(&self) -> ArcLangServer {
         self.lang_server.clone()
     }
 
