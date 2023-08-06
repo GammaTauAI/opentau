@@ -1,4 +1,5 @@
 from utils import read_jsonl
+import re
 
 
 def get_syntax_errors(code):
@@ -46,6 +47,7 @@ def get_num_typecheck(data_path, run_syntax):
     avg_syntax_errors = 0
     avg_heuristic = 0
     total_num_any_in_typechecks = 0
+    total_num_annot_in_typechecks = 0
     num_panic = 0
     for i, elem in enumerate(read_jsonl(data_path)):
         print(f"{i}...", end="", flush=True)
@@ -70,6 +72,9 @@ def get_num_typecheck(data_path, run_syntax):
             num_typecheck += 1
             avg_heuristic += comp["score"]
             total_num_any_in_typechecks += comp["code"].count(": any")
+            # regex for anoots
+            total_num_annot_in_typechecks += len(
+                re.findall(r": \w+", comp["code"]))
 
         avg_type_errors += num_errors
         if run_syntax:
@@ -92,6 +97,8 @@ def get_num_typecheck(data_path, run_syntax):
         avg_heuristic))
     print("Average number of anys per completion that typechecks: {}".format(
         total_num_any_in_typechecks / max(num_typecheck, 1)))
+    print("Percentage of anys per annotation in completions that typechecks: {}".format(
+        total_num_any_in_typechecks / max(total_num_annot_in_typechecks, 1)))
 
 
 if __name__ == "__main__":
