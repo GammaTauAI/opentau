@@ -56,6 +56,7 @@ struct TaskResult {
     maybe_error: Option<String>,
     maybe_arc_stats: Option<ArcTreeAlgoStats>,
     element: serde_json::Value,
+    time_taken: u128,
 }
 
 impl RunnerState {
@@ -118,6 +119,7 @@ impl RunnerState {
             let (strategy, maybe_arc_stats) = eval.get_strategy();
 
             // wrap in a task so that we can catch panics
+            let start = std::time::Instant::now();
             let inner_task = tokio::task::spawn(async move { strategy.run(context).await });
             let mut send_back = true;
 
@@ -178,6 +180,7 @@ impl RunnerState {
                 maybe_error,
                 maybe_arc_stats,
                 element,
+                time_taken: start.elapsed().as_millis(),
             }
         })
     }
@@ -198,6 +201,8 @@ impl RunnerState {
             handles.insert(i, self.spawn_eval_task(element.to_owned(), i, max_idx));
         }
 
+        let mut times_taken: Vec<u128> = Vec::new();
+
         while !handles.is_empty() {
             let done_i = self.done_rx.recv().await.unwrap();
             let handle = handles.remove(&done_i).unwrap();
@@ -207,7 +212,9 @@ impl RunnerState {
                 maybe_error,
                 maybe_arc_stats,
                 element,
+                time_taken,
             } = handle.await.unwrap();
+            times_taken.push(time_taken);
 
             // get inner stats from the Arc Mutex
             let maybe_stats = match maybe_arc_stats {
@@ -231,5 +238,17 @@ impl RunnerState {
             // rewrite results. i know, inefficient. whatever.
             write_results(&self.results, &self.eval.results_path).await;
         }
+        println!("Done!");
+
+        // print distribution of times taken
+        let mut times_taken: Vec<_> = times_taken.iter().map(|t| *t as f64).collect();
+        times_taken.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let mean = times_taken.iter().sum::<f64>() / times_taken.len() as f64;
+        let median = times_taken[times_taken.len() / 2];
+        println!(" ### Times taken (ms) ###");
+        println!("Mean: {}", mean);
+        println!("Median: {}", median);
+        println!("Min: {}", times_taken[0]);
+        println!("Max: {}", times_taken[times_taken.len() - 1]);
     }
 }
