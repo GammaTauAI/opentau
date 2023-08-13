@@ -39,13 +39,42 @@ def sendrecv_sock(sock, data) -> str:
 LANG_SERVER = None
 
 
+def type_errors(code: str, client_path: str) -> int:
+    global LANG_SERVER
+
+    code = base64.b64encode(code.encode('utf-8')).decode('utf-8')
+
+    npm_server_path = f'{client_path}/ts-compiler'
+
+    this_pid = os.getpid()
+    sock_path = f"/tmp/test-sock-{this_pid}.sock"
+
+    # run the server if it's not running
+    if not LANG_SERVER:
+        # close socket if it exists
+        if os.path.exists(sock_path):
+            os.remove(sock_path)
+        cmd = f"npm start {sock_path} {this_pid}"
+        proc = subprocess.Popen(
+            cmd.split(), cwd=npm_server_path, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        # wait for the server to start. really bad way to do this
+        time.sleep(3)
+        LANG_SERVER = proc
+
+    # req to send to the server
+    req = {
+        "cmd": "typecheck",
+        "text": code,
+    }
+
+    # send the request
+    errors = json.loads(sendrecv_sock(
+        sock_path, json.dumps(req).encode('utf-8')))["errors"]
+
+    return errors
+
+
 def find_usages(code: str, outer: str,  client_path: str) -> str:
-    """
-    runs the builtin type inference on the given typescript file,
-    returns whether it was able to type check the file and
-    the quality of the types it inferred. also returns the code
-    that was inferred.
-    """
     global LANG_SERVER
 
     code = base64.b64encode(code.encode('utf-8')).decode('utf-8')
@@ -68,7 +97,7 @@ def find_usages(code: str, outer: str,  client_path: str) -> str:
         time.sleep(3)
         LANG_SERVER = proc
 
-    # req to type-infer
+    # req to send to the server
     req = {
         "cmd": "usages",
         "text": outer_code,
@@ -76,11 +105,11 @@ def find_usages(code: str, outer: str,  client_path: str) -> str:
     }
 
     # send the request
-    typeinf_code = json.loads(sendrecv_sock(
+    usages = json.loads(sendrecv_sock(
         sock_path, json.dumps(req).encode('utf-8')))["text"]
-    decdoded_code = base64.b64decode(typeinf_code).decode('utf-8')
+    decdoded_usages = base64.b64decode(usages).decode('utf-8')
 
-    return decdoded_code
+    return decdoded_usages
 
 
 CODE = """
@@ -169,12 +198,20 @@ def annotate_with_usages(code: str) -> str:
 
         code_with_usages = code_with_usages.replace(
             fn_code, f"{usages}{fn_code}")
+        code_with_usages_errors = type_errors(
+            code_with_usages, '../../../')
+        code_errors = type_errors(code, '../../../')
+        if not code_with_usages_errors == code_errors:
+            # write to file
+            with open("error.ts", "w") as f:
+                f.write(code_with_usages)
+            raise Exception("type errors changed")
+
 
     return code_with_usages
 
 
 print(annotate_with_usages(TEST_CODE))
-
 
 ds = ds.map(lambda x: {"content_without_annotations": annotate_with_usages(
     x["content_without_annotations"])},
