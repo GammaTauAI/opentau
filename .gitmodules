@@ -10,3 +10,6 @@
 [submodule "evaluator/results"]
 	path = evaluator/results
 	url = git@github.com:GammaTauAI/opentau-results
+[submodule "evaluator/scripts/baseline_usages/tree-sitter-typescript"]
+	path = evaluator/scripts/baseline_usages/tree-sitter-typescript
+	url = https://github.com/tree-sitter/tree-sitter-typescript
