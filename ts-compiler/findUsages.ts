@@ -120,11 +120,15 @@ export const findUsages = (
 
   const numUsages = usagesStmts.length;
 
-  const usagesStr = codePrinter.printList(
+  let usagesStr = codePrinter.printList(
     ts.ListFormat.MultiLine,
     ts.createNodeArray(usagesStmts),
     outerBlock
   );
+
+  // remove any occurences of "/*" and "*/"
+  usagesStr = usagesStr.replace(/\/\*/g, "");
+  usagesStr = usagesStr.replace(/\*\//g, "");
 
   const prelude =
     "/* Example usages of '" + ident?.text + "' are shown below:\n";
