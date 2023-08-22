@@ -1,5 +1,7 @@
 # OpenTau: Using Large Language Models for Gradual Type Inference
 
+Implementation for the paper: [Type Prediction With Program Decomposition and Fill-in-the-Type Training. Federico Cassano, Ming-Ho Yee, Noah Shinn, Arjun Guha, Steven Holtzen.](https://arxiv.org/abs/2305.17145)
+
 Type inference for gradually-typed languages such as TypeScript and Python has become increasingly prevalent in the field of programming languages.
 However, current approaches often struggle with inferring descriptive types in cases in which user-defined type annotations are absent,
 especially when inferring function signatures.
@@ -11,6 +13,19 @@ In our work, we implement a TypeScript compiler that respects the protocol and a
 respects the other protocol.
 An optional OpenAI model endpoint also implements the protocol, but it is unmaintained and not recommended for use.
 Implementing the respective protocols is relatively straightforward. More information can be found in our [class final project submission](https://github.com/GammaTauAI/opentau/blob/main/docs/final_report.md) (as this work started as a class project for [CS 4100 at Northeastern University](https://www.khoury.northeastern.edu/home/sholtzen/assets/pdf/cs4100-fall22-syllabus.pdf)).
+
+## Cite
+
+```bibtex
+@misc{cassano2023type,
+      title={Type Prediction With Program Decomposition and Fill-in-the-Type Training}, 
+      author={Federico Cassano and Ming-Ho Yee and Noah Shinn and Arjun Guha and Steven Holtzen},
+      year={2023},
+      eprint={2305.17145},
+      archivePrefix={arXiv},
+      primaryClass={cs.SE}
+}
+```
 
 ## Usage
 
