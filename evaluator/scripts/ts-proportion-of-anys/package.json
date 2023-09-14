@@ -1,12 +1,13 @@
 {
-    "name": "ts-compiler",
+    "name": "ts-proportion-of-anys",
     "private": true,
     "scripts": {
         "start": "ts-node --project tsconfig.json main.ts"
     },
     "dependencies": {
         "ts-node": "^8.1.0",
-        "typescript": "^3.4.3"
+        "typescript": "^3.4.3",
+        "ts-compiler": "file:../../../ts-compiler"
     },
     "devDependencies": {
         "@types/node": "^18.8.4"
