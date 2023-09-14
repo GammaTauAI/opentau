@@ -2,40 +2,58 @@ from utils import read_jsonl
 import re
 
 
-def get_syntax_errors(code):
-    try:
-        # run the ts-node program in this directory, the exit code
-        # is the number of errors. the input is given by stdin
-        import subprocess
-        import os
+def start_node_proc(projdir):
+    # run the ts-node program in this directory, the exit code
+    import subprocess
+    import os
+    # is the number of errors. the input is given by stdin
 
-        projdir = os.path.join(os.path.dirname(__file__), "ts-does-parse")
-        # if node_modules doesn't exist, run npm install
-        if not os.path.exists(os.path.join(projdir, "node_modules")):
-            print("Running npm install...")
-            proc = subprocess.Popen(
-                ["npm", "install"],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                cwd=projdir,
-            )
-            _ = proc.communicate()
-            if proc.returncode != 0:
-                print("Failed to run npm install. Exiting.")
-                return 0
-
+    # if node_modules doesn't exist, run npm install
+    if not os.path.exists(os.path.join(projdir, "node_modules")):
+        print("Running npm install...")
         proc = subprocess.Popen(
-            ["npm", "start"],
+            ["npm", "install"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             cwd=projdir,
         )
+        _ = proc.communicate()
+        if proc.returncode != 0:
+            raise Exception("Failed to run npm install.")
+
+    proc = subprocess.Popen(
+        ["npm", "start"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        cwd=projdir,
+    )
+    return proc
+
+
+def get_syntax_errors(code):
+    try:
+        import os
+        projdir = os.path.join(os.path.dirname(__file__), "ts-does-parse")
+        proc = start_node_proc(projdir)
         _ = proc.communicate(input=code.encode("utf-8"))
         return proc.returncode
     except Exception as e:
         print("Had an error running the syntax checker: {}".format(e))
+        return 0
+
+
+def get_proportion_of_anys(code):
+    try:
+        import os
+        projdir = os.path.join(os.path.dirname(
+            __file__), "ts-proportion-of-anys")
+        proc = start_node_proc(projdir)
+        _ = proc.communicate(input=code.encode("utf-8"))
+        return proc.returncode
+    except Exception as e:
+        print("Had an error running the any finder: {}".format(e))
         return 0
 
 
@@ -89,6 +107,8 @@ def get_num_typecheck(data_path, run_syntax):
     print("Number of elements with a completion: {}".format(
         num_elems_with_completion))
     print("Number of elements with a completion that typechecks: {}".format(num_typecheck))
+    print("Percentage of elements with a completion that typechecks: {}".format(
+        num_typecheck / max(num_elems_with_completion, 1)))
     print("Number of elements that panicked: {}".format(num_panic))
     print("Average best number of type errors: {}".format(avg_type_errors))
     if run_syntax:
