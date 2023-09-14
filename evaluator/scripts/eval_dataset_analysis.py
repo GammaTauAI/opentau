@@ -1,8 +1,13 @@
 import datasets
 import statistics
 import matplotlib.pyplot as plt
+import argparse
 
-ds = datasets.load_dataset("nuprl/ts-eval", split="test")
+parser = argparse.ArgumentParser()
+parser.add_argument("dataset", type=str, help="dataset to use")
+args = parser.parse_args()
+
+ds = datasets.load_dataset("json", data_files=args.dataset, split="train")
 
 
 lengths = []
