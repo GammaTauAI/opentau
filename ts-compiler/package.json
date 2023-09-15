@@ -1,6 +1,5 @@
 {
     "name": "ts-compiler",
-    "private": true,
     "scripts": {
         "start": "ts-node --project tsconfig.json main.ts"
     },
