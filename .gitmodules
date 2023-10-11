@@ -10,3 +10,6 @@
 [submodule "evaluator/scripts/baseline_usages/tree-sitter-typescript"]
 	path = evaluator/scripts/baseline_usages/tree-sitter-typescript
 	url = https://github.com/tree-sitter/tree-sitter-typescript
+[submodule "santacoder-server"]
+	path = santacoder-server
+	url = git@github.com:gammatauai/santacoder-server
