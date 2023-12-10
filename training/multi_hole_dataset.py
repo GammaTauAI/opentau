@@ -10,14 +10,14 @@ rng_ptrs = [np.random.default_rng(42) for _ in range(threads)]
 max_holes = 6
 min_holes = 1
 
-def process(ex):
+def process(ex, idx):
     # get the id of this thread runnign in dataset.map
-    thread_id = int(datasets.utils.torch_utils.get_worker_info().id)
-    rng = rng_ptrs[0]
+    thread_id = idx % threads
+    rng = rng_ptrs[thread_id]
     num_holes = rng.integers(min_holes, max_holes + 1)
     content = ex["content"]
     new, new_rng = permute_multi_holes(content, rng, num_holes)
-    rng_ptrs[0] = new_rng
+    rng_ptrs[thread_id] = new_rng
     ex["content"] = new
     return {"original_content": content,  **ex}
 
