@@ -164,10 +164,20 @@ def get_multi_holes(
         splits.append(mid)
         if i < picked_holes[-1]:
             after = sample[captures_no_child[i].end_byte:captures_no_child[i+1].start_byte]
-            print(f"after: {after}")
             splits.append(after)
 
-    splits.append(sample[captures_no_child[picked_holes[-1]].end_byte:])
+
+    suffix_b: bytes = b""
+    if np_rng.binomial(1, strip_suffix_rate):
+        l = len(captures_no_child)
+        for i in range(picked_holes[-1], l - 1):
+            suffix_b += sample[captures_no_child[i]
+                               .end_byte:captures_no_child[i + 1].start_byte]
+        suffix_b += sample[captures_no_child[l - 1].end_byte:]
+    else:
+        suffix_b = sample[captures_no_child[picked_holes[-1]].end_byte:]
+
+    splits.append(suffix_b)
 
 
     return [s.decode("utf-8") for s in splits], np_rng
