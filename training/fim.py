@@ -86,7 +86,12 @@ def get_prefix_middle_suffix(np_rng: RandomState, sample: bytes, strip_suffix_ra
 
     return (prefix_str, middle_str, suffix_str), np_rng
 
-def get_multi_holes(np_rng: RandomState, sample: bytes, holes: int, strip_suffix_rate: float) -> Optional[Tuple[List[str], RandomState]]:
+def get_multi_holes(
+    np_rng: RandomState,
+    sample: bytes,
+    holes: int,
+    strip_suffix_rate: float = 0.9,
+) -> Optional[Tuple[List[str], RandomState]]:
     def is_child_type_annotation(node):
         """Checks if any of the parent nodes is an annotation node."""
         node = node.parent
@@ -137,23 +142,30 @@ def get_multi_holes(np_rng: RandomState, sample: bytes, holes: int, strip_suffix
     if len(splittable_indices) == 0:
         return None
     
-    random_pick_i: int = np_rng.choice(splittable_indices)
-    random_pick_i_i = splittable_indices.index(random_pick_i)
-    holes = min(holes, len(splittable_indices))
-    before = random_pick_i_i - holes // 2
-    after = random_pick_i_i + holes // 2
-    before = max(0, before)
-    after = min(len(splittable_indices), after)
-    picked_holes = splittable_indices[before:after]
-    print(f"main hole: {random_pick_i}")
-    print(f"picked_holes: {picked_holes}")
+    if len(splittable_indices) <= holes:
+        picked_holes = splittable_indices
+    else:
+        random_pick_i: int = np_rng.choice(splittable_indices)
+        random_pick_i_i = splittable_indices.index(random_pick_i)
+        holes = min(holes, len(splittable_indices))
+        before = random_pick_i_i - holes // 2
+        after = random_pick_i_i + holes // 2
+        before = max(0, before)
+        after = min(len(splittable_indices), after)
+        picked_holes = splittable_indices[before:after]
 
     splits = []
     splits.append(sample[:captures_no_child[picked_holes[0]].start_byte])
     for i in picked_holes:
-        splits.append(sample[captures_no_child[i].start_byte:captures_no_child[i].end_byte])
+        mid = sample[captures_no_child[i].start_byte:captures_no_child[i].end_byte]
+        if mid.startswith(b":"):
+            mid = mid[1:].lstrip()
+            splits[-1] += b": "
+        splits.append(mid)
         if i < picked_holes[-1]:
-            splits.append(sample[captures_no_child[i].end_byte:captures_no_child[i+1].start_byte])
+            after = sample[captures_no_child[i].end_byte:captures_no_child[i+1].start_byte]
+            print(f"after: {after}")
+            splits.append(after)
 
     splits.append(sample[captures_no_child[picked_holes[-1]].end_byte:])
 
@@ -235,19 +247,19 @@ if __name__ == "__main__":  # some unit tests
     rng = np.random.RandomState(seed=int(os.urandom(4).hex(), 16))
     sample = """
     interface Foo {
-        foo(x: number, y: number): number;
-        name: {
-            first: string;
-            last: {
-                name: string;
-                age: number;
-            };
-        };
-    }
-
-    function foo(x: number, y:number):number {
-        return x + y;
-    }
+         foo(x: number, y: number): number;
+         name: {
+             first: string;
+             last: {
+                 name: string;
+                 age: number;
+             };
+         };
+     }
+ 
+     function foo(x: number, y:number):number {
+         return x + y;
+     }
 
     // some unicode to mess things up
     // 😀 😃 😄 😁 😆 😅
