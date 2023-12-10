@@ -1,3 +1,4 @@
 **temp/
 *.pdf
 scratch/
+__pycache__/
