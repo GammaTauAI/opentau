@@ -4,18 +4,22 @@ import os
 import numpy as np
 
 base_ds = datasets.load_dataset("nuprl/ts-training", split="train", revision="v1.1p1")
-rng_ptr = [np.random.default_rng(42)]
+threads = os.cpu_count()
+assert threads is not None
+rng_ptrs = [np.random.default_rng(42) for _ in range(threads)]
 max_holes = 6
 min_holes = 1
 
 def process(ex):
-    rng = rng_ptr[0]
+    # get the id of this thread runnign in dataset.map
+    thread_id = int(datasets.utils.torch_utils.get_worker_info().id)
+    rng = rng_ptrs[0]
     num_holes = rng.integers(min_holes, max_holes + 1)
     content = ex["content"]
     new, new_rng = permute_multi_holes(content, rng, num_holes)
-    rng_ptr[0] = new_rng
+    rng_ptrs[0] = new_rng
     ex["content"] = new
     return {"original_content": content,  **ex}
 
-ds = base_ds.map(process).filter(lambda x: x["content"] != None)
+ds = base_ds.map(process, num_proc=threads).filter(lambda x: x["content"] != None)
 ds.push_to_hub("nuprl/ts-multi-hole-training")
