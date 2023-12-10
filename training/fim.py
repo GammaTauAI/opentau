@@ -190,9 +190,7 @@ def permute_multi_holes(
 ) -> Tuple[Optional[str], RandomState]:
     try:
         res = get_multi_holes(np_rng, sample, 6, strip_suffix_rate)
-    except Exception as e:
-        print(e)
-        print("GOT FAILED SAMPLE:\n", sample)
+    except Exception:
         return None, np_rng
 
     if res is None:

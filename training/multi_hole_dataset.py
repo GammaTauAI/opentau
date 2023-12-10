@@ -4,16 +4,18 @@ import os
 import numpy as np
 
 base_ds = datasets.load_dataset("nuprl/ts-training", split="train", revision="v1.1p1")
-rng = np.random.default_rng(42)
+rng_ptr = [np.random.default_rng(42)]
 max_holes = 6
 min_holes = 1
 
 def process(ex):
+    rng = rng_ptr[0]
     num_holes = rng.integers(min_holes, max_holes + 1)
     content = ex["content"]
-    new = permute_multi_holes(content, rng, num_holes)
+    new, new_rng = permute_multi_holes(content, rng, num_holes)
+    rng_ptr[0] = new_rng
     ex["content"] = new
     return {"original_content": content,  **ex}
 
-ds = base_ds.map(process)
+ds = base_ds.map(process).filter(lambda x: x["content"] != None)
 ds.push_to_hub("nuprl/ts-multi-hole-training")
