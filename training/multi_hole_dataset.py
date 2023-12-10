@@ -21,5 +21,5 @@ def process(ex, idx):
     ex["content"] = new
     return {"original_content": content,  **ex}
 
-ds = base_ds.map(process, num_proc=threads).filter(lambda x: x["content"] != None)
+ds = base_ds.map(process, with_indices=True, num_proc=threads).filter(lambda x: x["content"] != None)
 ds.push_to_hub("nuprl/ts-multi-hole-training")
