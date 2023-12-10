@@ -199,7 +199,17 @@ def permute_multi_holes(
         return None, np_rng
 
     holes, np_rng = res
-    return "", np_rng
+    buf = ""
+    hole_buf = ""
+    for hole, state in holes:
+        if state == "code":
+            buf += hole
+        else:
+            buf += f"<hole>"
+            hole_buf += f"<fill>{hole}"
+
+    buf += hole_buf
+    return buf, np_rng
 
 
 if __name__ == "__main__":  # some unit tests
@@ -207,7 +217,7 @@ if __name__ == "__main__":  # some unit tests
     rng = np.random.RandomState(seed=int(os.urandom(4).hex(), 16))
     sample = """
     interface Foo {
-         foo(x: number, y: number): number;
+         foo(x: bool, y: string): string;
          name: {
              first: string;
              last: {
@@ -217,19 +227,19 @@ if __name__ == "__main__":  # some unit tests
          };
      }
  
-     function foo(x: number, y:number):number {
+     function foo(x: number, y:number): number {
          return x + y;
      }
 
     // some unicode to mess things up
     // 😀 😃 😄 😁 😆 😅
 
-    function foo2(x:number, y: number): number {
+    function foo2(x:number, y: bool): number {
         return x + y;
     }
 
     interface Bar {
-        bar(x: number, y: number): number;
+        bar(x: number, y: bool): number;
         name: {
             first: string;
             last: string;
