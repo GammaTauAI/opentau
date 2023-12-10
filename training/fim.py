@@ -4,7 +4,7 @@ from tree_sitter_languages import get_language, get_parser
 import numpy as np
 from numpy.random import RandomState
 
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Literal
 
 TS_LANGUAGE = get_language("typescript")
 PARSER = get_parser("typescript")
@@ -86,12 +86,13 @@ def get_prefix_middle_suffix(np_rng: RandomState, sample: bytes, strip_suffix_ra
 
     return (prefix_str, middle_str, suffix_str), np_rng
 
+SplitState = Literal["code", "hole"]
 def get_multi_holes(
     np_rng: RandomState,
     sample: bytes,
     holes: int,
     strip_suffix_rate: float = 0.9,
-) -> Optional[Tuple[List[str], RandomState]]:
+) -> Optional[Tuple[List[Tuple[str, SplitState]], RandomState]]:
     def is_child_type_annotation(node):
         """Checks if any of the parent nodes is an annotation node."""
         node = node.parent
@@ -155,16 +156,16 @@ def get_multi_holes(
         picked_holes = splittable_indices[before:after]
 
     splits = []
-    splits.append(sample[:captures_no_child[picked_holes[0]].start_byte])
+    splits.append((sample[:captures_no_child[picked_holes[0]].start_byte], "code"))
     for i in picked_holes:
-        mid = sample[captures_no_child[i].start_byte:captures_no_child[i].end_byte]
-        if mid.startswith(b":"):
-            mid = mid[1:].lstrip()
-            splits[-1] += b": "
-        splits.append(mid)
+        hole = sample[captures_no_child[i].start_byte:captures_no_child[i].end_byte]
+        if hole.startswith(b":"):
+            hole = hole[1:].lstrip()
+            splits[-1] = (splits[-1][0] + b": ", "code")
+        splits.append((hole, "hole"))
         if i < picked_holes[-1]:
             after = sample[captures_no_child[i].end_byte:captures_no_child[i+1].start_byte]
-            splits.append(after)
+            splits.append((after, "code"))
 
 
     suffix_b: bytes = b""
@@ -177,79 +178,28 @@ def get_multi_holes(
     else:
         suffix_b = sample[captures_no_child[picked_holes[-1]].end_byte:]
 
-    splits.append(suffix_b)
+    splits.append((suffix_b, "code"))
 
 
-    return [s.decode("utf-8") for s in splits], np_rng
+    return [(s[0].decode("utf-8"), s[1]) for s in splits], np_rng
 
-# Adapted from https://github.com/bigcode-project/Megatron-LM/blob/6c4bf908df8fd86b4977f54bf5b8bd4b521003d1/megatron/data/gpt_dataset.py
-def permute(
-    tokenizer,
+def permute_multi_holes(
     sample,
     np_rng,
-    suffix_tok_id,
-    prefix_tok_id,
-    middle_tok_id,
-    fim_rate=0.5,
-    fim_spm_rate=0.5,
     strip_suffix_rate=0.9,
-):
-    """
-    Take in a sample (list of tokens) and perform a FIM transformation on it with a probability of fim_rate, using two FIM modes:
-    PSM and SPM (with a probability of fim_spm_rate).
-    """
+) -> Tuple[Optional[str], RandomState]:
+    try:
+        res = get_multi_holes(np_rng, sample, 6, strip_suffix_rate)
+    except Exception as e:
+        print(e)
+        print("GOT FAILED SAMPLE:\n", sample)
+        return None, np_rng
 
-    if np_rng.binomial(1, fim_rate):
-        decoded_bytes: str | bytes = tokenizer.decode(sample)
-        if not isinstance(decoded_bytes, bytes):
-            decoded_bytes = decoded_bytes.encode("utf-8")
+    if res is None:
+        return None, np_rng
 
-        try:
-            res = get_prefix_middle_suffix(
-                np_rng, decoded_bytes, strip_suffix_rate)
-
-        except Exception as e:
-            print(e)
-            print("GOT FAILED SAMPLE:\n", decoded_bytes)
-            return None, np_rng
-
-        if res is None:
-            return None, np_rng
-
-        (prefix_str, middle_str, suffix_str), np_rng = res
-
-        prefix = np.array(tokenizer.encode(prefix_str))
-        middle = np.array(tokenizer.encode(middle_str))
-        suffix = np.array(tokenizer.encode(suffix_str))
-
-        if np_rng.binomial(1, fim_spm_rate):
-            # SPM (variant 2 from FIM paper)
-            new_sample = np.concatenate(
-                [
-                    [prefix_tok_id, suffix_tok_id],
-                    suffix,
-                    [middle_tok_id],
-                    prefix,
-                    middle,
-                ]
-            )
-        else:
-            # PSM
-            new_sample = np.concatenate(
-                [
-                    [prefix_tok_id],
-                    prefix,
-                    [suffix_tok_id],
-                    suffix,
-                    [middle_tok_id],
-                    middle,
-                ]
-            )
-    else:
-        # don't do FIM preproc
-        new_sample = sample
-
-    return list(new_sample), np_rng
+    holes, np_rng = res
+    return "", np_rng
 
 
 if __name__ == "__main__":  # some unit tests
@@ -300,5 +250,11 @@ if __name__ == "__main__":  # some unit tests
     if res is not None:
         print()
         for i, s in enumerate(res[0]):
-            print(f"<s>{s}</s>", end="")
+            print(f"<{s[1]}>{s[0]}</{s[1]}>", end="")
+
+    print()
+    print("permute multi holes:")
+    res = permute_multi_holes(bytes_sample, rng, 0.5)
+    if res is not None:
+        print(res[0])
 
